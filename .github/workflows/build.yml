@@ -1,0 +1,56 @@
+name: Build
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+# Cancel any in-progress run for the same branch so each push doesn't queue
+# behind the previous one.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Build — iOS Simulator
+    runs-on: macos-15          # Ships with Xcode 16.x; iOS 17+ SDK included
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # ── Toolchain ───────────────────────────────────────────────────────
+      - name: Show Xcode version
+        run: xcodebuild -version
+
+      - name: Cache Homebrew downloads
+        uses: actions/cache@v4
+        with:
+          path: ~/Library/Caches/Homebrew/downloads
+          key: homebrew-xcodegen-${{ runner.os }}
+
+      - name: Install XcodeGen
+        run: brew install xcodegen
+
+      - name: Install xcpretty
+        run: gem install xcpretty --no-document --quiet
+
+      # ── Project generation ───────────────────────────────────────────────
+      # Regenerate from project.yml to catch any drift between the spec
+      # and the committed .xcodeproj.
+      - name: Generate Xcode project
+        run: xcodegen generate
+
+      # ── Build ────────────────────────────────────────────────────────────
+      # Targets the generic simulator slice — no device signing required.
+      - name: Build for iOS Simulator
+        run: |
+          set -o pipefail
+          xcodebuild build \
+            -scheme CatVox \
+            -destination 'generic/platform=iOS Simulator' \
+            -configuration Debug \
+            CODE_SIGNING_ALLOWED=NO \
+          | xcpretty
