@@ -11,6 +11,7 @@
 		1861803EF64D9F7FE6C77560 /* CatAnalysis.swift in Sources */ = {isa = PBXBuildFile; fileRef = E100F9FEEC3B2CF509B41F20 /* CatAnalysis.swift */; };
 		2B1DF66382C3129D895D785C /* CatVoxApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = FEBC2D72ADC3729A73D65E8D /* CatVoxApp.swift */; };
 		37039B5FADDEA9E57A423699 /* HomeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4F5C098EA923D7B7D2B7746F /* HomeView.swift */; };
+		46ECBCFF9DD385E7670A980D /* CameraService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 215145685222056D654FFBD5 /* CameraService.swift */; };
 		4F25F5EF0770D910A04EE964 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = B0A06657FF5E304418C27E21 /* Assets.xcassets */; };
 		53EBF6283E37AC40C2FBF31C /* AnimatedVideoBackground.swift in Sources */ = {isa = PBXBuildFile; fileRef = B25B98C7A388BAC230FA34DE /* AnimatedVideoBackground.swift */; };
 		61C87E117CBDFD72736557E7 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F08F33CD1AC4F31C7769CE96 /* ContentView.swift */; };
@@ -19,6 +20,7 @@
 		96E2D99555D8C2D479694DEE /* ThoughtBubbleView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B7C3FCEEFAA51F645F5BECDC /* ThoughtBubbleView.swift */; };
 		9CD5CA08C5225D84F30B2646 /* CatPersona.swift in Sources */ = {isa = PBXBuildFile; fileRef = 689AC1D0436D57C04DBE7694 /* CatPersona.swift */; };
 		A5C4EECE806C37E8D53F28E0 /* ExpertInsightsDrawer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 337DB0A3CC6E2C83B8244190 /* ExpertInsightsDrawer.swift */; };
+		B4D5970C08C51D76A7FA3AB4 /* CameraPreviewView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8F5127E72D22F9078142F6EE /* CameraPreviewView.swift */; };
 		B84CBF26D24790B4B6F348CD /* Preview Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = C7BA98BD11A2006135A1026D /* Preview Assets.xcassets */; };
 		C3ADEFA683DE26DFF3392AD6 /* RecordingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 19667502574A1D26D0A51E54 /* RecordingView.swift */; };
 		F9CC0F007EC8922439868C9A /* ResultView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B7D6D24374084C2723FD8F66 /* ResultView.swift */; };
@@ -26,10 +28,12 @@
 
 /* Begin PBXFileReference section */
 		19667502574A1D26D0A51E54 /* RecordingView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecordingView.swift; sourceTree = "<group>"; };
+		215145685222056D654FFBD5 /* CameraService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CameraService.swift; sourceTree = "<group>"; };
 		337DB0A3CC6E2C83B8244190 /* ExpertInsightsDrawer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExpertInsightsDrawer.swift; sourceTree = "<group>"; };
 		4F5C098EA923D7B7D2B7746F /* HomeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HomeView.swift; sourceTree = "<group>"; };
 		689AC1D0436D57C04DBE7694 /* CatPersona.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CatPersona.swift; sourceTree = "<group>"; };
-		7BC4DFCD54831F1AA990A7C3 /* CatVox.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = CatVox.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		7BC4DFCD54831F1AA990A7C3 /* CatVox.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = CatVox.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		8F5127E72D22F9078142F6EE /* CameraPreviewView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CameraPreviewView.swift; sourceTree = "<group>"; };
 		A8DEBD3D6B9687B0058E599A /* MockAnalysisService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MockAnalysisService.swift; sourceTree = "<group>"; };
 		A8E77CD777F85F8155EEE27D /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
 		B0A06657FF5E304418C27E21 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
@@ -82,6 +86,7 @@
 			isa = PBXGroup;
 			children = (
 				B25B98C7A388BAC230FA34DE /* AnimatedVideoBackground.swift */,
+				8F5127E72D22F9078142F6EE /* CameraPreviewView.swift */,
 				DE20F331A3A02FFAF0D011F0 /* PersonaBadgeView.swift */,
 			);
 			path = Components;
@@ -124,6 +129,7 @@
 		9E63E0A0F3E948CF3BCDF67F /* Services */ = {
 			isa = PBXGroup;
 			children = (
+				215145685222056D654FFBD5 /* CameraService.swift */,
 				A8DEBD3D6B9687B0058E599A /* MockAnalysisService.swift */,
 			);
 			path = Services;
@@ -200,7 +206,9 @@
 			isa = PBXProject;
 			attributes = {
 				BuildIndependentTargetsInParallel = YES;
-				LastUpgradeCheck = 2640;
+				LastUpgradeCheck = 1600;
+				TargetAttributes = {
+				};
 			};
 			buildConfigurationList = 35CA416E20D77D1A4BC6992A /* Build configuration list for PBXProject "CatVox" */;
 			developmentRegion = en;
@@ -239,6 +247,8 @@
 			buildActionMask = 2147483647;
 			files = (
 				53EBF6283E37AC40C2FBF31C /* AnimatedVideoBackground.swift in Sources */,
+				B4D5970C08C51D76A7FA3AB4 /* CameraPreviewView.swift in Sources */,
+				46ECBCFF9DD385E7670A980D /* CameraService.swift in Sources */,
 				1861803EF64D9F7FE6C77560 /* CatAnalysis.swift in Sources */,
 				9CD5CA08C5225D84F30B2646 /* CatPersona.swift in Sources */,
 				2B1DF66382C3129D895D785C /* CatVoxApp.swift in Sources */,
@@ -292,10 +302,8 @@
 				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
 				COPY_PHASE_STRIP = NO;
 				DEBUG_INFORMATION_FORMAT = dwarf;
-				DEVELOPMENT_TEAM = 93SH436384;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
 				ENABLE_TESTABILITY = YES;
-				ENABLE_USER_SCRIPT_SANDBOXING = YES;
 				GCC_C_LANGUAGE_STANDARD = gnu11;
 				GCC_DYNAMIC_NO_PIC = NO;
 				GCC_NO_COMMON_BLOCKS = YES;
@@ -316,7 +324,6 @@
 				ONLY_ACTIVE_ARCH = YES;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = iphoneos;
-				STRING_CATALOG_GENERATE_SYMBOLS = YES;
 				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
 				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
 				SWIFT_VERSION = 5.0;
@@ -378,10 +385,8 @@
 				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
 				COPY_PHASE_STRIP = NO;
 				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
-				DEVELOPMENT_TEAM = 93SH436384;
 				ENABLE_NS_ASSERTIONS = NO;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
-				ENABLE_USER_SCRIPT_SANDBOXING = YES;
 				GCC_C_LANGUAGE_STANDARD = gnu11;
 				GCC_NO_COMMON_BLOCKS = YES;
 				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
@@ -395,7 +400,6 @@
 				MTL_FAST_MATH = YES;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = iphoneos;
-				STRING_CATALOG_GENERATE_SYMBOLS = YES;
 				SWIFT_COMPILATION_MODE = wholemodule;
 				SWIFT_OPTIMIZATION_LEVEL = "-O";
 				SWIFT_VERSION = 5.0;

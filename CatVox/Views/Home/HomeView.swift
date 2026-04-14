@@ -1,13 +1,9 @@
 import SwiftUI
 
-/// Placeholder home screen.
-///
-/// Phase 2 will add: latest mood card, credit counter, and
-/// a navigation push to RecordingView.
-/// For now this provides a quick launchpad into the ResultView preview.
 struct HomeView: View {
 
-    @State private var showResult = false
+    @State private var showRecording  = false
+    @State private var showResult     = false
     @State private var selectedSample = 0
 
     var body: some View {
@@ -35,27 +31,11 @@ struct HomeView: View {
 
                 Spacer()
 
-                // MARK: Sample picker (dev convenience)
-                VStack(spacing: 8) {
-                    Text("Preview mock persona:")
-                        .font(.caption)
-                        .foregroundStyle(.white.opacity(0.4))
-
-                    Picker("Persona", selection: $selectedSample) {
-                        Text("Grumpy Boss").tag(0)
-                        Text("Philosopher").tag(1)
-                        Text("Chaotic Hunter").tag(2)
-                    }
-                    .pickerStyle(.segmented)
-                    .padding(.horizontal, 24)
-                }
-                .padding(.bottom, 20)
-
-                // MARK: CTA
+                // MARK: Primary CTA
                 Button {
-                    showResult = true
+                    showRecording = true
                 } label: {
-                    Label("Preview Result Screen", systemImage: "play.fill")
+                    Label("Start - Scan", systemImage: "video.fill")
                         .font(.headline)
                         .foregroundStyle(.black)
                         .frame(maxWidth: .infinity)
@@ -72,10 +52,40 @@ struct HomeView: View {
                     .foregroundStyle(.white.opacity(0.35))
                     .padding(.top, 12)
 
+                // MARK: Dev preview shortcut
+                Rectangle()
+                    .fill(.white.opacity(0.07))
+                    .frame(height: 1)
+                    .padding(.horizontal, 24)
+                    .padding(.vertical, 28)
+
+                VStack(spacing: 10) {
+                    Text("DEV - PREVIEW")
+                        .font(.system(size: 9, weight: .heavy))
+                        .foregroundStyle(.white.opacity(0.25))
+                        .tracking(2)
+
+                    Picker("Persona", selection: $selectedSample) {
+                        Text("Grumpy - Boss").tag(0)
+                        Text("Philosopher").tag(1)
+                        Text("Chaotic - Hunter").tag(2)
+                    }
+                    .pickerStyle(.segmented)
+                    .padding(.horizontal, 24)
+
+                    Button("Preview - Result") { showResult = true }
+                        .font(.caption)
+                        .foregroundStyle(.white.opacity(0.35))
+                        .padding(.top, 2)
+                }
+
                 Spacer().frame(height: 56)
             }
         }
         .preferredColorScheme(.dark)
+        .fullScreenCover(isPresented: $showRecording) {
+            RecordingView()
+        }
         .fullScreenCover(isPresented: $showResult) {
             ResultView(analysis: MockAnalysisService.allSamples[selectedSample])
         }
