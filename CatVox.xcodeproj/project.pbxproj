@@ -1,0 +1,445 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 77;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		1287A8DCFE6D80256B9611B0 /* MockAnalysisService.swift in Sources */ = {isa = PBXBuildFile; fileRef = A8DEBD3D6B9687B0058E599A /* MockAnalysisService.swift */; };
+		1861803EF64D9F7FE6C77560 /* CatAnalysis.swift in Sources */ = {isa = PBXBuildFile; fileRef = E100F9FEEC3B2CF509B41F20 /* CatAnalysis.swift */; };
+		2B1DF66382C3129D895D785C /* CatVoxApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = FEBC2D72ADC3729A73D65E8D /* CatVoxApp.swift */; };
+		37039B5FADDEA9E57A423699 /* HomeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4F5C098EA923D7B7D2B7746F /* HomeView.swift */; };
+		4F25F5EF0770D910A04EE964 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = B0A06657FF5E304418C27E21 /* Assets.xcassets */; };
+		53EBF6283E37AC40C2FBF31C /* AnimatedVideoBackground.swift in Sources */ = {isa = PBXBuildFile; fileRef = B25B98C7A388BAC230FA34DE /* AnimatedVideoBackground.swift */; };
+		61C87E117CBDFD72736557E7 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F08F33CD1AC4F31C7769CE96 /* ContentView.swift */; };
+		8C2CEB06889AD660A126DB42 /* PersonaBadgeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DE20F331A3A02FFAF0D011F0 /* PersonaBadgeView.swift */; };
+		93C8E173BFE2C46040F5EA46 /* ResultViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = B95B88E4B8C3A92CC6B7C716 /* ResultViewModel.swift */; };
+		96E2D99555D8C2D479694DEE /* ThoughtBubbleView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B7C3FCEEFAA51F645F5BECDC /* ThoughtBubbleView.swift */; };
+		9CD5CA08C5225D84F30B2646 /* CatPersona.swift in Sources */ = {isa = PBXBuildFile; fileRef = 689AC1D0436D57C04DBE7694 /* CatPersona.swift */; };
+		A5C4EECE806C37E8D53F28E0 /* ExpertInsightsDrawer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 337DB0A3CC6E2C83B8244190 /* ExpertInsightsDrawer.swift */; };
+		B84CBF26D24790B4B6F348CD /* Preview Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = C7BA98BD11A2006135A1026D /* Preview Assets.xcassets */; };
+		C3ADEFA683DE26DFF3392AD6 /* RecordingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 19667502574A1D26D0A51E54 /* RecordingView.swift */; };
+		F9CC0F007EC8922439868C9A /* ResultView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B7D6D24374084C2723FD8F66 /* ResultView.swift */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXFileReference section */
+		19667502574A1D26D0A51E54 /* RecordingView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecordingView.swift; sourceTree = "<group>"; };
+		337DB0A3CC6E2C83B8244190 /* ExpertInsightsDrawer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExpertInsightsDrawer.swift; sourceTree = "<group>"; };
+		4F5C098EA923D7B7D2B7746F /* HomeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HomeView.swift; sourceTree = "<group>"; };
+		689AC1D0436D57C04DBE7694 /* CatPersona.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CatPersona.swift; sourceTree = "<group>"; };
+		7BC4DFCD54831F1AA990A7C3 /* CatVox.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = CatVox.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		A8DEBD3D6B9687B0058E599A /* MockAnalysisService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MockAnalysisService.swift; sourceTree = "<group>"; };
+		A8E77CD777F85F8155EEE27D /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
+		B0A06657FF5E304418C27E21 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		B25B98C7A388BAC230FA34DE /* AnimatedVideoBackground.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AnimatedVideoBackground.swift; sourceTree = "<group>"; };
+		B7C3FCEEFAA51F645F5BECDC /* ThoughtBubbleView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ThoughtBubbleView.swift; sourceTree = "<group>"; };
+		B7D6D24374084C2723FD8F66 /* ResultView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ResultView.swift; sourceTree = "<group>"; };
+		B95B88E4B8C3A92CC6B7C716 /* ResultViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ResultViewModel.swift; sourceTree = "<group>"; };
+		C7BA98BD11A2006135A1026D /* Preview Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = "Preview Assets.xcassets"; sourceTree = "<group>"; };
+		DE20F331A3A02FFAF0D011F0 /* PersonaBadgeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PersonaBadgeView.swift; sourceTree = "<group>"; };
+		E100F9FEEC3B2CF509B41F20 /* CatAnalysis.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CatAnalysis.swift; sourceTree = "<group>"; };
+		F08F33CD1AC4F31C7769CE96 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
+		FEBC2D72ADC3729A73D65E8D /* CatVoxApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CatVoxApp.swift; sourceTree = "<group>"; };
+/* End PBXFileReference section */
+
+/* Begin PBXGroup section */
+		226AECDCF7E76CDDBA444650 /* Preview Content */ = {
+			isa = PBXGroup;
+			children = (
+				C7BA98BD11A2006135A1026D /* Preview Assets.xcassets */,
+			);
+			path = "Preview Content";
+			sourceTree = "<group>";
+		};
+		2EC6AC8B89266B766339B420 /* ViewModels */ = {
+			isa = PBXGroup;
+			children = (
+				B95B88E4B8C3A92CC6B7C716 /* ResultViewModel.swift */,
+			);
+			path = ViewModels;
+			sourceTree = "<group>";
+		};
+		3A6EA7172C89C57F4F5F2BDB /* Models */ = {
+			isa = PBXGroup;
+			children = (
+				E100F9FEEC3B2CF509B41F20 /* CatAnalysis.swift */,
+				689AC1D0436D57C04DBE7694 /* CatPersona.swift */,
+			);
+			path = Models;
+			sourceTree = "<group>";
+		};
+		4C9BA6609FEE1ADFF6BA2072 /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				7BC4DFCD54831F1AA990A7C3 /* CatVox.app */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+		74F08FAA36CAA3571905D207 /* Components */ = {
+			isa = PBXGroup;
+			children = (
+				B25B98C7A388BAC230FA34DE /* AnimatedVideoBackground.swift */,
+				DE20F331A3A02FFAF0D011F0 /* PersonaBadgeView.swift */,
+			);
+			path = Components;
+			sourceTree = "<group>";
+		};
+		7999165DC9E8C948CFB7E844 /* CatVox */ = {
+			isa = PBXGroup;
+			children = (
+				A8E77CD777F85F8155EEE27D /* Info.plist */,
+				9E16D7575F6047024CF0F3F6 /* App */,
+				3A6EA7172C89C57F4F5F2BDB /* Models */,
+				226AECDCF7E76CDDBA444650 /* Preview Content */,
+				B3C80866A15A6D492557E91D /* Resources */,
+				9E63E0A0F3E948CF3BCDF67F /* Services */,
+				2EC6AC8B89266B766339B420 /* ViewModels */,
+				C56174D5E800CF468E3C6840 /* Views */,
+			);
+			path = CatVox;
+			sourceTree = "<group>";
+		};
+		83AF3D977B0C56135BE6C28D /* Result */ = {
+			isa = PBXGroup;
+			children = (
+				337DB0A3CC6E2C83B8244190 /* ExpertInsightsDrawer.swift */,
+				B7D6D24374084C2723FD8F66 /* ResultView.swift */,
+				B7C3FCEEFAA51F645F5BECDC /* ThoughtBubbleView.swift */,
+			);
+			path = Result;
+			sourceTree = "<group>";
+		};
+		9E16D7575F6047024CF0F3F6 /* App */ = {
+			isa = PBXGroup;
+			children = (
+				FEBC2D72ADC3729A73D65E8D /* CatVoxApp.swift */,
+				F08F33CD1AC4F31C7769CE96 /* ContentView.swift */,
+			);
+			path = App;
+			sourceTree = "<group>";
+		};
+		9E63E0A0F3E948CF3BCDF67F /* Services */ = {
+			isa = PBXGroup;
+			children = (
+				A8DEBD3D6B9687B0058E599A /* MockAnalysisService.swift */,
+			);
+			path = Services;
+			sourceTree = "<group>";
+		};
+		B3C80866A15A6D492557E91D /* Resources */ = {
+			isa = PBXGroup;
+			children = (
+				B0A06657FF5E304418C27E21 /* Assets.xcassets */,
+			);
+			path = Resources;
+			sourceTree = "<group>";
+		};
+		B6FE9CE5911F820A8C6D2F94 /* Home */ = {
+			isa = PBXGroup;
+			children = (
+				4F5C098EA923D7B7D2B7746F /* HomeView.swift */,
+			);
+			path = Home;
+			sourceTree = "<group>";
+		};
+		C56174D5E800CF468E3C6840 /* Views */ = {
+			isa = PBXGroup;
+			children = (
+				74F08FAA36CAA3571905D207 /* Components */,
+				B6FE9CE5911F820A8C6D2F94 /* Home */,
+				DB0F9041CE7EFE223DE01133 /* Recording */,
+				83AF3D977B0C56135BE6C28D /* Result */,
+			);
+			path = Views;
+			sourceTree = "<group>";
+		};
+		DB0F9041CE7EFE223DE01133 /* Recording */ = {
+			isa = PBXGroup;
+			children = (
+				19667502574A1D26D0A51E54 /* RecordingView.swift */,
+			);
+			path = Recording;
+			sourceTree = "<group>";
+		};
+		E28E5EAA1288431A8FBB6B6F = {
+			isa = PBXGroup;
+			children = (
+				7999165DC9E8C948CFB7E844 /* CatVox */,
+				4C9BA6609FEE1ADFF6BA2072 /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		A7EDDBB8F04B431FAC25DB3C /* CatVox */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = EFD8A9F258F409C1D2C31F34 /* Build configuration list for PBXNativeTarget "CatVox" */;
+			buildPhases = (
+				A0C9A29FFE1C39B4DAF337E5 /* Sources */,
+				19C03496FEB9054410133BF6 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = CatVox;
+			packageProductDependencies = (
+			);
+			productName = CatVox;
+			productReference = 7BC4DFCD54831F1AA990A7C3 /* CatVox.app */;
+			productType = "com.apple.product-type.application";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		6E889E5E24CD6285788492AD /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = YES;
+				LastUpgradeCheck = 1600;
+				TargetAttributes = {
+				};
+			};
+			buildConfigurationList = 35CA416E20D77D1A4BC6992A /* Build configuration list for PBXProject "CatVox" */;
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				Base,
+				en,
+			);
+			mainGroup = E28E5EAA1288431A8FBB6B6F;
+			minimizedProjectReferenceProxies = 1;
+			preferredProjectObjectVersion = 77;
+			productRefGroup = 4C9BA6609FEE1ADFF6BA2072 /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				A7EDDBB8F04B431FAC25DB3C /* CatVox */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		19C03496FEB9054410133BF6 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				4F25F5EF0770D910A04EE964 /* Assets.xcassets in Resources */,
+				B84CBF26D24790B4B6F348CD /* Preview Assets.xcassets in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		A0C9A29FFE1C39B4DAF337E5 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				53EBF6283E37AC40C2FBF31C /* AnimatedVideoBackground.swift in Sources */,
+				1861803EF64D9F7FE6C77560 /* CatAnalysis.swift in Sources */,
+				9CD5CA08C5225D84F30B2646 /* CatPersona.swift in Sources */,
+				2B1DF66382C3129D895D785C /* CatVoxApp.swift in Sources */,
+				61C87E117CBDFD72736557E7 /* ContentView.swift in Sources */,
+				A5C4EECE806C37E8D53F28E0 /* ExpertInsightsDrawer.swift in Sources */,
+				37039B5FADDEA9E57A423699 /* HomeView.swift in Sources */,
+				1287A8DCFE6D80256B9611B0 /* MockAnalysisService.swift in Sources */,
+				8C2CEB06889AD660A126DB42 /* PersonaBadgeView.swift in Sources */,
+				C3ADEFA683DE26DFF3392AD6 /* RecordingView.swift in Sources */,
+				F9CC0F007EC8922439868C9A /* ResultView.swift in Sources */,
+				93C8E173BFE2C46040F5EA46 /* ResultViewModel.swift in Sources */,
+				96E2D99555D8C2D479694DEE /* ThoughtBubbleView.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin XCBuildConfiguration section */
+		01943A8224D832B90D99AFF8 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_TESTABILITY = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_DYNAMIC_NO_PIC = NO;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"$(inherited)",
+					"DEBUG=1",
+				);
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				MTL_FAST_MATH = YES;
+				ONLY_ACTIVE_ARCH = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+				SWIFT_VERSION = 5.0;
+			};
+			name = Debug;
+		};
+		073CB9C14934C03AC448BA24 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_IDENTITY = "iPhone Developer";
+				DEVELOPMENT_ASSET_PATHS = "\"CatVox/Preview Content\"";
+				INFOPLIST_FILE = CatVox/Info.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.kathelix.catvox;
+				SDKROOT = iphoneos;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 1;
+			};
+			name = Debug;
+		};
+		447D3839A7E071606061BC09 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				MTL_ENABLE_DEBUG_INFO = NO;
+				MTL_FAST_MATH = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SWIFT_COMPILATION_MODE = wholemodule;
+				SWIFT_OPTIMIZATION_LEVEL = "-O";
+				SWIFT_VERSION = 5.0;
+			};
+			name = Release;
+		};
+		4E044AB3B4EFADB5E039CFC9 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_IDENTITY = "iPhone Developer";
+				DEVELOPMENT_ASSET_PATHS = "\"CatVox/Preview Content\"";
+				INFOPLIST_FILE = CatVox/Info.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.kathelix.catvox;
+				SDKROOT = iphoneos;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 1;
+			};
+			name = Release;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		35CA416E20D77D1A4BC6992A /* Build configuration list for PBXProject "CatVox" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				01943A8224D832B90D99AFF8 /* Debug */,
+				447D3839A7E071606061BC09 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		EFD8A9F258F409C1D2C31F34 /* Build configuration list for PBXNativeTarget "CatVox" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				073CB9C14934C03AC448BA24 /* Debug */,
+				4E044AB3B4EFADB5E039CFC9 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+/* End XCConfigurationList section */
+	};
+	rootObject = 6E889E5E24CD6285788492AD /* Project object */;
+}
