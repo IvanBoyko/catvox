@@ -173,21 +173,21 @@ final class CameraService {
 
         // TRD §3.1 — high-intensity haptic buzz + ping at exactly 10 s.
         //
-        // Generator is created inline, NOT stored across the 10-second recording.
-        // UIFeedbackGenerator.prepare() has a short expiry window (~2-3 s); a
-        // generator prepared at startRecording() has long since returned to idle
-        // by the time this fires, silently dropping the haptic request.
-        // Creating it fresh here fires immediately without a prepare() window.
-        UINotificationFeedbackGenerator().notificationOccurred(.success)
-
+        // AVCaptureSession holds an exclusive audio-input lock while recording.
+        // iOS suppresses BOTH AudioServices sounds AND UIFeedbackGenerator haptics
+        // while that lock is held — the same root cause that previously silenced
+        // the audio.  Fix: stopRecording() first (releases the lock), then fire
+        // the haptic and sound together, exactly as we already do for the sound.
         #if targetEnvironment(simulator)
+        UINotificationFeedbackGenerator().notificationOccurred(.success)
         AudioServicesPlaySystemSound(1117)
         let stubURL = FileManager.default.temporaryDirectory
             .appendingPathComponent("catvox_mock.mov")
         captureState = .finished(stubURL)
         #else
-        fileOutput.stopRecording()          // releases audio session lock
-        AudioServicesPlaySystemSound(1117)  // audible ping (ID 1117 — Alert tone)
+        fileOutput.stopRecording()                                    // release lock
+        UINotificationFeedbackGenerator().notificationOccurred(.success)  // buzz
+        AudioServicesPlaySystemSound(1117)                            // ping
         #endif
     }
 
