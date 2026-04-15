@@ -1,6 +1,6 @@
 # Technical Requirements Document: CatVox AI (MVP)
 
-**Version:** 1.1  
+**Version:** 1.2  
 **Company:** Kathelix Ltd  
 **Project Lead:** Ivan Boyko
 **Date:** April 2026  
@@ -23,8 +23,7 @@ CatVox AI is a premium, minimalist iOS application designed to interpret cat beh
 ## 3. Functional Requirements
 
 ### 3.1 Core Features (MVP)
-* **Video Capture:** Fixed 10-second recording window with a countdown UI.
-    * **CRITICAL:** A high-intensity haptic buzz and a subtle "ping" sound must trigger exactly at the 10.0s mark to signal the end of recording.
+* **Video Capture:** Fixed 10-second recording window with a visual countdown UI.
 * **Multimodal Analysis:** Simultaneous processing of video (body language) and audio (vocalization) via Vertex AI.
 * **Persona Engine:** Logic to assign one of 6 "Cat Personas" (e.g., Grumpy Boss, Existential Philosopher) to the output.
 * **Mood Diary:** A local history of scans saved using SwiftData.
@@ -64,8 +63,9 @@ The backend must return a strictly formatted JSON object:
 ### 5.1 Key Screens
 1. **Home Screen:** Minimalist dashboard showing the latest "Mood" and a "Start Scan" button.
 2. **Recording Screen:** Viewfinder with an AVFoundation-based 10s progress ring.
-3. **Result Screen:** * Full-screen looping video.
-    * Animated Glassmorphism "Thought Bubble."
+3. **Result Screen:**
+    * Full-screen looping video.
+    * Animated Glassmorphism "Thought Bubble".
     * **Confidence Score UI:** The percentage ring must be dynamically color-coded:
         * **Green:** > 80% (High Confidence)
         * **Amber:** 50% - 80% (Moderate Confidence)
@@ -78,7 +78,6 @@ The backend must return a strictly formatted JSON object:
 ## 6. Project Roadmap
 
 ### Phase 1: Prototype Refinement (Current)
-* **Bug Fix:** Implement haptic/audio feedback trigger at exactly 10s.
 * **UI Update:** Apply dynamic color logic to the Confidence Score ring.
 * Finalize System Instructions for Gemini.
 * Setup Firebase/GCP project structure.
@@ -91,3 +90,9 @@ The backend must return a strictly formatted JSON object:
 ### Phase 3: Launch & Iteration
 * Beta testing with limited users.
 * LinkedIn/Social Media marketing campaign.
+
+---
+
+## 7. Future Enhancements (Post-MVP)
+* **Haptic & Audio Completion Signals:** Implementation of high-intensity haptic buzz and audio "ping" upon recording completion (to be resolved after technical limitations with AVFoundation are addressed).
+* **Advanced Mood Analytics:** Week-over-week trends for cat behavior.

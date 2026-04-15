@@ -1,5 +1,6 @@
 import AudioToolbox
 import AVFoundation
+import CoreHaptics
 import Observation
 import UIKit
 
@@ -57,10 +58,14 @@ final class CameraService {
     private var displayLink: CADisplayLink?
     private var startTime:   CFTimeInterval = 0
 
-    /// Kept alive across the async haptic dispatch so ARC cannot reclaim it
-    /// before the Taptic Engine acts on the request (see handleTick comments).
+    /// CoreHaptics engine + pattern player.  Both must be kept alive as stored
+    /// properties: the engine drives the Taptic Engine hardware, and the player
+    /// must outlive the `start(atTime:)` call or ARC releases it before the
+    /// hardware actuates.  Both are nilled in `reset()`.
     @ObservationIgnored
-    private var completionFeedback: UINotificationFeedbackGenerator?
+    private var hapticEngine: CHHapticEngine?
+    @ObservationIgnored
+    private var hapticPlayer: (any CHHapticPatternPlayer)?
 
 
     /// NSObject delegate shim stored as `let` (not lazy) to avoid
@@ -177,48 +182,83 @@ final class CameraService {
         displayLink = nil
 
         // TRD §3.1 — high-intensity haptic buzz + ping at exactly 10 s.
-        //
-        // AVCaptureSession holds an exclusive audio-input lock while recording.
-        // iOS suppresses BOTH AudioServices sounds AND UIFeedbackGenerator haptics
-        // while that lock is held — the same root cause that previously silenced
-        // the audio.  Fix: stopRecording() first (releases the lock), then fire
-        // the haptic and sound together, exactly as we already do for the sound.
         #if targetEnvironment(simulator)
         AudioServicesPlaySystemSound(1117)
         let stubURL = FileManager.default.temporaryDirectory
             .appendingPathComponent("catvox_mock.mov")
         captureState = .finished(stubURL)
         #else
-        print("[CameraService] 10 s reached — stopRecording()")
+        // TRD §3.1 — ping + haptic buzz at exactly 10 s.
+        //
+        // stopRecording() initiates an async pipeline teardown.  AudioServices
+        // (a C-level API) plays immediately because it bypasses AVAudioSession.
+        // CHHapticEngine cannot start while AVCaptureSession holds the audio
+        // lock, so the haptic is deferred to handleRecordingFinished(), which
+        // fires only AFTER the teardown is fully complete and the lock released.
         fileOutput.stopRecording()
-
-        print("[CameraService] Playing sound")
         AudioServicesPlaySystemSound(1117)
-
-        print("[CameraService] Storing completionFeedback generator")
-        completionFeedback = UINotificationFeedbackGenerator()
-        DispatchQueue.main.async { [weak self] in
-            guard let self else {
-                print("[CameraService] ⚠️ self deallocated before haptic dispatch")
-                return
-            }
-            guard completionFeedback != nil else {
-                print("[CameraService] ⚠️ completionFeedback is nil in dispatch")
-                return
-            }
-            print("[CameraService] Calling notificationOccurred(.success)")
-            completionFeedback?.notificationOccurred(.success)
-            print("[CameraService] notificationOccurred returned")
-        }
         #endif
     }
 
+    // MARK: - CoreHaptics helper
+
+    /// Creates, starts, and immediately fires a two-transient buzz.
+    ///
+    /// Must be called AFTER `AVCaptureFileOutput.stopRecording()` has fully
+    /// unwound — i.e. from `handleRecordingFinished` — because
+    /// `CHHapticEngine.start()` uses `AVAudioSession` internally and will
+    /// fail silently while the capture pipeline holds the audio lock.
+    private func triggerCompletionHaptic() {
+        // Must be called on the main thread — CoreHaptics is not thread-safe.
+        guard CHHapticEngine.capabilitiesForHardware().supportsHaptics else {
+            print("[Haptic] Device does not support haptics — skipping")
+            return
+        }
+        do {
+            let engine = try CHHapticEngine()
+            hapticEngine = engine
+
+            engine.stoppedHandler = { reason in
+                print("[Haptic] Engine stopped: \(reason.rawValue)")
+            }
+
+            try engine.start()
+
+            // Two sharp transients 120 ms apart — "double buzz" feel.
+            let sharpness = CHHapticEventParameter(parameterID: .hapticSharpness, value: 0.8)
+            let intensity = CHHapticEventParameter(parameterID: .hapticIntensity,  value: 1.0)
+
+            let first  = CHHapticEvent(eventType: .hapticTransient,
+                                       parameters: [sharpness, intensity],
+                                       relativeTime: 0)
+            let second = CHHapticEvent(eventType: .hapticTransient,
+                                       parameters: [sharpness, intensity],
+                                       relativeTime: 0.12)
+
+            let pattern = try CHHapticPattern(events: [first, second], parameters: [])
+            let player  = try engine.makePlayer(with: pattern)
+            hapticPlayer = player          // Strong ref — keeps player alive until reset()
+            try player.start(atTime: CHHapticTimeImmediate)
+            print("[Haptic] Fired successfully")
+        } catch {
+            print("[Haptic] Error: \(error)")
+        }
+    }
+
     fileprivate func handleRecordingFinished(url: URL, error: Error?) {
+        // AVFoundation can call this delegate twice: once with a non-nil error
+        // when the audio session is interrupted mid-recording, then again on
+        // the intentional stopRecording() call.  The hapticEngine guard ensures
+        // we only fire once — on whichever call arrives first on the main thread.
         DispatchQueue.main.async { [weak self] in
             guard let self else { return }
-            // Safe to release now — recording is done and the Taptic Engine
-            // has had at least one full run-loop cycle to fire the haptic.
-            completionFeedback = nil
+
+            if hapticEngine == nil {
+                // First arrival wins.  hapticEngine + hapticPlayer stay alive
+                // until reset() so the pattern finishes playing.
+                triggerCompletionHaptic()
+            }
+
             if let error {
                 captureState = .failed(error.localizedDescription)
             } else {
@@ -232,9 +272,10 @@ final class CameraService {
     /// Returns to `.idle` so the user can record again without
     /// dismissing RecordingView.
     func reset() {
-        captureState     = .idle
-        progress         = 0
-        completionFeedback = nil
+        captureState = .idle
+        progress     = 0
+        hapticEngine = nil
+        hapticPlayer = nil
     }
 }
 
