@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 
 struct HomeView: View {
 
@@ -77,6 +78,22 @@ struct HomeView: View {
                         .font(.caption)
                         .foregroundStyle(.white.opacity(0.35))
                         .padding(.top, 2)
+
+                    // ── Haptic diagnostic ───────────────────────────────
+                    // Tap this button and feel for a buzz.
+                    // If it fires here but NOT after recording → context bug.
+                    // If it never fires → device/settings issue, not code.
+                    Button {
+                        print("[HapticTest] Button tapped — firing UINotificationFeedbackGenerator")
+                        let g = UINotificationFeedbackGenerator()
+                        g.notificationOccurred(.success)
+                        print("[HapticTest] notificationOccurred(.success) called")
+                    } label: {
+                        Label("Test Haptic", systemImage: "waveform")
+                            .font(.caption)
+                            .foregroundStyle(.yellow.opacity(0.55))
+                    }
+                    .padding(.top, 4)
                 }
 
                 Spacer().frame(height: 56)

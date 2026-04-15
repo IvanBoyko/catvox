@@ -189,21 +189,26 @@ final class CameraService {
             .appendingPathComponent("catvox_mock.mov")
         captureState = .finished(stubURL)
         #else
-        // 1. Release the AVCaptureSession audio-input lock so iOS does not
-        //    suppress the sound or the haptic.
+        print("[CameraService] 10 s reached — stopRecording()")
         fileOutput.stopRecording()
 
-        // 2. Play the ping immediately after the lock is released.
+        print("[CameraService] Playing sound")
         AudioServicesPlaySystemSound(1117)
 
-        // 3. Store the generator before dispatching so ARC cannot deallocate
-        //    it before the Taptic Engine acts on the request.  Apple docs:
-        //    "The system can cancel a request from a deallocated generator."
-        //    Dispatching to the next run-loop turn also ensures the haptic fires
-        //    from a normal main-thread context, not inside a CADisplayLink cb.
+        print("[CameraService] Storing completionFeedback generator")
         completionFeedback = UINotificationFeedbackGenerator()
         DispatchQueue.main.async { [weak self] in
-            self?.completionFeedback?.notificationOccurred(.success)
+            guard let self else {
+                print("[CameraService] ⚠️ self deallocated before haptic dispatch")
+                return
+            }
+            guard completionFeedback != nil else {
+                print("[CameraService] ⚠️ completionFeedback is nil in dispatch")
+                return
+            }
+            print("[CameraService] Calling notificationOccurred(.success)")
+            completionFeedback?.notificationOccurred(.success)
+            print("[CameraService] notificationOccurred returned")
         }
         #endif
     }
