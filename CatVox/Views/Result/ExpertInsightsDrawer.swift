@@ -21,7 +21,7 @@ struct ExpertInsightsDrawer: View {
                         .foregroundStyle(.white.opacity(0.75))
                         .font(.subheadline)
 
-                    Text("Expert - Insights")
+                    Text("Expert Insights")
                         .font(.subheadline)
                         .fontWeight(.semibold)
                         .foregroundStyle(.white)
@@ -51,7 +51,7 @@ struct ExpertInsightsDrawer: View {
 
                 VStack(alignment: .leading, spacing: 16) {
                     InsightRow(icon: "waveform.path.ecg",
-                               title: "Behavioural - Analysis",
+                               title: "Behavioural Analysis",
                                text: analysis.analysis)
 
                     Rectangle()
@@ -59,7 +59,7 @@ struct ExpertInsightsDrawer: View {
                         .frame(height: 1)
 
                     InsightRow(icon: "lightbulb.fill",
-                               title: "Owner - Tip",
+                               title: "Owner Tip",
                                text: analysis.ownerTip)
                 }
                 .padding(.horizontal, 16)

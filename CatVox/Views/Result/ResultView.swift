@@ -94,7 +94,7 @@ struct ResultView: View {
 
             Spacer()
 
-            Text("CAT - VOX")
+            Text("CAT VOX")
                 .font(.system(size: 11, weight: .heavy))
                 .foregroundStyle(.white.opacity(0.45))
                 .tracking(3)
@@ -135,7 +135,7 @@ struct ResultView: View {
             HStack(spacing: 8) {
                 Image(systemName: "square.and.arrow.up")
                     .fontWeight(.semibold)
-                Text("Share - to - Story")
+                Text("Share to Story")
                     .fontWeight(.bold)
             }
             .font(.subheadline)

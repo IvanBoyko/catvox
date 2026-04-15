@@ -40,12 +40,12 @@ enum CatPersona: String, CaseIterable, Hashable {
     /// Keeps `rawValue` intact for API round-tripping.
     var displayName: String {
         switch self {
-        case .grumpyBoss:             return "Grumpy - Boss"
-        case .existentialPhilosopher: return "Existential - Philosopher"
-        case .chaoticHunter:          return "Chaotic - Hunter"
-        case .dramaticDiva:           return "Dramatic - Diva"
-        case .affectionateSweetheart: return "Affectionate - Sweetheart"
-        case .secretAgent:            return "Secret - Agent"
+        case .grumpyBoss:             return "Grumpy Boss"
+        case .existentialPhilosopher: return "Existential Philosopher"
+        case .chaoticHunter:          return "Chaotic Hunter"
+        case .dramaticDiva:           return "Dramatic Diva"
+        case .affectionateSweetheart: return "Affectionate Sweetheart"
+        case .secretAgent:            return "Secret Agent"
         }
     }
 

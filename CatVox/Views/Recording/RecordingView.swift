@@ -84,7 +84,7 @@ struct RecordingView: View {
             // Phase 1: always mock. Phase 2: pass recorded URL to the backend.
             ResultView(analysis: MockAnalysisService.sampleAnalysis)
         }
-        .alert("Recording - Failed", isPresented: $showError) {
+        .alert("Recording Failed", isPresented: $showError) {
             Button("Retry",  role: .none)   { service.reset() }
             Button("Cancel", role: .cancel) { dismiss() }
         } message: {
@@ -114,7 +114,7 @@ struct RecordingView: View {
                         .frame(width: 7, height: 7)
                         .opacity(0.9)
                 }
-                Text(isRecording ? "REC" : "10 - SEC")
+                Text(isRecording ? "REC" : "10 SEC")
                     .font(.system(size: 11, weight: .heavy))
                     .foregroundStyle(.white.opacity(0.55))
                     .tracking(2.5)
@@ -203,8 +203,8 @@ struct RecordingView: View {
                     .foregroundStyle(.white.opacity(0.16))
 
                 Text(service.permissionDenied
-                     ? "Camera - Access\nDenied in Settings."
-                     : "Initialising - Camera...")
+                     ? "Camera Access\nDenied in Settings."
+                     : "Initialising Camera...")
                     .font(.callout)
                     .multilineTextAlignment(.center)
                     .foregroundStyle(.white.opacity(0.28))
@@ -221,7 +221,7 @@ struct RecordingView: View {
 
     private var statusLabel: String {
         switch service.captureState {
-        case .idle:         return "TAP - TO - START"
+        case .idle:         return "TAP TO START"
         case .recording:    return "RECORDING"
         case .finished(_):  return "PROCESSING"
         case .failed(_):    return "FAILED"

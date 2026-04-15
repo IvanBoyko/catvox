@@ -15,7 +15,7 @@ struct PersonaBadgeView: View {
 
             // MARK: Emotion label
             VStack(alignment: .leading, spacing: 3) {
-                Text("PRIMARY - EMOTION")
+                Text("PRIMARY EMOTION")
                     .font(.system(size: 9, weight: .heavy))
                     .foregroundStyle(.white.opacity(0.45))
                     .tracking(1.4)

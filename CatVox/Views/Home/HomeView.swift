@@ -35,7 +35,7 @@ struct HomeView: View {
                 Button {
                     showRecording = true
                 } label: {
-                    Label("Start - Scan", systemImage: "video.fill")
+                    Label("Start Scan", systemImage: "video.fill")
                         .font(.headline)
                         .foregroundStyle(.black)
                         .frame(maxWidth: .infinity)
@@ -60,20 +60,20 @@ struct HomeView: View {
                     .padding(.vertical, 28)
 
                 VStack(spacing: 10) {
-                    Text("DEV - PREVIEW")
+                    Text("DEV PREVIEW")
                         .font(.system(size: 9, weight: .heavy))
                         .foregroundStyle(.white.opacity(0.25))
                         .tracking(2)
 
                     Picker("Persona", selection: $selectedSample) {
-                        Text("Grumpy - Boss").tag(0)
+                        Text("Grumpy Boss").tag(0)
                         Text("Philosopher").tag(1)
-                        Text("Chaotic - Hunter").tag(2)
+                        Text("Chaotic Hunter").tag(2)
                     }
                     .pickerStyle(.segmented)
                     .padding(.horizontal, 24)
 
-                    Button("Preview - Result") { showResult = true }
+                    Button("Preview Result") { showResult = true }
                         .font(.caption)
                         .foregroundStyle(.white.opacity(0.35))
                         .padding(.top, 2)

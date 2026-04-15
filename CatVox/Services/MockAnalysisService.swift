@@ -6,7 +6,7 @@ import Foundation
 enum MockAnalysisService {
 
     static let sampleAnalysis = CatAnalysis(
-        primaryEmotion:  "Territorial - Alertness",
+        primaryEmotion:  "Territorial Alertness",
         confidenceScore: 0.87,
         analysis: """
             The subject displays classic signs of heightened territorial awareness. \
@@ -29,7 +29,7 @@ enum MockAnalysisService {
         sampleAnalysis,
 
         CatAnalysis(
-            primaryEmotion:  "Existential - Ennui",
+            primaryEmotion:  "Existential Ennui",
             confidenceScore: 0.72,
             analysis: """
                 The subject is in a state of deep contemplation, evidenced by slow blinking, \
@@ -49,7 +49,7 @@ enum MockAnalysisService {
         ),
 
         CatAnalysis(
-            primaryEmotion:  "Maximum - Zoomies",
+            primaryEmotion:  "Maximum Zoomies",
             confidenceScore: 0.95,
             analysis: """
                 The subject is exhibiting classic frenetic random activity periods (FRAPs). Dilated \
