@@ -1,10 +1,10 @@
 # Technical Requirements Document: CatVox AI (MVP)
 
-**Version:** 1.0  
+**Version:** 1.1  
 **Company:** Kathelix Ltd  
 **Project Lead:** Ivan Boyko
 **Date:** April 2026  
-**Status:** Draft / Specification Phase
+**Status:** Specification Refinement (Post-Prototype)
 
 ---
 
@@ -24,6 +24,7 @@ CatVox AI is a premium, minimalist iOS application designed to interpret cat beh
 
 ### 3.1 Core Features (MVP)
 * **Video Capture:** Fixed 10-second recording window with a countdown UI.
+    * **CRITICAL:** A high-intensity haptic buzz and a subtle "ping" sound must trigger exactly at the 10.0s mark to signal the end of recording.
 * **Multimodal Analysis:** Simultaneous processing of video (body language) and audio (vocalization) via Vertex AI.
 * **Persona Engine:** Logic to assign one of 6 "Cat Personas" (e.g., Grumpy Boss, Existential Philosopher) to the output.
 * **Mood Diary:** A local history of scans saved using SwiftData.
@@ -65,6 +66,10 @@ The backend must return a strictly formatted JSON object:
 2. **Recording Screen:** Viewfinder with an AVFoundation-based 10s progress ring.
 3. **Result Screen:** * Full-screen looping video.
     * Animated Glassmorphism "Thought Bubble."
+    * **Confidence Score UI:** The percentage ring must be dynamically color-coded:
+        * **Green:** > 80% (High Confidence)
+        * **Amber:** 50% - 80% (Moderate Confidence)
+        * **Red:** < 50% (Low Confidence/Ambiguous)
     * Expandable "Expert Insights" drawer.
     * "Share to Story" CTA.
 
@@ -72,9 +77,10 @@ The backend must return a strictly formatted JSON object:
 
 ## 6. Project Roadmap
 
-### Phase 1: Prototype (1-2 Weeks)
+### Phase 1: Prototype Refinement (Current)
+* **Bug Fix:** Implement haptic/audio feedback trigger at exactly 10s.
+* **UI Update:** Apply dynamic color logic to the Confidence Score ring.
 * Finalize System Instructions for Gemini.
-* Build SwiftUI ResultView with mock data.
 * Setup Firebase/GCP project structure.
 
 ### Phase 2: MVP Development (3-4 Weeks)
