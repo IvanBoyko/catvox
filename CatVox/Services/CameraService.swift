@@ -57,13 +57,6 @@ final class CameraService {
     private var displayLink: CADisplayLink?
     private var startTime:   CFTimeInterval = 0
 
-    /// Prepared ahead of recording so the haptic fires without latency at 10 s.
-    /// UINotificationFeedbackGenerator (.success) produces the two-pulse "buzz"
-    /// pattern required by TRD §3.1, unlike UIImpactFeedbackGenerator which gives
-    /// a single sharp thump.
-    /// @ObservationIgnored — UIKit objects must not be tracked by the macro.
-    @ObservationIgnored
-    private var feedbackGenerator: UINotificationFeedbackGenerator?
 
     /// NSObject delegate shim stored as `let` (not lazy) to avoid
     /// the @Observable init-accessor conflict with lazy stored properties.
@@ -149,10 +142,6 @@ final class CameraService {
         progress     = 0
         startTime    = CACurrentMediaTime()
 
-        // Prepare haptic engine now so it fires instantly at the 10 s mark.
-        feedbackGenerator = UINotificationFeedbackGenerator()
-        feedbackGenerator?.prepare()
-
         #if targetEnvironment(simulator)
         attachDisplayLink()           // Simulated countdown, no real file
         #else
@@ -183,15 +172,13 @@ final class CameraService {
         displayLink = nil
 
         // TRD §3.1 — high-intensity haptic buzz + ping at exactly 10 s.
-        // Three rules applied here (see Gemini analysis):
-        //   1. Use .notificationOccurred(.success) — two-pulse "buzz" pattern.
-        //   2. Do NOT nil feedbackGenerator yet; Taptic Engine fires async and
-        //      releasing the reference in the same run-loop cycle can cancel it.
-        //      reset() will nil it once the transition is complete.
-        //   3. On device: call stopRecording() BEFORE the system sound so iOS
-        //      releases the AVCaptureSession audio lock first — otherwise the
-        //      active audio-input session suppresses AudioServicesPlaySystemSound.
-        feedbackGenerator?.notificationOccurred(.success)
+        //
+        // Generator is created inline, NOT stored across the 10-second recording.
+        // UIFeedbackGenerator.prepare() has a short expiry window (~2-3 s); a
+        // generator prepared at startRecording() has long since returned to idle
+        // by the time this fires, silently dropping the haptic request.
+        // Creating it fresh here fires immediately without a prepare() window.
+        UINotificationFeedbackGenerator().notificationOccurred(.success)
 
         #if targetEnvironment(simulator)
         AudioServicesPlaySystemSound(1117)
@@ -220,9 +207,8 @@ final class CameraService {
     /// Returns to `.idle` so the user can record again without
     /// dismissing RecordingView.
     func reset() {
-        captureState      = .idle
-        progress          = 0
-        feedbackGenerator = nil
+        captureState = .idle
+        progress     = 0
     }
 }
 
