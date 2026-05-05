@@ -79,6 +79,8 @@ catvox/
 │   ├── build.yml                  # iOS build check on every push/PR
 │   ├── functions.yml              # Functions build/deploy/integration workflow
 │   └── terraform.yml              # Terraform plan (PR) + apply (merge to main)
+├── .codex/environments/
+│   └── environment.toml           # Codex app run actions; call Makefile targets
 ├── Makefile                       # Local/CI command facade for common automation
 └── AGENTS.md                      # Developer onboarding (read automatically by Codex)
 ```
@@ -88,6 +90,8 @@ catvox/
 ## 4. Local Automation
 
 Use the repository-root `Makefile` as the command facade for common local workflows. It intentionally stays thin: larger workflow logic remains in scripts such as `scripts/run-on-iphone.sh` and the Terraform bootstrap scripts. GitHub Actions also call Makefile targets for shared command bodies while retaining CI-specific setup, authentication, caching, and PR comments. See ADR-0014.
+
+Codex app run actions in `.codex/environments/environment.toml` should call Makefile targets as well. When adding or renaming common automation targets, update that file in the same change if the Codex UI actions are affected.
 
 Useful targets:
 
@@ -220,10 +224,10 @@ The WIF pool is locked to `kathelix/catvox` via `attribute-condition` — no oth
 | Workflow | Trigger | What it does |
 |---|---|---|
 | `build.yml` | Every push/PR to `main` | XcodeGen → build generic iOS Simulator slice → run unit tests on a concrete simulator |
-| `functions.yml` (build) | Push/PR touching `functions/**`, `firebase.json`, `docs/systemInstruction.md`, or workflow | TypeScript compile check + backend unit tests |
+| `functions.yml` (build) | Push/PR touching `functions/**`, `firebase.json`, `docs/systemInstruction.md`, `Makefile`, or workflow | TypeScript compile check + backend unit tests |
 | `functions.yml` (deploy + integration) | Merge to `main` touching Functions inputs | Firebase Functions deploy, then backend integration tests against the current Dev backend |
-| `terraform.yml` (plan) | PR touching `terraform/**` | fmt-check → init → validate → plan → PR comment |
-| `terraform.yml` (apply) | Merge to `main` touching `terraform/**` | init → apply -auto-approve |
+| `terraform.yml` (plan) | PR touching `terraform/**`, `Makefile`, or workflow | fmt-check → init → validate → plan → PR comment |
+| `terraform.yml` (apply) | Merge to `main` touching `terraform/**`, `Makefile`, or workflow | init → apply -auto-approve |
 
 ### Bootstrap (one-time, already done)
 
@@ -251,6 +255,7 @@ GCP_PROJECT_ID=kathelix-catvox-prod make bootstrap-wif
 
 - Feature work goes on a branch; open a PR to `main`.
 - Create or switch to the intended feature branch before making any feature-related doc or code edits. Avoid starting feature work on `main`, even for documentation-only changes.
+- Exception: tiny mechanical follow-ups may be committed directly to `main` when the user explicitly asks for direct-to-main handling or confirms that a PR is unnecessary. Keep this exception to low-risk documentation/config alignment changes, such as updating Codex action wrappers after a Makefile target rename. Do not use it for product behavior, infrastructure semantics, workflow logic, secrets, or anything that needs review before merge.
 - The Terraform pipeline posts a plan comment on every PR — review it before merging.
 - Before final review or merge, check all PR bot / AI review findings and explicitly triage each one as fix, reject with reasoning, or defer.
 - Treat bot findings touching concurrency, cancellation, state ownership, persistence, navigation, or other direct user-facing behavior as high-signal by default until disproven.
