@@ -43,7 +43,7 @@ const signedUrlEndpoint =
 function usage(): void {
   console.error(`
 Usage:
-  npm --prefix functions run test:integration:quota -- --confirm
+  npm --prefix functions run test:integration
 
 Options:
   --confirm   Required. Writes and deletes a temporary Firestore usage doc.
