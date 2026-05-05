@@ -321,45 +321,51 @@ percentage. See ADR-0010 and ADR-0012.
 
 ## 7. CI/CD Pipelines
 
+### 7.0 Shared Local / CI Command Facade
+CatVox uses the repository-root `Makefile` as a thin facade for common developer and CI command bodies. Developers should prefer discoverable `make` targets such as `make ios-test`, `make functions-deploy`, `make functions-integration`, `make terraform-plan`, and `make terraform-apply CONFIRM=apply` over manually retyping long command sequences.
+
+GitHub Actions may call Makefile targets for the command body, but workflow YAML remains responsible for CI-only concerns such as checkout, toolchain installation, dependency caching, Workload Identity Federation authentication, path/event triggers, and PR comments. See ADR-0014.
+
 ### 7.1 iOS Build Pipeline
 * **Trigger:** Every push and pull request targeting `main`.
 * **Runner:** macOS 15 (Xcode 16, iOS 17+ SDK).
-* **Steps:** Checkout → XcodeGen (regenerate `.xcodeproj` from `project.yml`) → build for generic iOS Simulator slice (`CODE_SIGNING_ALLOWED=NO`) → run unit tests on a concrete simulator device (`platform=iOS Simulator,name=iPhone 16,OS=latest`). Xcode cannot run tests on `generic/platform=iOS Simulator`.
+* **Steps:** Checkout → install XcodeGen / `xcpretty` → `make ios-generate` → `make ios-build-only` for the generic iOS Simulator slice (`CODE_SIGNING_ALLOWED=NO`) → `make ios-test-only` on a concrete simulator device (`platform=iOS Simulator,name=iPhone 16,OS=latest`). Xcode cannot run tests on `generic/platform=iOS Simulator`.
 * **Purpose:** Catches build breaks, XcodeGen drift, and unit-test regressions on every change. No device signing or provisioning profiles required.
 
 ### 7.2 Terraform Infrastructure Pipeline
-* **Trigger:** Push or pull request targeting `main` when files under `terraform/` or the workflow file itself change.
+* **Trigger:** Push or pull request targeting `main` when files under `terraform/`, the repository `Makefile`, or the workflow file itself change.
 * **Authentication:** Keyless via **Workload Identity Federation (WIF)**. GitHub Actions presents its OIDC token; GCP exchanges it for a short-lived credential scoped to `catvox-ci-sa` (the dedicated Terraform CI identity). No long-lived service account keys are stored anywhere.
 * **Plan job (on PR):**
     1. Authenticate to GCP via WIF.
-    2. `terraform init` → `terraform fmt -check` → `terraform validate` → `terraform plan`.
+    2. `make terraform-fmt-check` → `make terraform-init` → `make terraform-validate` → `make terraform-ci-plan`.
     3. Post a structured comment to the PR with fmt/init outcomes and the full plan output (collapsible, truncated at 60k characters if needed).
     4. Fail the job if the plan step fails, surfacing the error in the PR comment.
-* **Apply job (on merge to `main`):** `terraform init` → `terraform apply -auto-approve`.
+* **Apply job (on merge to `main`):** `make terraform-init` → `make terraform-ci-apply` (`terraform apply -auto-approve -no-color`).
 * **Variables:** `TF_VAR_project_id` and `TF_VAR_app_check_debug_token` supplied from GitHub Actions secrets; `region` and `firestore_location` use the defaults defined in `variables.tf`.
+* **Local apply guard:** Developers must run `make terraform-plan` before review, and local `make terraform-apply` refuses to run unless invoked as `make terraform-apply CONFIRM=apply`. The target still uses Terraform's interactive apply prompt.
 
 ### 7.3 Firebase Cloud Functions Pipeline
-* **Trigger:** Push or pull request targeting `main` when files under `functions/`, `firebase.json`, `docs/systemInstruction.md`, or the workflow file itself change. `docs/systemInstruction.md` is included because it is copied into the deployment artifact at build time — a prompt-only change must trigger a redeploy. (See ADR-0008 and ADR-0010.)
+* **Trigger:** Push or pull request targeting `main` when files under `functions/`, `firebase.json`, `docs/systemInstruction.md`, the repository `Makefile`, or the workflow file itself change. `docs/systemInstruction.md` is included because it is copied into the deployment artifact at build time — a prompt-only change must trigger a redeploy. (See ADR-0008 and ADR-0010.)
 * **Authentication:** Same WIF setup as the Terraform pipeline — `catvox-ci-sa` via `GCP_WORKLOAD_IDENTITY_PROVIDER` and `GCP_SERVICE_ACCOUNT` secrets.
-* **Build job (on PR and push):** `npm ci` → `npm run test:unit` (TypeScript compile check plus backend unit tests).
-* **Deploy job (on merge to `main`):** Runs after build passes → `firebase deploy --only functions`.
-* **Integration job (after merge-to-main deploy):** Runs backend integration tests against the currently deployed backend, using the current live GCP/Firebase project as the Dev environment until a separate production environment exists. Integration tests may write temporary Dev data when required and must clean it up. The current suite includes the daily-quota contract test, which creates a temporary `usage/{userId}` document, verifies the machine-readable daily-quota HTTP `429` response and structured Cloud Logging entry, then deletes the temporary document. See ADR-0013.
-* **Local Dev integration command:** Developers can run the same backend integration suite against the currently deployed Dev backend with `npm --prefix functions run test:integration`.
+* **Build job (on PR and push):** `make functions-install` → `make functions-test` (TypeScript compile check plus backend unit tests).
+* **Deploy job (on merge to `main`):** Runs after build passes → `make functions-deploy` (`npm --prefix functions run build` plus `firebase deploy --only functions`).
+* **Integration job (after merge-to-main deploy):** Runs `make functions-integration` against the currently deployed backend, using the current live GCP/Firebase project as the Dev environment until a separate production environment exists. Integration tests may write temporary Dev data when required and must clean it up. The current suite includes the daily-quota contract test, which creates a temporary `usage/{userId}` document, verifies the machine-readable daily-quota HTTP `429` response and structured Cloud Logging entry, then deletes the temporary document. See ADR-0013.
+* **Local Dev integration command:** Developers can run the same backend integration suite against the currently deployed Dev backend with `make functions-integration` or `npm --prefix functions run test:integration`.
 
 ### 7.4 WIF Bootstrap & GitHub Secrets
-The following one-time manual setup is required before the Terraform pipeline can run. Bootstrap scripts are in `terraform/`:
+The following one-time manual setup is required before the Terraform pipeline can run. Bootstrap operations are exposed through repository-root Makefile targets:
 
-| Script | Purpose |
+| Target | Purpose |
 |---|---|
-| `bootstrap_remote_state.sh` | Creates the GCS state bucket with versioning |
-| `bootstrap_wif.sh` | Creates the WIF pool + OIDC provider, binds the GitHub repo to `catvox-ci-sa`, grants state bucket access |
+| `make bootstrap-remote-state` | Creates the GCS state bucket with versioning |
+| `make bootstrap-wif` | Creates the WIF pool + OIDC provider, binds the GitHub repo to `catvox-ci-sa`, grants state bucket access |
 
 **Required GitHub Actions secrets:**
 
 | Secret | Value |
 |---|---|
 | `GCP_PROJECT_ID` | GCP project ID (`var.project_id`) |
-| `GCP_WORKLOAD_IDENTITY_PROVIDER` | Full WIF provider resource name (output of `bootstrap_wif.sh`) |
+| `GCP_WORKLOAD_IDENTITY_PROVIDER` | Full WIF provider resource name (output of `make bootstrap-wif`) |
 | `GCP_SERVICE_ACCOUNT` | `catvox-ci-sa@<project-id>.iam.gserviceaccount.com` |
 | `TF_VAR_app_check_debug_token` | Firebase App Check debug token |
 
@@ -373,22 +379,21 @@ Use this when deploying to a new GCP project, or after a full `terraform destroy
    ```bash
    firebase projects:addfirebase <PROJECT_ID>
    ```
-3. Run the bootstrap scripts from `terraform/`:
+3. Run the Makefile bootstrap targets:
    ```bash
-   PROJECT_ID=<your-project-id> ./bootstrap_remote_state.sh  # creates TF state bucket
-   PROJECT_ID=<your-project-id> ./bootstrap_wif.sh            # creates WIF pool + OIDC provider
+   GCP_PROJECT_ID=<your-project-id> make bootstrap-remote-state  # creates TF state bucket
+   GCP_PROJECT_ID=<your-project-id> make bootstrap-wif            # creates WIF pool + OIDC provider
    ```
-4. Add the four GitHub Actions secrets printed by `bootstrap_wif.sh` (see §7.4).
+4. Add the four GitHub Actions secrets printed by `make bootstrap-wif` (see §7.4).
 
 #### Deploy infrastructure and backend
 ```bash
 # 1. Provision all GCP infrastructure
-cd terraform
-terraform apply
+make terraform-plan
+make terraform-apply CONFIRM=apply
 
 # 2. Deploy Cloud Functions
-cd ../functions
-firebase deploy --only functions
+make functions-deploy
 ```
 
 After step 1 the GitHub Actions CI pipeline is fully functional — all subsequent infrastructure changes go through CI.

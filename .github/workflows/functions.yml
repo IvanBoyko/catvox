@@ -7,6 +7,7 @@ on:
       - 'functions/**'
       - 'firebase.json'
       - 'docs/systemInstruction.md'
+      - 'Makefile'
       - '.github/workflows/functions.yml'
   pull_request:
     branches: [main]
@@ -14,6 +15,7 @@ on:
       - 'functions/**'
       - 'firebase.json'
       - 'docs/systemInstruction.md'
+      - 'Makefile'
       - '.github/workflows/functions.yml'
 
 concurrency:
@@ -31,9 +33,6 @@ jobs:
   build:
     name: Build
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: functions
 
     steps:
       - name: Checkout
@@ -47,10 +46,10 @@ jobs:
           cache-dependency-path: functions/package-lock.json
 
       - name: Install dependencies
-        run: npm ci
+        run: make functions-install
 
       - name: Build and unit tests
-        run: npm run test:unit
+        run: make functions-test
 
   # ── Deploy ───────────────────────────────────────────────────────────────────
   # Runs only on merge to main. Authenticates via WIF and deploys to GCP.
@@ -59,9 +58,6 @@ jobs:
     runs-on: ubuntu-latest
     needs: build
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    defaults:
-      run:
-        working-directory: functions
 
     steps:
       - name: Checkout
@@ -84,13 +80,12 @@ jobs:
         run: npm install -g firebase-tools
 
       - name: Install dependencies
-        run: npm ci
+        run: make functions-install
 
-      - name: Build
-        run: npm run build
-
-      - name: Deploy to Firebase
-        run: firebase deploy --only functions --project ${{ secrets.GCP_PROJECT_ID }}
+      - name: Build and deploy to Firebase
+        env:
+          FIREBASE_PROJECT: ${{ secrets.GCP_PROJECT_ID }}
+        run: make functions-deploy
 
   # ── Integration: post-deploy ─────────────────────────────────────────────────
   # Runs only after main deploy. Treats the current live GCP/Firebase project as
@@ -100,9 +95,6 @@ jobs:
     runs-on: ubuntu-latest
     needs: deploy
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    defaults:
-      run:
-        working-directory: functions
 
     steps:
       - name: Checkout
@@ -125,9 +117,9 @@ jobs:
           cache-dependency-path: functions/package-lock.json
 
       - name: Install dependencies
-        run: npm ci
+        run: make functions-install
 
       - name: Run integration tests
         env:
           CATVOX_PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
-        run: npm run test:integration
+        run: make functions-integration
