@@ -8,9 +8,9 @@ script = ""
 [[actions]]
 name = "App - build and deploy"
 icon = "run"
-command = "./scripts/run-on-iphone.sh launch"
+command = "make ios-device-launch"
 
 [[actions]]
 name = "Deploy backend"
 icon = "run"
-command = "firebase deploy --only functions"
+command = "make functions-deploy"
