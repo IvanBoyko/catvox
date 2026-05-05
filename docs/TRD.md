@@ -353,19 +353,19 @@ GitHub Actions may call Makefile targets for the command body, but workflow YAML
 * **Local Dev integration command:** Developers can run the same backend integration suite against the currently deployed Dev backend with `make functions-integration` or `npm --prefix functions run test:integration`.
 
 ### 7.4 WIF Bootstrap & GitHub Secrets
-The following one-time manual setup is required before the Terraform pipeline can run. Bootstrap scripts are in `terraform/`:
+The following one-time manual setup is required before the Terraform pipeline can run. Bootstrap operations are exposed through repository-root Makefile targets:
 
-| Script | Purpose |
+| Target | Purpose |
 |---|---|
-| `bootstrap_remote_state.sh` / `make bootstrap-remote-state` | Creates the GCS state bucket with versioning |
-| `bootstrap_wif.sh` / `make bootstrap-wif` | Creates the WIF pool + OIDC provider, binds the GitHub repo to `catvox-ci-sa`, grants state bucket access |
+| `make bootstrap-remote-state` | Creates the GCS state bucket with versioning |
+| `make bootstrap-wif` | Creates the WIF pool + OIDC provider, binds the GitHub repo to `catvox-ci-sa`, grants state bucket access |
 
 **Required GitHub Actions secrets:**
 
 | Secret | Value |
 |---|---|
 | `GCP_PROJECT_ID` | GCP project ID (`var.project_id`) |
-| `GCP_WORKLOAD_IDENTITY_PROVIDER` | Full WIF provider resource name (output of `bootstrap_wif.sh`) |
+| `GCP_WORKLOAD_IDENTITY_PROVIDER` | Full WIF provider resource name (output of `make bootstrap-wif`) |
 | `GCP_SERVICE_ACCOUNT` | `catvox-ci-sa@<project-id>.iam.gserviceaccount.com` |
 | `TF_VAR_app_check_debug_token` | Firebase App Check debug token |
 
@@ -379,12 +379,12 @@ Use this when deploying to a new GCP project, or after a full `terraform destroy
    ```bash
    firebase projects:addfirebase <PROJECT_ID>
    ```
-3. Run the bootstrap scripts from `terraform/`:
+3. Run the Makefile bootstrap targets:
    ```bash
    GCP_PROJECT_ID=<your-project-id> make bootstrap-remote-state  # creates TF state bucket
    GCP_PROJECT_ID=<your-project-id> make bootstrap-wif            # creates WIF pool + OIDC provider
    ```
-4. Add the four GitHub Actions secrets printed by `bootstrap_wif.sh` (see §7.4).
+4. Add the four GitHub Actions secrets printed by `make bootstrap-wif` (see §7.4).
 
 #### Deploy infrastructure and backend
 ```bash
