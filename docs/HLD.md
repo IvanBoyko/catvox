@@ -3,7 +3,7 @@
 **Version:** 1.8
 **Company:** Kathelix Ltd
 **Project Lead:** Ivan Boyko
-**Date:** April 2026
+**Date:** 29 April 2026
 
 This file captures the high-level architecture and stable design intent for CatVox.
 It should stay concise and remain aligned with `docs/TRD.md`, which holds the detailed technical design and implementation constraints.

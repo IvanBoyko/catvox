@@ -3,7 +3,7 @@
 **Version:** 2.9
 **Company:** Kathelix Ltd  
 **Project Lead:** Ivan Boyko
-**Date:** May 2026
+**Date:** 1 May 2026
 **Status:** Infrastructure & Backend Definition
 
 ---
