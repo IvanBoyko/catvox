@@ -5,11 +5,13 @@ on:
     branches: [main]
     paths:
       - 'terraform/**'
+      - 'Makefile'
       - '.github/workflows/terraform.yml'
   pull_request:
     branches: [main]
     paths:
       - 'terraform/**'
+      - 'Makefile'
       - '.github/workflows/terraform.yml'
 
 # Cancel any in-progress run for the same branch so each push doesn't queue
@@ -38,9 +40,6 @@ jobs:
     name: Plan
     runs-on: ubuntu-latest
     if: github.event_name == 'pull_request'
-    defaults:
-      run:
-        working-directory: terraform
 
     steps:
       - name: Checkout
@@ -58,20 +57,20 @@ jobs:
       # Check formatting before doing anything else — fast fail.
       - name: Terraform Format Check
         id: fmt
-        run: terraform fmt -check -recursive
+        run: make terraform-fmt-check
         continue-on-error: true  # Report in PR comment rather than failing the step
 
       - name: Terraform Init
         id: init
-        run: terraform init
+        run: make terraform-init
 
       - name: Terraform Validate
         id: validate
-        run: terraform validate -no-color
+        run: make terraform-validate
 
       - name: Terraform Plan
         id: plan
-        run: terraform plan -no-color
+        run: make terraform-ci-plan
         continue-on-error: true  # Failure is surfaced in the PR comment below
 
       # Post a structured comment summarising all steps. Truncates plan output
@@ -134,9 +133,6 @@ jobs:
     name: Apply
     runs-on: ubuntu-latest
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    defaults:
-      run:
-        working-directory: terraform
 
     steps:
       - name: Checkout
@@ -152,7 +148,7 @@ jobs:
         uses: hashicorp/setup-terraform@v4
 
       - name: Terraform Init
-        run: terraform init
+        run: make terraform-init
 
       - name: Terraform Apply
-        run: terraform apply -auto-approve -no-color
+        run: make terraform-ci-apply

@@ -77,13 +77,46 @@ catvox/
 │   └── bootstrap_wif.sh           # One-time: sets up WIF for GitHub Actions
 ├── .github/workflows/
 │   ├── build.yml                  # iOS build check on every push/PR
+│   ├── functions.yml              # Functions build/deploy/integration workflow
 │   └── terraform.yml              # Terraform plan (PR) + apply (merge to main)
+├── Makefile                       # Local/CI command facade for common automation
 └── AGENTS.md                      # Developer onboarding (read automatically by Codex)
 ```
 
 ---
 
-## 4. iOS Development
+## 4. Local Automation
+
+Use the repository-root `Makefile` as the command facade for common local workflows. It intentionally stays thin: larger workflow logic remains in scripts such as `scripts/run-on-iphone.sh` and the Terraform bootstrap scripts. GitHub Actions also call Makefile targets for shared command bodies while retaining CI-specific setup, authentication, caching, and PR comments. See ADR-0014.
+
+Useful targets:
+
+```bash
+make help
+make doctor
+make ios-build
+make ios-test
+make ios-device-launch
+make functions-test
+make functions-deploy
+make functions-integration
+make terraform-plan
+make terraform-apply CONFIRM=apply
+make bootstrap-remote-state
+make bootstrap-wif
+```
+
+For environment-specific runs, override variables at invocation time, for example:
+
+```bash
+GCP_PROJECT_ID=kathelix-catvox-prod make terraform-plan
+FIREBASE_PROJECT=kathelix-catvox-prod make functions-deploy
+DEVICE_ID=<device-udid> make ios-device-launch
+```
+
+---
+
+## 5. iOS Development
 
 ### XcodeGen Workflow
 
@@ -91,7 +124,7 @@ catvox/
 
 ```bash
 # After any change to project.yml:
-xcodegen generate
+make ios-generate
 ```
 
 The `schemes:` block in `project.yml` is intentional — XcodeGen silently deletes shared schemes unless they are declared there. Do not remove it.
@@ -101,23 +134,17 @@ The `schemes:` block in `project.yml` is intentional — XcodeGen silently delet
 - The machine is configured to use full Xcode, not Command Line Tools:
   - `xcode-select -p` should be `/Applications/Xcode.app/Contents/Developer`
   - plain `xcodebuild -version` should work without a `DEVELOPER_DIR` override
-- For local build and test verification, run `xcodebuild` from the repo root (`/Users/Shared/git/github.com/catvox`), not from a subdirectory.
+- For local build and test verification, run Makefile targets or `xcodebuild` from the repo root (`/Users/Shared/git/github.com/catvox`), not from a subdirectory.
 - Canonical build verification command:
 
 ```bash
-xcodebuild -project CatVox.xcodeproj \
-  -scheme CatVox \
-  -destination 'generic/platform=iOS Simulator' \
-  build CODE_SIGNING_ALLOWED=NO
+make ios-build
 ```
 
 - Unit tests must run on a concrete simulator device. Xcode cannot run tests on `generic/platform=iOS Simulator`.
 
 ```bash
-xcodebuild -project CatVox.xcodeproj \
-  -scheme CatVox \
-  -destination 'platform=iOS Simulator,name=iPhone 16,OS=latest' \
-  test CODE_SIGNING_ALLOWED=NO
+make ios-test
 ```
 
 - In Codex, simulator builds may fail inside the sandbox because of `CoreSimulatorService` and `~/Library` access. If that happens, rerun the same `xcodebuild` command outside the sandbox instead of changing the build command.
@@ -157,7 +184,7 @@ Implemented in `functions/src/gemini.ts` — update there, not here:
 
 ---
 
-## 5. Infrastructure
+## 6. Infrastructure
 
 ### Terraform State
 
@@ -165,9 +192,8 @@ Remote state lives in GCS: `gs://catvox-tf-state-kathelix-catvox-prod/catvox/sta
 
 Never run `terraform apply` locally without first confirming the remote state is clean:
 ```bash
-cd terraform
-terraform init   # connects to GCS backend
-terraform plan   # review before any apply
+make terraform-plan   # connects to GCS backend and reviews planned changes
+make terraform-apply CONFIRM=apply
 ```
 
 `terraform.tfvars` is gitignored. Copy from `terraform.tfvars.example` and fill in values.
@@ -204,8 +230,8 @@ The WIF pool is locked to `kathelix/catvox` via `attribute-condition` — no oth
 Both bootstrap scripts in `terraform/` have already been run against the live project. They are idempotent — safe to re-run if needed:
 
 ```bash
-PROJECT_ID=kathelix-catvox-prod ./terraform/bootstrap_remote_state.sh
-PROJECT_ID=kathelix-catvox-prod ./terraform/bootstrap_wif.sh
+GCP_PROJECT_ID=kathelix-catvox-prod make bootstrap-remote-state
+GCP_PROJECT_ID=kathelix-catvox-prod make bootstrap-wif
 ```
 
 **Required GitHub Actions secrets** (already configured):
@@ -219,7 +245,7 @@ PROJECT_ID=kathelix-catvox-prod ./terraform/bootstrap_wif.sh
 
 ---
 
-## 6. Process Conventions
+## 7. Process Conventions
 
 ### Branching
 
@@ -315,9 +341,9 @@ If a feature that was originally tracked under one broad backlog item becomes se
 
 ### Functions Local Validation
 
-- The Firebase Functions runtime is Node.js 22. For local validation, prefer running `functions` commands under Node.js 22 so `npm ci` and `npm run build` match CI and do not emit avoidable engine warnings.
+- The Firebase Functions runtime is Node.js 22. For local validation, prefer running `functions` commands under Node.js 22 so `make functions-install`, `make functions-build`, and `make functions-test` match CI and do not emit avoidable engine warnings.
 - If Node.js 22 is unavailable locally, it is acceptable to run the build under the installed Node version, but explicitly report any expected `EBADENGINE` warning as an environment mismatch rather than treating it as a workflow failure.
-- Backend integration tests may write temporary Firestore documents and are safe to run against the current Dev backend with `npm --prefix functions run test:integration`. Do not run Firestore-mutating integration tests against a future real Prod environment; future Prod should use only a separate, protected, non-invasive smoke-test runbook.
+- Backend integration tests may write temporary Firestore documents and are safe to run against the current Dev backend with `make functions-integration` or `npm --prefix functions run test:integration`. Do not run Firestore-mutating integration tests against a future real Prod environment; future Prod should use only a separate, protected, non-invasive smoke-test runbook.
 
 ### HLD vs TRD
 
@@ -328,7 +354,7 @@ If a feature that was originally tracked under one broad backlog item becomes se
 
 ---
 
-## 7. Current Implementation Status
+## 8. Current Implementation Status
 
 See TRD §8 for the definitive backlog and implementation status. This section is only a lightweight orientation snapshot for new contributors, not the source of truth.
 
@@ -352,7 +378,7 @@ See TRD §8 for the definitive backlog and implementation status. This section i
 
 ---
 
-## 8. Key Constraints and Decisions Not Obvious from Code
+## 9. Key Constraints and Decisions Not Obvious from Code
 
 - **No ads.** Monetization is StoreKit 2 IAP only (from `docs/PROMPT.md`).
 - **Firebase as backend proxy.** The iOS app never calls Vertex AI directly — all AI calls go through a Cloud Function. This is a security requirement (App Check + cost control).

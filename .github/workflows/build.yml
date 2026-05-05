@@ -41,26 +41,12 @@ jobs:
       # Regenerate from project.yml to catch any drift between the spec
       # and the committed .xcodeproj.
       - name: Generate Xcode project
-        run: xcodegen generate
+        run: make ios-generate
 
       # ── Build ────────────────────────────────────────────────────────────
       # Targets the generic simulator slice — no device signing required.
       - name: Build for iOS Simulator
-        run: |
-          set -o pipefail
-          xcodebuild build \
-            -scheme CatVox \
-            -destination 'generic/platform=iOS Simulator' \
-            -configuration Debug \
-            CODE_SIGNING_ALLOWED=NO \
-          | xcpretty
+        run: make ios-build-only
 
       - name: Run iOS Unit Tests
-        run: |
-          set -o pipefail
-          xcodebuild test \
-            -scheme CatVox \
-            -destination 'platform=iOS Simulator,name=iPhone 16,OS=latest' \
-            -configuration Debug \
-            CODE_SIGNING_ALLOWED=NO \
-          | xcpretty
+        run: make ios-test-only
