@@ -47,4 +47,20 @@ final class GCPServiceRequestTests: XCTestCase {
         XCTAssertEqual(decoded["gcsUri"], "gs://catvox-raw-videos-test/cat.mov")
         XCTAssertEqual(decoded["userId"], "user-123")
     }
+
+    func testBackendSessionConfigurationUsesExplicitTimeouts() {
+        let config = GCPService.makeBackendSessionConfiguration(timeout: 150)
+
+        XCTAssertEqual(config.timeoutIntervalForRequest, 150)
+        XCTAssertEqual(config.timeoutIntervalForResource, 150)
+        XCTAssertEqual(config.requestCachePolicy, .reloadIgnoringLocalCacheData)
+        XCTAssertNil(config.urlCache)
+        XCTAssertTrue(config.waitsForConnectivity)
+    }
+
+    func testPipelinePhaseFailureTitlesMatchCurrentStep() {
+        XCTAssertEqual(GCPService.PipelinePhase.preparing.failureTitle, "Connection Failed")
+        XCTAssertEqual(GCPService.PipelinePhase.uploading.failureTitle, "Upload Failed")
+        XCTAssertEqual(GCPService.PipelinePhase.analysing.failureTitle, "Analysis Failed")
+    }
 }

@@ -27,7 +27,7 @@ final class GCPService {
         case analysing
         case complete(CatAnalysis)
         case quotaExceeded
-        case failed(String)
+        case failed(PipelinePhase, String)
 
         static func == (lhs: UploadState, rhs: UploadState) -> Bool {
             switch (lhs, rhs) {
@@ -41,10 +41,27 @@ final class GCPService {
                 return a.id == b.id
             case (.quotaExceeded,    .quotaExceeded):
                 return true
-            case let (.failed(a),     .failed(b)):
-                return a == b
+            case let (.failed(aPhase, aMessage), .failed(bPhase, bMessage)):
+                return aPhase == bPhase && aMessage == bMessage
             default:
                 return false
+            }
+        }
+    }
+
+    enum PipelinePhase: Equatable {
+        case preparing
+        case uploading
+        case analysing
+
+        var failureTitle: String {
+            switch self {
+            case .preparing:
+                return "Connection Failed"
+            case .uploading:
+                return "Upload Failed"
+            case .analysing:
+                return "Analysis Failed"
             }
         }
     }
@@ -80,6 +97,11 @@ final class GCPService {
     private enum Header {
         static let contentType = "Content-Type"
         static let appCheck = "X-Firebase-AppCheck"
+    }
+
+    private enum BackendTimeout {
+        static let signedURL: TimeInterval = 45
+        static let analysis: TimeInterval = 150
     }
 
     // MARK: - User identity
@@ -125,6 +147,9 @@ final class GCPService {
             }
         } catch GCPError.quotaExceeded {
             setUploadState(.quotaExceeded, for: requestID)
+        } catch let failure as PipelinePhaseFailure {
+            logger.error("pipeline failed during \(String(describing: failure.phase)): \(failure.underlying.localizedDescription)")
+            setUploadState(.failed(failure.phase, failure.localizedDescription), for: requestID)
         } catch {
             if isCancellation(error) {
                 setUploadState(.idle, for: requestID)
@@ -132,7 +157,7 @@ final class GCPService {
             }
 
             logger.error("pipeline failed: \(error)")
-            setUploadState(.failed(error.localizedDescription), for: requestID)
+            setUploadState(.failed(.preparing, error.localizedDescription), for: requestID)
         }
     }
 
@@ -166,24 +191,47 @@ final class GCPService {
         let contentType = ImportedVideoService.mimeType(for: localURL)
 
         setUploadState(.fetchingSignedURL, for: requestID)
-        let (signedURL, gcsUri) = try await fetchSignedURL(
-            for: localURL,
-            contentType: contentType
-        )
+        let (signedURL, gcsUri) = try await runPipelinePhase(.preparing) {
+            try await fetchSignedURL(
+                for: localURL,
+                contentType: contentType
+            )
+        }
         try Task.checkCancellation()
 
         setUploadState(.uploading(0), for: requestID)
-        try await upload(
-            fileURL: localURL,
-            to: signedURL,
-            contentType: contentType,
-            requestID: requestID
-        )
+        try await runPipelinePhase(.uploading) {
+            try await upload(
+                fileURL: localURL,
+                to: signedURL,
+                contentType: contentType,
+                requestID: requestID
+            )
+        }
         try Task.checkCancellation()
 
         setUploadState(.analysing, for: requestID)
-        let analysis = try await triggerAnalysis(gcsUri: gcsUri)
+        let analysis = try await runPipelinePhase(.analysing) {
+            try await triggerAnalysis(gcsUri: gcsUri)
+        }
         setUploadState(.complete(analysis), for: requestID)
+    }
+
+    private func runPipelinePhase<T>(
+        _ phase: PipelinePhase,
+        operation: () async throws -> T
+    ) async throws -> T {
+        do {
+            return try await operation()
+        } catch GCPError.quotaExceeded {
+            throw GCPError.quotaExceeded
+        } catch {
+            if isCancellation(error) {
+                throw error
+            }
+
+            throw PipelinePhaseFailure(phase: phase, underlying: error)
+        }
     }
 
     /// Returns `(signedURL, gcsUri)` — the signed PUT URL for the upload and
@@ -198,7 +246,10 @@ final class GCPService {
             appCheckToken: appCheckToken
         )
 
-        let (data, response) = try await URLSession.shared.data(for: request)
+        let (data, response) = try await data(
+            forBackendRequest: request,
+            timeout: BackendTimeout.signedURL
+        )
         guard let http = response as? HTTPURLResponse else {
             throw URLError(.badServerResponse)
         }
@@ -282,7 +333,10 @@ final class GCPService {
             appCheckToken: appCheckToken
         )
 
-        let (data, response) = try await URLSession.shared.data(for: request)
+        let (data, response) = try await data(
+            forBackendRequest: request,
+            timeout: BackendTimeout.analysis
+        )
         guard let http = response as? HTTPURLResponse else {
             throw URLError(.badServerResponse)
         }
@@ -300,6 +354,26 @@ final class GCPService {
     private func fetchAppCheckToken() async throws -> String {
         let token = try await AppCheck.appCheck().token(forcingRefresh: false)
         return token.token
+    }
+
+    private func data(
+        forBackendRequest request: URLRequest,
+        timeout: TimeInterval
+    ) async throws -> (Data, URLResponse) {
+        let config = Self.makeBackendSessionConfiguration(timeout: timeout)
+        let session = URLSession(configuration: config)
+        defer { session.finishTasksAndInvalidate() }
+        return try await session.data(for: request)
+    }
+
+    static func makeBackendSessionConfiguration(timeout: TimeInterval) -> URLSessionConfiguration {
+        let config = URLSessionConfiguration.ephemeral
+        config.requestCachePolicy = .reloadIgnoringLocalCacheData
+        config.timeoutIntervalForRequest = timeout
+        config.timeoutIntervalForResource = timeout
+        config.urlCache = nil
+        config.waitsForConnectivity = true
+        return config
     }
 
     static func makeSignedURLRequest(
@@ -369,6 +443,15 @@ enum GCPError: LocalizedError, Equatable {
 
     var errorDescription: String? {
         "Daily scan limit reached. Come back tomorrow."
+    }
+}
+
+private struct PipelinePhaseFailure: LocalizedError {
+    let phase: GCPService.PipelinePhase
+    let underlying: Error
+
+    var errorDescription: String? {
+        underlying.localizedDescription
     }
 }
 

@@ -62,6 +62,7 @@ struct ResultView: View {
 
     /// Error state for the retry alert.
     @State private var showRetryAlert = false
+    @State private var failureTitle = "Processing Failed"
     @State private var failureMessage  = ""
     @State private var persistenceMessage = ""
     @State private var showPersistenceAlert = false
@@ -178,7 +179,7 @@ struct ResultView: View {
         .onDisappear {
             shareRenderTask?.cancel()
         }
-        .alert("Upload Failed", isPresented: $showRetryAlert) {
+        .alert(failureTitle, isPresented: $showRetryAlert) {
             Button("Retry") {
                 AnalyticsService.capture(.analysisRetryTapped)
                 if let url = videoURL { gcpService.retry(videoAt: url) }
@@ -519,7 +520,8 @@ struct ResultView: View {
             AnalyticsService.capture(.quotaExceeded)
             AnalyticsService.capture(.quotaCardShown, properties: ["trigger": "server_quota"])
 
-        case .failed(let message):
+        case .failed(let phase, let message):
+            failureTitle = phase.failureTitle
             failureMessage = message
             showRetryAlert = true
             AnalyticsService.capture(.analysisFailed, properties: ["error_message": message])
