@@ -118,6 +118,8 @@ FIREBASE_PROJECT=kathelix-catvox-prod make functions-deploy
 DEVICE_ID=<device-udid> make ios-device-launch
 ```
 
+`make functions-integration` needs a Firebase App Check debug token. It preserves an explicitly supplied `CATVOX_APP_CHECK_DEBUG_TOKEN`; otherwise `TF_VAR_app_check_debug_token` is accepted by the integration script. For local developer convenience, the Makefile silently falls back to `app_check_debug_token` in local `terraform/terraform.tfvars` when neither environment variable is set. Never commit debug tokens or shared Xcode schemes containing `FIRAAppCheckDebugToken`.
+
 ---
 
 ## 5. iOS Development
@@ -156,7 +158,8 @@ make ios-test
 ### Key Implementation Details
 
 - **Video recording:** `CameraService.swift` — `sessionPreset = .hd1920x1080` caps at 1080p; HEVC codec enforced via `setOutputSettings` after `addOutput()`. Falls back to H.264 silently on pre-A10 devices.
-- **Mock mode:** `GCPService.swift` has `mockMode = true` by default. The real upload pipeline is stubbed until the backend is deployed. Flip to `false` once the Cloud Function is live.
+- **Real backend pipeline:** `GCPService.swift` has `mockMode = false` by default. It requests signed upload URLs from `getSignedUploadURL`, uploads the video directly to GCS via the signed PUT URL, then calls `analyseVideo`.
+- **App Check on iOS:** `CatVoxApp.swift` sets the App Check provider factory before `FirebaseApp.configure()`. Debug builds use Firebase's Debug Provider; release builds use App Attest only, with no DeviceCheck fallback. The iOS app sends `X-Firebase-AppCheck` on both backend POSTs and must not send App Check headers to the GCS signed PUT URL.
 - **Confidence score color coding:** Result screen ring is green (>80%), amber (50–80%), red (<50%) — implemented in ResultViewModel.
 - **Share watermark:** "Powered by Kathelix" (no ".com") on free-tier exports.
 - **Share rendering:** `ShareVideoRenderer.swift` builds the shareable derived video locally on device using AVFoundation composition/export plus Core Animation overlay layers.
@@ -348,7 +351,7 @@ If a feature that was originally tracked under one broad backlog item becomes se
 
 - The Firebase Functions runtime is Node.js 22. For local validation, prefer running `functions` commands under Node.js 22 so `make functions-install`, `make functions-build`, and `make functions-test` match CI and do not emit avoidable engine warnings.
 - If Node.js 22 is unavailable locally, it is acceptable to run the build under the installed Node version, but explicitly report any expected `EBADENGINE` warning as an environment mismatch rather than treating it as a workflow failure.
-- Backend integration tests may write temporary Firestore documents and are safe to run against the current Dev backend with `make functions-integration` or `npm --prefix functions run test:integration`. Do not run Firestore-mutating integration tests against a future real Prod environment; future Prod should use only a separate, protected, non-invasive smoke-test runbook.
+- Backend integration tests may write temporary Firestore documents and are safe to run against the current Dev backend with `make functions-integration` or `npm --prefix functions run test:integration`. The suite exchanges the registered App Check debug token for a valid App Check token, verifies that both HTTP Functions reject missing App Check tokens with `401 app_check_unauthorized`, then verifies the daily-quota contract and structured quota log. Do not run Firestore-mutating integration tests against a future real Prod environment; future Prod should use only a separate, protected, non-invasive smoke-test runbook.
 
 ### HLD vs TRD
 
