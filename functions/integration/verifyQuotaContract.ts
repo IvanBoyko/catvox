@@ -1,12 +1,20 @@
 import { Firestore } from '@google-cloud/firestore';
 import { spawnSync } from 'node:child_process';
+import { createHash } from 'node:crypto';
 
 const DEFAULT_PROJECT_ID = 'kathelix-catvox-prod';
 const DEFAULT_SIGNED_URL_ENDPOINT =
   'https://getsigneduploadurl-pdkw5uifga-uc.a.run.app/';
+const DEFAULT_ANALYSE_ENDPOINT =
+  'https://analysevideo-pdkw5uifga-uc.a.run.app/';
 const DEFAULT_FIREBASE_APP_ID = '1:953500951129:ios:1595a4c27cd8f3f7964748';
 const DEFAULT_FIREBASE_API_KEY = 'AIzaSyAMKDQ_mIGQWQF4VhU8lytvvGx1TpuoBMI';
 const DEFAULT_IOS_BUNDLE_ID = 'com.kathelix.catvox';
+
+type AppCheckUnauthorizedResponseBody = {
+  code?: unknown;
+  message?: unknown;
+};
 
 type QuotaResponseBody = {
   code?: unknown;
@@ -47,16 +55,19 @@ const projectId =
   DEFAULT_PROJECT_ID;
 const signedUrlEndpoint =
   process.env.CATVOX_SIGNED_URL_ENDPOINT || DEFAULT_SIGNED_URL_ENDPOINT;
+const analyseEndpoint =
+  process.env.CATVOX_ANALYSE_ENDPOINT || DEFAULT_ANALYSE_ENDPOINT;
 const firebaseAppId =
   process.env.CATVOX_FIREBASE_APP_ID || DEFAULT_FIREBASE_APP_ID;
 const firebaseApiKey =
   process.env.CATVOX_FIREBASE_API_KEY || DEFAULT_FIREBASE_API_KEY;
 const iosBundleId =
   process.env.CATVOX_IOS_BUNDLE_ID || DEFAULT_IOS_BUNDLE_ID;
-const appCheckDebugToken =
+const rawAppCheckDebugToken =
   process.env.CATVOX_APP_CHECK_DEBUG_TOKEN ||
   process.env.TF_VAR_app_check_debug_token ||
   '';
+const appCheckDebugToken = rawAppCheckDebugToken.trim();
 
 function usage(): void {
   console.error(`
@@ -70,6 +81,7 @@ Options:
 Environment:
   CATVOX_PROJECT_ID             Defaults to ${DEFAULT_PROJECT_ID}
   CATVOX_SIGNED_URL_ENDPOINT    Defaults to ${DEFAULT_SIGNED_URL_ENDPOINT}
+  CATVOX_ANALYSE_ENDPOINT        Defaults to ${DEFAULT_ANALYSE_ENDPOINT}
   CATVOX_APP_CHECK_DEBUG_TOKEN  Required. Registered Firebase App Check debug token.
   CATVOX_FIREBASE_APP_ID        Defaults to ${DEFAULT_FIREBASE_APP_ID}
   CATVOX_FIREBASE_API_KEY       Defaults to committed iOS Firebase API key.
@@ -104,12 +116,31 @@ function assert(condition: boolean, message: string): void {
   }
 }
 
-function parseQuotaResponse(rawBody: string): QuotaResponseBody {
+function parseJsonResponse<T>(rawBody: string, label: string): T {
   try {
-    return JSON.parse(rawBody) as QuotaResponseBody;
+    return JSON.parse(rawBody) as T;
   } catch {
-    throw new Error(`Response body was not JSON: ${rawBody}`);
+    throw new Error(`${label} response body was not JSON: ${rawBody}`);
   }
+}
+
+function parseQuotaResponse(rawBody: string): QuotaResponseBody {
+  return parseJsonResponse<QuotaResponseBody>(rawBody, 'Quota contract');
+}
+
+function fingerprintSecret(value: string): string {
+  return createHash('sha256').update(value).digest('hex').slice(0, 12);
+}
+
+function describeDebugToken(): string {
+  if (!appCheckDebugToken) {
+    return 'missing';
+  }
+
+  const trimmedNote =
+    rawAppCheckDebugToken === appCheckDebugToken ? '' : ', trimmed surrounding whitespace';
+
+  return `sha256:${fingerprintSecret(appCheckDebugToken)} length:${appCheckDebugToken.length}${trimmedNote}`;
 }
 
 async function exchangeDebugTokenForAppCheckToken(): Promise<string> {
@@ -138,7 +169,13 @@ async function exchangeDebugTokenForAppCheckToken(): Promise<string> {
   const rawBody = await response.text();
   if (!response.ok) {
     throw new Error(
-      `Failed to exchange App Check debug token: HTTP ${response.status} ${rawBody}`
+      [
+        `Failed to exchange App Check debug token: HTTP ${response.status} ${rawBody}`,
+        `Debug token fingerprint: ${describeDebugToken()}`,
+        `Firebase app: projects/${projectId}/apps/${firebaseAppId}`,
+        `iOS bundle identifier: ${iosBundleId}`,
+        'Verify that this exact debug token is registered for the Firebase iOS app above.',
+      ].join('\n')
     );
   }
 
@@ -148,6 +185,63 @@ async function exchangeDebugTokenForAppCheckToken(): Promise<string> {
   }
 
   return parsed.token;
+}
+
+async function verifyAppCheckUnauthorized(
+  endpointName: string,
+  endpoint: string,
+  body: Record<string, unknown>
+): Promise<void> {
+  const response = await fetch(endpoint, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(body),
+  });
+
+  const rawBody = await response.text();
+  const parsed = parseJsonResponse<AppCheckUnauthorizedResponseBody>(
+    rawBody,
+    `${endpointName} App Check`
+  );
+  const contentType = response.headers.get('content-type') || '';
+
+  assert(
+    response.status === 401,
+    `Expected ${endpointName} without App Check to return HTTP 401, got ${response.status}`
+  );
+  assert(
+    contentType.includes('application/json'),
+    `Expected ${endpointName} App Check rejection to be JSON, got ${contentType || '(missing)'}`
+  );
+  assert(
+    parsed.code === 'app_check_unauthorized',
+    `Expected ${endpointName} app_check_unauthorized code, got ${String(parsed.code)}`
+  );
+
+  console.log(`${endpointName} App Check unauthenticated rejection verified`);
+}
+
+async function verifyAppCheckUnauthorizedPreflight(testUserId: string): Promise<void> {
+  await verifyAppCheckUnauthorized(
+    'getSignedUploadURL',
+    signedUrlEndpoint,
+    {
+      filename: 'app-check-preflight.mov',
+      contentType: 'video/quicktime',
+      userId: testUserId,
+    }
+  );
+
+  await verifyAppCheckUnauthorized(
+    'analyseVideo',
+    analyseEndpoint,
+    {
+      gcsUri: `gs://catvox-raw-videos-${projectId}/app-check-preflight.mov`,
+      userId: testUserId,
+    }
+  );
 }
 
 async function verifyHttpContract(
@@ -282,17 +376,23 @@ async function main(): Promise<void> {
   const doc = firestore.collection('usage').doc(testUserId);
 
   console.log('Project:', projectId);
-  console.log('Endpoint:', signedUrlEndpoint);
+  console.log('Signed URL endpoint:', signedUrlEndpoint);
+  console.log('Analyse endpoint:', analyseEndpoint);
   console.log('Temporary userId:', testUserId);
+  console.log('App Check debug token:', describeDebugToken());
 
+  let quotaDocCreated = false;
   try {
     const appCheckToken = await exchangeDebugTokenForAppCheckToken();
     console.log('App Check debug token exchanged');
+
+    await verifyAppCheckUnauthorizedPreflight(testUserId);
 
     await doc.set({
       count: 5,
       lastResetDate: quotaWindow.usageDate,
     });
+    quotaDocCreated = true;
     console.log('Temporary Firestore quota doc created');
 
     const body = await verifyHttpContract(
@@ -307,11 +407,13 @@ async function main(): Promise<void> {
       await verifyStructuredLog(body.resetAt, startTime);
     }
   } finally {
-    await doc.delete().catch((err: unknown) => {
-      console.error('Failed to delete temporary Firestore doc:', err);
-    });
+    if (quotaDocCreated) {
+      await doc.delete().catch((err: unknown) => {
+        console.error('Failed to delete temporary Firestore doc:', err);
+      });
+      console.log('Temporary Firestore quota doc deleted');
+    }
     await firestore.terminate();
-    console.log('Temporary Firestore quota doc deleted');
   }
 }
 
