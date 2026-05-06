@@ -12,8 +12,10 @@
 		1287A8DCFE6D80256B9611B0 /* MockAnalysisService.swift in Sources */ = {isa = PBXBuildFile; fileRef = A8DEBD3D6B9687B0058E599A /* MockAnalysisService.swift */; };
 		1861803EF64D9F7FE6C77560 /* CatAnalysis.swift in Sources */ = {isa = PBXBuildFile; fileRef = E100F9FEEC3B2CF509B41F20 /* CatAnalysis.swift */; };
 		18A039960A12961EBFEBC651 /* LoopingVideoBackground.swift in Sources */ = {isa = PBXBuildFile; fileRef = 431ED6A02525A346D288F5CA /* LoopingVideoBackground.swift */; };
+		19CF3C0B8D875672AF8B7A15 /* FirebaseCore in Frameworks */ = {isa = PBXBuildFile; productRef = 8E865FA0F52929C0386ECF63 /* FirebaseCore */; };
 		19F624038D417F767050CF21 /* UserIdentityStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 48EA24A52C870000B3D3280E /* UserIdentityStore.swift */; };
 		2052FB6C170E9EEC2531E86A /* CatAnalysisTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6364ED5AE4CAAE1E2AC30B29 /* CatAnalysisTests.swift */; };
+		20BE71B74167716C5467545B /* GCPServiceRequestTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 956E52E26ED05B63972F72FD /* GCPServiceRequestTests.swift */; };
 		281365429F072D278D203C44 /* PostHog in Frameworks */ = {isa = PBXBuildFile; productRef = EC01C7226C91D747F131797E /* PostHog */; };
 		2B1DF66382C3129D895D785C /* CatVoxApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = FEBC2D72ADC3729A73D65E8D /* CatVoxApp.swift */; };
 		2D40438890094A8E0A0EB71F /* ShareVideoRenderer.swift in Sources */ = {isa = PBXBuildFile; fileRef = C5502025B9115BEAD8E634EF /* ShareVideoRenderer.swift */; };
@@ -48,6 +50,7 @@
 		E66C3E964387260252BC45F3 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = 13B1A8A31D1EAAB998A22160 /* PrivacyInfo.xcprivacy */; };
 		ED83E27532C2FF6FCBB3FF6B /* ImportedVideoService.swift in Sources */ = {isa = PBXBuildFile; fileRef = C2F3ADCCFC50AD8360715D2E /* ImportedVideoService.swift */; };
 		F313F83CB35D9EBB47FB6D86 /* GCPService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0F8AF485DF075ADE029435E4 /* GCPService.swift */; };
+		F55EBDF3B7DB3C465150EF90 /* FirebaseAppCheck in Frameworks */ = {isa = PBXBuildFile; productRef = 9C8FB8ADD46CABC89B83CE4B /* FirebaseAppCheck */; };
 		F607B892AD837E4AE7317D50 /* ImportedVideoServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB0452D678AA7A7829735F30 /* ImportedVideoServiceTests.swift */; };
 		F6CC1D6EFE3B0806EF52737B /* SavedScan.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3F0F9D24B635C065A8B16442 /* SavedScan.swift */; };
 		F9CC0F007EC8922439868C9A /* ResultView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B7D6D24374084C2723FD8F66 /* ResultView.swift */; };
@@ -64,6 +67,7 @@
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
+		0D8439BECE45A0303556B1C1 /* CatVox.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = CatVox.entitlements; sourceTree = "<group>"; };
 		0F8AF485DF075ADE029435E4 /* GCPService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GCPService.swift; sourceTree = "<group>"; };
 		13B1A8A31D1EAAB998A22160 /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; lastKnownFileType = text.xml; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
 		19667502574A1D26D0A51E54 /* RecordingView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecordingView.swift; sourceTree = "<group>"; };
@@ -87,6 +91,7 @@
 		7CDA1F15EF954A1E30D11AE3 /* ActivityView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ActivityView.swift; sourceTree = "<group>"; };
 		82B4E92B6085484FE9DDDA8B /* ScanQuotaStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScanQuotaStore.swift; sourceTree = "<group>"; };
 		8F5127E72D22F9078142F6EE /* CameraPreviewView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CameraPreviewView.swift; sourceTree = "<group>"; };
+		956E52E26ED05B63972F72FD /* GCPServiceRequestTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GCPServiceRequestTests.swift; sourceTree = "<group>"; };
 		A6E8BBD7D810A695BAAAB6ED /* ScanHistoryStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScanHistoryStore.swift; sourceTree = "<group>"; };
 		A8DEBD3D6B9687B0058E599A /* MockAnalysisService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MockAnalysisService.swift; sourceTree = "<group>"; };
 		A8E77CD777F85F8155EEE27D /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
@@ -118,6 +123,8 @@
 			buildActionMask = 2147483647;
 			files = (
 				281365429F072D278D203C44 /* PostHog in Frameworks */,
+				19CF3C0B8D875672AF8B7A15 /* FirebaseCore in Frameworks */,
+				F55EBDF3B7DB3C465150EF90 /* FirebaseAppCheck in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -178,6 +185,7 @@
 		7999165DC9E8C948CFB7E844 /* CatVox */ = {
 			isa = PBXGroup;
 			children = (
+				0D8439BECE45A0303556B1C1 /* CatVox.entitlements */,
 				1A557949F28BBD9853A801AE /* GoogleService-Info.plist */,
 				A8E77CD777F85F8155EEE27D /* Info.plist */,
 				13B1A8A31D1EAAB998A22160 /* PrivacyInfo.xcprivacy */,
@@ -281,6 +289,7 @@
 				6313F1146262336F3B4CE566 /* CatPersonaTests.swift */,
 				D8AD2459F0FB2E469B3A8EBF /* ConfidenceTierTests.swift */,
 				60C285092936A8E76E9632C6 /* GCPServiceBackendErrorTests.swift */,
+				956E52E26ED05B63972F72FD /* GCPServiceRequestTests.swift */,
 				AB0452D678AA7A7829735F30 /* ImportedVideoServiceTests.swift */,
 				C334985AD19C5A97AACCCC01 /* SavedScanTests.swift */,
 				AE8291820F5D680D455B4DB9 /* ScanQuotaStoreTests.swift */,
@@ -324,6 +333,8 @@
 			name = CatVox;
 			packageProductDependencies = (
 				EC01C7226C91D747F131797E /* PostHog */,
+				8E865FA0F52929C0386ECF63 /* FirebaseCore */,
+				9C8FB8ADD46CABC89B83CE4B /* FirebaseAppCheck */,
 			);
 			productName = CatVox;
 			productReference = 7BC4DFCD54831F1AA990A7C3 /* CatVox.app */;
@@ -348,6 +359,7 @@
 			mainGroup = E28E5EAA1288431A8FBB6B6F;
 			minimizedProjectReferenceProxies = 1;
 			packageReferences = (
+				D7BA911B6F02A6019FF37084 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */,
 				6BE6C02BB0C4EA80A4B9F0EB /* XCRemoteSwiftPackageReference "posthog-ios" */,
 			);
 			preferredProjectObjectVersion = 77;
@@ -384,6 +396,7 @@
 				4E7FE2E01925797AAEE7E495 /* CatPersonaTests.swift in Sources */,
 				3A76BB65F25DB94D7E779AA1 /* ConfidenceTierTests.swift in Sources */,
 				097DEB2A0F0D8CF7612574CF /* GCPServiceBackendErrorTests.swift in Sources */,
+				20BE71B74167716C5467545B /* GCPServiceRequestTests.swift in Sources */,
 				F607B892AD837E4AE7317D50 /* ImportedVideoServiceTests.swift in Sources */,
 				63FA374A9BCE02441274BF75 /* SavedScanTests.swift in Sources */,
 				C93725BB3023F1154E1DCB70 /* ScanQuotaStoreTests.swift in Sources */,
@@ -512,6 +525,7 @@
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CATVOX_POSTHOG_HOST = "https://us.i.posthog.com";
 				CATVOX_POSTHOG_PROJECT_TOKEN = phc_ktoFY7ywiGeSCdyLT7msVfWtankAWx8QLLrLerBzmMr8;
+				CODE_SIGN_ENTITLEMENTS = CatVox/CatVox.entitlements;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
 				DEVELOPMENT_ASSET_PATHS = "\"CatVox/Preview Content\"";
 				DEVELOPMENT_TEAM = QYT76L5836;
@@ -593,6 +607,7 @@
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CATVOX_POSTHOG_HOST = "https://us.i.posthog.com";
 				CATVOX_POSTHOG_PROJECT_TOKEN = phc_ktoFY7ywiGeSCdyLT7msVfWtankAWx8QLLrLerBzmMr8;
+				CODE_SIGN_ENTITLEMENTS = CatVox/CatVox.entitlements;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
 				DEVELOPMENT_ASSET_PATHS = "\"CatVox/Preview Content\"";
 				DEVELOPMENT_TEAM = QYT76L5836;
@@ -688,9 +703,27 @@
 				minimumVersion = 3.57.2;
 			};
 		};
+		D7BA911B6F02A6019FF37084 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/firebase/firebase-ios-sdk";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 12.13.0;
+			};
+		};
 /* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
+		8E865FA0F52929C0386ECF63 /* FirebaseCore */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = D7BA911B6F02A6019FF37084 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */;
+			productName = FirebaseCore;
+		};
+		9C8FB8ADD46CABC89B83CE4B /* FirebaseAppCheck */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = D7BA911B6F02A6019FF37084 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */;
+			productName = FirebaseAppCheck;
+		};
 		EC01C7226C91D747F131797E /* PostHog */ = {
 			isa = XCSwiftPackageProductDependency;
 			package = 6BE6C02BB0C4EA80A4B9F0EB /* XCRemoteSwiftPackageReference "posthog-ios" */;

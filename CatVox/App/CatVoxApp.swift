@@ -1,5 +1,7 @@
 import SwiftUI
 import SwiftData
+import FirebaseCore
+import FirebaseAppCheck
 
 @main
 struct CatVoxApp: App {
@@ -7,6 +9,7 @@ struct CatVoxApp: App {
     @State private var quotaStore = ScanQuotaStore()
 
     init() {
+        Self.configureFirebase()
         AnalyticsService.configure()
         Self.prepareApplicationSupportDirectory()
     }
@@ -17,6 +20,17 @@ struct CatVoxApp: App {
                 .environment(quotaStore)
         }
         .modelContainer(for: SavedScan.self)
+    }
+
+    private static func configureFirebase() {
+        #if DEBUG
+        let providerFactory = AppCheckDebugProviderFactory()
+        #else
+        let providerFactory = CatVoxAppCheckProviderFactory()
+        #endif
+
+        AppCheck.setAppCheckProviderFactory(providerFactory)
+        FirebaseApp.configure()
     }
 
     private static func prepareApplicationSupportDirectory() {
@@ -34,5 +48,11 @@ struct CatVoxApp: App {
             at: supportURL,
             withIntermediateDirectories: true
         )
+    }
+}
+
+private final class CatVoxAppCheckProviderFactory: NSObject, AppCheckProviderFactory {
+    func createProvider(with app: FirebaseApp) -> AppCheckProvider? {
+        AppAttestProvider(app: app)
     }
 }

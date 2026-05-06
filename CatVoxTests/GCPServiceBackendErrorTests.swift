@@ -45,4 +45,20 @@ final class GCPServiceBackendErrorTests: XCTestCase {
 
         XCTAssertNil(error)
     }
+
+    func testAppCheckUnauthorizedDoesNotMapToQuotaError() {
+        let payload = """
+        {
+          "code": "app_check_unauthorized",
+          "message": "App Check token is missing or invalid."
+        }
+        """
+
+        let error = GCPError.fromBackendResponse(
+            statusCode: 401,
+            data: Data(payload.utf8)
+        )
+
+        XCTAssertNil(error)
+    }
 }
