@@ -374,9 +374,9 @@ See TRD §8 for the definitive backlog and implementation status. This section i
 - SwiftData-backed local scan history, reopen-from-history flow, and scan deletion
 - On-device share rendering, save-to-Photos/share-sheet actions, temporary render-cache cleanup, and cached share-video reuse after restart
 - Firebase App Check repo wiring and backend enforcement
+- Firebase App Check console/live verification gate
 
 **Pending:**
-- App Check console/live verification gate before merge
 - StoreKit 2: Pro tier (unlimited scans)
 
 ---
