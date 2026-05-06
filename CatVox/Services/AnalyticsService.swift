@@ -79,6 +79,8 @@ enum AnalyticsService {
     private static var isRuntimeDisabled: Bool {
         let environment = ProcessInfo.processInfo.environment
         return environment["XCTestConfigurationFilePath"] != nil ||
+            environment["CATVOX_DISABLE_ANALYTICS"] == "1" ||
+            CatVoxLaunchConfiguration.current.isUITesting ||
             environment["XCODE_RUNNING_FOR_PREVIEWS"] == "1"
     }
 }

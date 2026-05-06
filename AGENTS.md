@@ -100,6 +100,7 @@ make help
 make doctor
 make ios-build
 make ios-test
+make ios-ui-test
 make ios-device-launch
 make functions-test
 make functions-deploy
@@ -135,6 +136,37 @@ make ios-generate
 
 The `schemes:` block in `project.yml` is intentional — XcodeGen silently deletes shared schemes unless they are declared there. Do not remove it.
 
+Treat generated `.xcodeproj` and `.xcscheme` diffs as a rendered contract, not meaningless noise. If the rendered project and `project.yml` disagree, fix `project.yml` first, then regenerate.
+
+Before finalizing any change that touches `project.yml`, generated project files, schemes, signing, or test targets, explicitly inspect the generated diff for semantic drift:
+
+- `LastUpgradeCheck` in `CatVox.xcodeproj/project.pbxproj`
+- `LastUpgradeVersion` in shared `.xcscheme` files
+- Xcode recommended build settings, especially:
+  - `ENABLE_USER_SCRIPT_SANDBOXING`
+  - `ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS`
+  - `LOCALIZATION_PREFERS_STRING_CATALOGS`
+  - `STRING_CATALOG_GENERATE_SYMBOLS`
+- signing settings:
+  - `DEVELOPMENT_TEAM`
+  - `CODE_SIGN_STYLE`
+  - `CODE_SIGN_ENTITLEMENTS`
+  - provisioning/profile-related settings if present
+- bundle identifiers
+- test host / `TEST_TARGET_NAME`
+- shared schemes and scheme test targets
+
+Current XcodeGen project metadata that should be preserved:
+
+| Setting | Expected value |
+|---|---|
+| `options.xcodeVersion` | `26.4` |
+| App `DEVELOPMENT_TEAM` | `QYT76L5836` |
+
+Do not use simulator build success as proof that signing is correct. `CODE_SIGNING_ALLOWED=NO` simulator builds can pass while Xcode's Signing & Capabilities UI still points at the wrong team. If Xcode changes signing values in `CatVox.xcodeproj/project.pbxproj`, update `project.yml` and regenerate instead of keeping a manual project-file edit.
+
+If a local Xcode open/save introduces unrelated metadata churn, keep it out of the feature commit unless it is intentional and represented in `project.yml` where possible.
+
 ### Local Xcode / Build Verification
 
 - The machine is configured to use full Xcode, not Command Line Tools:
@@ -151,6 +183,12 @@ make ios-build
 
 ```bash
 make ios-test
+```
+
+- UI tests use a separate native XCUITest target and are intentionally not merged into the unit-test or backend integration suites:
+
+```bash
+make ios-ui-test
 ```
 
 - In Codex, simulator builds may fail inside the sandbox because of `CoreSimulatorService` and `~/Library` access. If that happens, rerun the same `xcodebuild` command outside the sandbox instead of changing the build command.
@@ -325,6 +363,12 @@ Before merging a feature PR, verify all of the following:
 - implemented backlog items are checked off in `docs/TRD.md` §8
 - `docs/HLD.md` still matches the implemented MVP boundary
 - no leftover dev-only UI, preview shortcuts, or debug scaffolding remains in the user-facing flow
+
+For XcodeGen or generated-project changes, also verify:
+- regeneration preserves the intended Xcode upgrade markers (`LastUpgradeCheck` and shared scheme `LastUpgradeVersion`)
+- regeneration preserves the expected signing team (`DEVELOPMENT_TEAM = QYT76L5836` for the app target)
+- Xcode's recommended-settings dialog does not reappear because of stale generated settings
+- simulator build success is not the only signing validation signal; inspect Xcode Signing & Capabilities or `xcodebuild -showBuildSettings` when signing settings changed
 
 For user-facing async/stateful features, also verify a small manual regression matrix before merge where relevant:
 - dismiss or cancel during in-flight work

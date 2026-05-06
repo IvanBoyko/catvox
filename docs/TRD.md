@@ -1,9 +1,9 @@
 # Technical Requirements Document: CatVox AI (MVP)
 
-**Version:** 2.9
+**Version:** 3.0
 **Company:** Kathelix Ltd  
 **Project Lead:** Ivan Boyko
-**Date:** 1 May 2026
+**Date:** 6 May 2026
 **Status:** Infrastructure & Backend Definition
 
 ---
@@ -332,6 +332,14 @@ GitHub Actions may call Makefile targets for the command body, but workflow YAML
 * **Steps:** Checkout → install XcodeGen / `xcpretty` → `make ios-generate` → `make ios-build-only` for the generic iOS Simulator slice (`CODE_SIGNING_ALLOWED=NO`) → `make ios-test-only` on a concrete simulator device (`platform=iOS Simulator,name=iPhone 16,OS=latest`). Xcode cannot run tests on `generic/platform=iOS Simulator`.
 * **Purpose:** Catches build breaks, XcodeGen drift, and unit-test regressions on every change. No device signing or provisioning profiles required.
 
+### 7.1.1 iOS UI Test Pipeline
+* **Local command:** `make ios-ui-test` regenerates the Xcode project and runs the dedicated `CatVoxUITests` XCUITest scheme on a concrete iPhone simulator destination (`IOS_UI_TEST_DESTINATION`, defaulting to `platform=iOS Simulator,name=iPhone 16,OS=latest`).
+* **CI trigger:** The Build workflow runs UI tests as a separate job on push to `main` and on manual `workflow_dispatch`, after the normal build/unit-test job passes. Pull requests keep running the cheaper build and unit-test path unless UI coverage is manually requested after merge.
+* **Launch mode:** UI tests launch the app with `-uiTesting` and `-mockBackend`; individual scenarios may also use `-seedHistory` or `-forceQuotaExceeded`.
+* **State model:** `-uiTesting` disables analytics, resets test-local quota/user/history state, and uses an in-memory SwiftData store. `-seedHistory` inserts deterministic local saved-scan data and app-owned placeholder files so history replay opens Result without upload or analysis. `-forceQuotaExceeded` renders the quota/upgrade UI from local state without backend calls.
+* **Coverage boundary:** The baseline suite covers Home launch smoke, source-choice visibility/dismissal, seeded history replay, and mocked quota exceeded UI. It intentionally does not use real camera, Photos picker content, Firebase App Check, GCS, Gemini/Vertex AI, user accounts, network calls, snapshots, Appium, Maestro, BrowserStack, or Firebase Test Lab.
+* **Extension path:** The suite remains native XCUITest and launch-argument driven so it can later run on real devices through Firebase Test Lab or BrowserStack without changing app behavior or adopting a second UI automation framework. See `docs/UI_TESTING.md`.
+
 ### 7.2 Terraform Infrastructure Pipeline
 * **Trigger:** Push or pull request targeting `main` when files under `terraform/`, the repository `Makefile`, or the workflow file itself change.
 * **Authentication:** Keyless via **Workload Identity Federation (WIF)**. GitHub Actions presents its OIDC token; GCP exchanges it for a short-lived credential scoped to `catvox-ci-sa` (the dedicated Terraform CI identity). No long-lived service account keys are stored anywhere.
@@ -413,6 +421,7 @@ After step 1 the GitHub Actions CI pipeline is fully functional — all subseque
 * [x] **Asset Integration:** App Icon & Accent Colors implemented.
 * [x] **UI Logic:** Confidence Score color-coding implemented.
 * [x] **Source Unit Test Baseline:** iOS unit-test target covers backend JSON decoding, persona labels, confidence-tier thresholds, local quota state, saved scan reconstruction, and Photos-import validation messaging; CI runs the iOS test suite.
+* [x] **Native UI Test Baseline:** Add a separate XCUITest target and `make ios-ui-test` entrypoint covering Home smoke, source-choice dismissal, seeded history replay, and mocked quota exceeded UI with deterministic launch arguments and no real camera, Photos, backend, or network dependency.
 * [x] **GCP Foundation:** Deploy Terraform plan to provision GCS (with CORS), IAM, Artifact Registry, and Firestore.
 * [x] **Remote Terraform State:** GCS backend configured and local state migrated; state bucket bootstrapped with versioning enabled.
 * [x] **CI/CD Terraform Pipeline:** GitHub Actions workflow live — plan on PR (with PR comment), apply on merge; authenticated via Workload Identity Federation.

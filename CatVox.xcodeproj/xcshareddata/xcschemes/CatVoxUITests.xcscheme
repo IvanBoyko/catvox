@@ -44,9 +44,9 @@
             parallelizable = "NO">
             <BuildableReference
                BuildableIdentifier = "primary"
-               BlueprintIdentifier = "187F9CB2E713B4E21A252580"
-               BuildableName = "CatVoxTests.xctest"
-               BlueprintName = "CatVoxTests"
+               BlueprintIdentifier = "4DF3DE52DEB7BC6BDD20B322"
+               BuildableName = "CatVoxUITests.xctest"
+               BlueprintName = "CatVoxUITests"
                ReferencedContainer = "container:CatVox.xcodeproj">
             </BuildableReference>
          </TestableReference>

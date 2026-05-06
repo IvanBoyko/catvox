@@ -6,20 +6,34 @@ import FirebaseAppCheck
 @main
 struct CatVoxApp: App {
 
-    @State private var quotaStore = ScanQuotaStore()
+    private let launchConfiguration: CatVoxLaunchConfiguration
+    @State private var quotaStore: ScanQuotaStore
 
     init() {
-        Self.configureFirebase()
+        let launchConfiguration = CatVoxLaunchConfiguration.current
+        self.launchConfiguration = launchConfiguration
+
+        if launchConfiguration.isUITesting {
+            CatVoxUITestSupport.resetPersistentState()
+        } else {
+            Self.configureFirebase()
+        }
+
+        _quotaStore = State(
+            initialValue: ScanQuotaStore(
+                initialScansRemaining: launchConfiguration.forceQuotaExceeded ? 0 : nil
+            )
+        )
         AnalyticsService.configure()
         Self.prepareApplicationSupportDirectory()
     }
 
     var body: some Scene {
         WindowGroup {
-            ContentView()
+            CatVoxRootView(launchConfiguration: launchConfiguration)
                 .environment(quotaStore)
         }
-        .modelContainer(for: SavedScan.self)
+        .modelContainer(for: SavedScan.self, inMemory: launchConfiguration.isUITesting)
     }
 
     private static func configureFirebase() {
@@ -48,6 +62,22 @@ struct CatVoxApp: App {
             at: supportURL,
             withIntermediateDirectories: true
         )
+    }
+}
+
+private struct CatVoxRootView: View {
+    @Environment(\.modelContext) private var modelContext
+
+    let launchConfiguration: CatVoxLaunchConfiguration
+
+    var body: some View {
+        ContentView()
+            .task {
+                CatVoxUITestSupport.seedIfNeeded(
+                    configuration: launchConfiguration,
+                    modelContext: modelContext
+                )
+            }
     }
 }
 

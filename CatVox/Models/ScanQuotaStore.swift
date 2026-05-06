@@ -15,8 +15,8 @@ final class ScanQuotaStore {
 
     private(set) var scansRemaining: Int
 
-    init() {
-        scansRemaining = Self.compute()
+    init(initialScansRemaining: Int? = nil) {
+        scansRemaining = initialScansRemaining ?? Self.compute()
     }
 
     /// Call after a successful analysis completes.
@@ -38,6 +38,11 @@ final class ScanQuotaStore {
     private enum Keys {
         static let used     = "catvox.scansUsedToday"
         static let lastDate = "catvox.lastScanDate"
+    }
+
+    nonisolated static func resetPersistedUsageForUITesting() {
+        UserDefaults.standard.removeObject(forKey: Keys.used)
+        UserDefaults.standard.removeObject(forKey: Keys.lastDate)
     }
 
     private static func compute() -> Int {
