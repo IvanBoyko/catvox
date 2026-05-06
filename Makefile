@@ -44,6 +44,7 @@ help:
 		'' \
 		'Environment overrides:' \
 		'  GCP_PROJECT_ID=... FIREBASE_PROJECT=... CATVOX_PROJECT_ID=...' \
+		'  CATVOX_APP_CHECK_DEBUG_TOKEN=... make functions-integration' \
 		'  IOS_TEST_DESTINATION="platform=iOS Simulator,name=iPhone 16,OS=latest"' \
 		'  DEVICE_ID=... make ios-device-launch'
 

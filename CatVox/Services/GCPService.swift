@@ -1,4 +1,5 @@
 import Foundation
+import FirebaseAppCheck
 import Observation
 import os
 
@@ -10,11 +11,9 @@ import os
 ///      with the content type inferred from the file container.
 ///   3. Trigger the Vertex AI analysis Cloud Function and return a CatAnalysis.
 ///
-/// Mock mode (default on):
+/// Mock mode:
 ///   Simulates the full pipeline with realistic delays so every UI state
 ///   transition can be exercised without a live server connection.
-///
-/// Phase 2: flip `mockMode = false` once the GCP backend is deployed.
 @MainActor
 @Observable
 final class GCPService {
@@ -76,6 +75,11 @@ final class GCPService {
             string: "https://getsigneduploadurl-pdkw5uifga-uc.a.run.app")!
         static let analyse   = URL(
             string: "https://analysevideo-pdkw5uifga-uc.a.run.app")!
+    }
+
+    private enum Header {
+        static let contentType = "Content-Type"
+        static let appCheck = "X-Firebase-AppCheck"
     }
 
     // MARK: - User identity
@@ -156,7 +160,7 @@ final class GCPService {
         setUploadState(.complete(MockAnalysisService.sampleAnalysis), for: requestID)
     }
 
-    // MARK: - Real pipeline (Phase 2)
+    // MARK: - Real pipeline
 
     private func realPipeline(localURL: URL, requestID: UUID) async throws {
         let contentType = ImportedVideoService.mimeType(for: localURL)
@@ -185,15 +189,14 @@ final class GCPService {
     /// Returns `(signedURL, gcsUri)` — the signed PUT URL for the upload and
     /// the GCS URI (`gs://…`) passed to the analysis function.
     private func fetchSignedURL(for videoURL: URL, contentType: String) async throws -> (URL, String) {
-        var request = URLRequest(url: Endpoint.signedURL)
-        request.httpMethod = "POST"
-        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        let payload: [String: String] = [
-            "filename":    videoURL.lastPathComponent,
-            "contentType": contentType,
-            "userId":      userId,
-        ]
-        request.httpBody = try JSONEncoder().encode(payload)
+        let appCheckToken = try await fetchAppCheckToken()
+        let request = try Self.makeSignedURLRequest(
+            endpoint: Endpoint.signedURL,
+            videoURL: videoURL,
+            contentType: contentType,
+            userId: userId,
+            appCheckToken: appCheckToken
+        )
 
         let (data, response) = try await URLSession.shared.data(for: request)
         guard let http = response as? HTTPURLResponse else {
@@ -271,14 +274,13 @@ final class GCPService {
     }
 
     private func triggerAnalysis(gcsUri: String) async throws -> CatAnalysis {
-        var request = URLRequest(url: Endpoint.analyse)
-        request.httpMethod = "POST"
-        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        let payload: [String: String] = [
-            "gcsUri": gcsUri,
-            "userId": userId,
-        ]
-        request.httpBody = try JSONEncoder().encode(payload)
+        let appCheckToken = try await fetchAppCheckToken()
+        let request = try Self.makeAnalysisRequest(
+            endpoint: Endpoint.analyse,
+            gcsUri: gcsUri,
+            userId: userId,
+            appCheckToken: appCheckToken
+        )
 
         let (data, response) = try await URLSession.shared.data(for: request)
         guard let http = response as? HTTPURLResponse else {
@@ -293,6 +295,49 @@ final class GCPService {
             throw URLError(.badServerResponse)
         }
         return try JSONDecoder().decode(CatAnalysis.self, from: data)
+    }
+
+    private func fetchAppCheckToken() async throws -> String {
+        let token = try await AppCheck.appCheck().token(forcingRefresh: false)
+        return token.token
+    }
+
+    static func makeSignedURLRequest(
+        endpoint: URL,
+        videoURL: URL,
+        contentType: String,
+        userId: String,
+        appCheckToken: String
+    ) throws -> URLRequest {
+        var request = URLRequest(url: endpoint)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: Header.contentType)
+        request.setValue(appCheckToken, forHTTPHeaderField: Header.appCheck)
+        let payload: [String: String] = [
+            "filename":    videoURL.lastPathComponent,
+            "contentType": contentType,
+            "userId":      userId,
+        ]
+        request.httpBody = try JSONEncoder().encode(payload)
+        return request
+    }
+
+    static func makeAnalysisRequest(
+        endpoint: URL,
+        gcsUri: String,
+        userId: String,
+        appCheckToken: String
+    ) throws -> URLRequest {
+        var request = URLRequest(url: endpoint)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: Header.contentType)
+        request.setValue(appCheckToken, forHTTPHeaderField: Header.appCheck)
+        let payload: [String: String] = [
+            "gcsUri": gcsUri,
+            "userId": userId,
+        ]
+        request.httpBody = try JSONEncoder().encode(payload)
+        return request
     }
 }
 

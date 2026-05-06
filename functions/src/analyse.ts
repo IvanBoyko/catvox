@@ -8,6 +8,7 @@ import {
   sendDailyQuotaExceededResponse,
 } from './usageGuard';
 import { callGemini } from './gemini';
+import { runWithAppCheck } from './appCheck';
 
 const REGION = 'us-central1';
 const MAX_UPLOAD_BYTES = 100 * 1024 * 1024;
@@ -36,91 +37,94 @@ class InvalidVertexResponseError extends Error {
 export const analyseVideo = onRequest(
   {
     region: REGION,
-    invoker: 'public', // Unauthenticated iOS clients must reach this endpoint.
-    // Security boundary: Firebase App Check (ADR-0002) — enforce once wired in iOS.
+    // Public at the IAM layer so mobile clients can reach the endpoint.
+    // Firebase App Check is enforced before business logic runs.
+    invoker: 'public',
     serviceAccount: 'catvox-backend-sa@kathelix-catvox-prod.iam.gserviceaccount.com',
     timeoutSeconds: 120, // Vertex AI multimodal calls can take up to ~30s; headroom for retries.
     memory: '512MiB',
   },
   async (req, res) => {
-    if (req.method !== 'POST') {
-      res.status(405).send('Method Not Allowed');
-      return;
-    }
-
-    const { gcsUri, userId } = req.body as {
-      gcsUri?: string;
-      userId?: string;
-    };
-
-    if (!gcsUri || !userId) {
-      res.status(400).json({ error: 'gcsUri and userId are required' });
-      return;
-    }
-
-    try {
-      await checkUsageAvailable(userId);
-    } catch (err: unknown) {
-      if (isLimitExceededError(err)) {
-        sendDailyQuotaExceededResponse(res, 'analyseVideo');
+    await runWithAppCheck(req, res, async () => {
+      if (req.method !== 'POST') {
+        res.status(405).send('Method Not Allowed');
         return;
       }
-      throw err;
-    }
 
-    const projectId = process.env.GCLOUD_PROJECT;
-    if (!projectId) throw new Error('GCLOUD_PROJECT env var is not set');
+      const { gcsUri, userId } = req.body as {
+        gcsUri?: string;
+        userId?: string;
+      };
 
-    const objectInfo = parseGcsUri(gcsUri);
-    if (!objectInfo) {
-      res.status(400).json({ error: 'Invalid gcsUri' });
-      return;
-    }
+      if (!gcsUri || !userId) {
+        res.status(400).json({ error: 'gcsUri and userId are required' });
+        return;
+      }
 
-    const file = getStorage().bucket(objectInfo.bucketName).file(objectInfo.objectName);
-    const [metadata] = await file.getMetadata();
+      try {
+        await checkUsageAvailable(userId);
+      } catch (err: unknown) {
+        if (isLimitExceededError(err)) {
+          sendDailyQuotaExceededResponse(res, 'analyseVideo');
+          return;
+        }
+        throw err;
+      }
 
-    const sizeBytes = Number(metadata.size ?? 0);
-    if (!Number.isFinite(sizeBytes) || sizeBytes <= 0) {
-      res.status(400).json({ error: 'Uploaded video metadata is missing a valid size.' });
-      return;
-    }
+      const projectId = process.env.GCLOUD_PROJECT;
+      if (!projectId) throw new Error('GCLOUD_PROJECT env var is not set');
 
-    if (sizeBytes > MAX_UPLOAD_BYTES) {
-      res.status(413).json({
-        error: 'Uploaded video exceeds the 100 MB limit.',
-      });
-      return;
-    }
+      const objectInfo = parseGcsUri(gcsUri);
+      if (!objectInfo) {
+        res.status(400).json({ error: 'Invalid gcsUri' });
+        return;
+      }
 
-    const mimeType = normalizedVertexVideoMimeType(metadata.contentType);
-    if (!mimeType) {
-      res.status(400).json({ error: 'Uploaded object is not a supported video.' });
-      return;
-    }
+      const file = getStorage().bucket(objectInfo.bucketName).file(objectInfo.objectName);
+      const [metadata] = await file.getMetadata();
 
-    try {
-      const parsed = await getAnalysisPayload(() =>
-        callGemini(projectId, gcsUri, mimeType)
-      );
+      const sizeBytes = Number(metadata.size ?? 0);
+      if (!Number.isFinite(sizeBytes) || sizeBytes <= 0) {
+        res.status(400).json({ error: 'Uploaded video metadata is missing a valid size.' });
+        return;
+      }
 
-      await incrementUsage(userId);
-      res.status(200).json(parsed);
-    } catch (err: unknown) {
-      if (err instanceof InvalidVertexResponseError) {
-        logger.error('Vertex AI returned malformed analysis payload', {
-          issues: err.issues,
-          rawResponsePreview: previewRawResponse(err.rawResponse),
-          gcsUri,
-        });
-        res.status(502).json({
-          error: 'Analysis service returned an invalid response. Please try again.',
+      if (sizeBytes > MAX_UPLOAD_BYTES) {
+        res.status(413).json({
+          error: 'Uploaded video exceeds the 100 MB limit.',
         });
         return;
       }
 
-      throw err;
-    }
+      const mimeType = normalizedVertexVideoMimeType(metadata.contentType);
+      if (!mimeType) {
+        res.status(400).json({ error: 'Uploaded object is not a supported video.' });
+        return;
+      }
+
+      try {
+        const parsed = await getAnalysisPayload(() =>
+          callGemini(projectId, gcsUri, mimeType)
+        );
+
+        await incrementUsage(userId);
+        res.status(200).json(parsed);
+      } catch (err: unknown) {
+        if (err instanceof InvalidVertexResponseError) {
+          logger.error('Vertex AI returned malformed analysis payload', {
+            issues: err.issues,
+            rawResponsePreview: previewRawResponse(err.rawResponse),
+            gcsUri,
+          });
+          res.status(502).json({
+            error: 'Analysis service returned an invalid response. Please try again.',
+          });
+          return;
+        }
+
+        throw err;
+      }
+    });
   }
 );
 

@@ -373,12 +373,10 @@ See TRD §8 for the definitive backlog and implementation status. This section i
 - Photos import with local validation
 - SwiftData-backed local scan history, reopen-from-history flow, and scan deletion
 - On-device share rendering, save-to-Photos/share-sheet actions, temporary render-cache cleanup, and cached share-video reuse after restart
+- Firebase App Check repo wiring and backend enforcement
 
 **Pending:**
-- App Check: configure in Apple + Firebase consoles; wire Firebase SDK into iOS app
-- Backend proxy: Firebase Cloud Function (TypeScript) with usage-limit guard (Firestore) and Vertex AI call
-- Video upload: Swift GCS signed-URL upload (`GCPService.mockMode = false`)
-- AI connection: Cloud Function → Vertex AI Gemini 2.5 Flash
+- App Check console/live verification gate before merge
 - StoreKit 2: Pro tier (unlimited scans)
 
 ---

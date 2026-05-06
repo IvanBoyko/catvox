@@ -10,6 +10,9 @@ packages:
   PostHog:
     url: https://github.com/PostHog/posthog-ios
     from: 3.57.2
+  Firebase:
+    url: https://github.com/firebase/firebase-ios-sdk
+    from: 12.13.0
 
 targets:
   CatVox:
@@ -20,10 +23,15 @@ targets:
     dependencies:
       - package: PostHog
         product: PostHog
+      - package: Firebase
+        product: FirebaseCore
+      - package: Firebase
+        product: FirebaseAppCheck
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.kathelix.catvox
         DEVELOPMENT_TEAM: 93SH436384
+        CODE_SIGN_ENTITLEMENTS: CatVox/CatVox.entitlements
         SWIFT_VERSION: "5.0"
         TARGETED_DEVICE_FAMILY: "1"
         IPHONEOS_DEPLOYMENT_TARGET: "17.0"

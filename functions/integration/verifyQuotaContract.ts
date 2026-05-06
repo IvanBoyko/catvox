@@ -4,6 +4,9 @@ import { spawnSync } from 'node:child_process';
 const DEFAULT_PROJECT_ID = 'kathelix-catvox-prod';
 const DEFAULT_SIGNED_URL_ENDPOINT =
   'https://getsigneduploadurl-pdkw5uifga-uc.a.run.app/';
+const DEFAULT_FIREBASE_APP_ID = '1:953500951129:ios:1595a4c27cd8f3f7964748';
+const DEFAULT_FIREBASE_API_KEY = 'AIzaSyAMKDQ_mIGQWQF4VhU8lytvvGx1TpuoBMI';
+const DEFAULT_IOS_BUNDLE_ID = 'com.kathelix.catvox';
 
 type QuotaResponseBody = {
   code?: unknown;
@@ -11,6 +14,11 @@ type QuotaResponseBody = {
   limit?: unknown;
   remaining?: unknown;
   resetAt?: unknown;
+};
+
+type AppCheckExchangeResponse = {
+  token?: unknown;
+  ttl?: unknown;
 };
 
 type LogEntry = {
@@ -39,6 +47,16 @@ const projectId =
   DEFAULT_PROJECT_ID;
 const signedUrlEndpoint =
   process.env.CATVOX_SIGNED_URL_ENDPOINT || DEFAULT_SIGNED_URL_ENDPOINT;
+const firebaseAppId =
+  process.env.CATVOX_FIREBASE_APP_ID || DEFAULT_FIREBASE_APP_ID;
+const firebaseApiKey =
+  process.env.CATVOX_FIREBASE_API_KEY || DEFAULT_FIREBASE_API_KEY;
+const iosBundleId =
+  process.env.CATVOX_IOS_BUNDLE_ID || DEFAULT_IOS_BUNDLE_ID;
+const appCheckDebugToken =
+  process.env.CATVOX_APP_CHECK_DEBUG_TOKEN ||
+  process.env.TF_VAR_app_check_debug_token ||
+  '';
 
 function usage(): void {
   console.error(`
@@ -52,6 +70,10 @@ Options:
 Environment:
   CATVOX_PROJECT_ID             Defaults to ${DEFAULT_PROJECT_ID}
   CATVOX_SIGNED_URL_ENDPOINT    Defaults to ${DEFAULT_SIGNED_URL_ENDPOINT}
+  CATVOX_APP_CHECK_DEBUG_TOKEN  Required. Registered Firebase App Check debug token.
+  CATVOX_FIREBASE_APP_ID        Defaults to ${DEFAULT_FIREBASE_APP_ID}
+  CATVOX_FIREBASE_API_KEY       Defaults to committed iOS Firebase API key.
+  CATVOX_IOS_BUNDLE_ID          Defaults to ${DEFAULT_IOS_BUNDLE_ID}
 `);
 }
 
@@ -90,13 +112,55 @@ function parseQuotaResponse(rawBody: string): QuotaResponseBody {
   }
 }
 
+async function exchangeDebugTokenForAppCheckToken(): Promise<string> {
+  if (!appCheckDebugToken) {
+    throw new Error(
+      'CATVOX_APP_CHECK_DEBUG_TOKEN is required for App Check-protected integration tests'
+    );
+  }
+
+  const app = `projects/${projectId}/apps/${firebaseAppId}`;
+  const url =
+    `https://firebaseappcheck.googleapis.com/v1/${app}:exchangeDebugToken` +
+    `?key=${encodeURIComponent(firebaseApiKey)}`;
+  const response = await fetch(url, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'X-Ios-Bundle-Identifier': iosBundleId,
+    },
+    body: JSON.stringify({
+      debugToken: appCheckDebugToken,
+      limitedUse: false,
+    }),
+  });
+
+  const rawBody = await response.text();
+  if (!response.ok) {
+    throw new Error(
+      `Failed to exchange App Check debug token: HTTP ${response.status} ${rawBody}`
+    );
+  }
+
+  const parsed = JSON.parse(rawBody) as AppCheckExchangeResponse;
+  if (typeof parsed.token !== 'string' || parsed.token.length === 0) {
+    throw new Error(`App Check token exchange response was missing token: ${rawBody}`);
+  }
+
+  return parsed.token;
+}
+
 async function verifyHttpContract(
   testUserId: string,
-  expectedResetAt: string
+  expectedResetAt: string,
+  appCheckToken: string
 ): Promise<QuotaResponseBody> {
   const response = await fetch(signedUrlEndpoint, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: {
+      'Content-Type': 'application/json',
+      'X-Firebase-AppCheck': appCheckToken,
+    },
     body: JSON.stringify({
       filename: 'quota-contract-test.mov',
       contentType: 'video/quicktime',
@@ -222,13 +286,20 @@ async function main(): Promise<void> {
   console.log('Temporary userId:', testUserId);
 
   try {
+    const appCheckToken = await exchangeDebugTokenForAppCheckToken();
+    console.log('App Check debug token exchanged');
+
     await doc.set({
       count: 5,
       lastResetDate: quotaWindow.usageDate,
     });
     console.log('Temporary Firestore quota doc created');
 
-    const body = await verifyHttpContract(testUserId, quotaWindow.resetAt);
+    const body = await verifyHttpContract(
+      testUserId,
+      quotaWindow.resetAt,
+      appCheckToken
+    );
 
     if (skipLog) {
       console.log('Structured log verification skipped');
