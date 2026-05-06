@@ -69,7 +69,7 @@
 /* Begin PBXFileReference section */
 		0D8439BECE45A0303556B1C1 /* CatVox.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = CatVox.entitlements; sourceTree = "<group>"; };
 		0F8AF485DF075ADE029435E4 /* GCPService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GCPService.swift; sourceTree = "<group>"; };
-		13B1A8A31D1EAAB998A22160 /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; lastKnownFileType = text.xml; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
+		13B1A8A31D1EAAB998A22160 /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
 		19667502574A1D26D0A51E54 /* RecordingView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecordingView.swift; sourceTree = "<group>"; };
 		1A557949F28BBD9853A801AE /* GoogleService-Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = "GoogleService-Info.plist"; sourceTree = "<group>"; };
 		215145685222056D654FFBD5 /* CameraService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CameraService.swift; sourceTree = "<group>"; };
@@ -87,7 +87,7 @@
 		689AC1D0436D57C04DBE7694 /* CatPersona.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CatPersona.swift; sourceTree = "<group>"; };
 		6B2B3D6279B0CBA2AEBDEB41 /* UploadProgressView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UploadProgressView.swift; sourceTree = "<group>"; };
 		7656DF1FA69C366617629924 /* CatVoxTests.xctest */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.cfbundle; path = CatVoxTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
-		7BC4DFCD54831F1AA990A7C3 /* CatVox.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = CatVox.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		7BC4DFCD54831F1AA990A7C3 /* CatVox.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = CatVox.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		7CDA1F15EF954A1E30D11AE3 /* ActivityView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ActivityView.swift; sourceTree = "<group>"; };
 		82B4E92B6085484FE9DDDA8B /* ScanQuotaStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScanQuotaStore.swift; sourceTree = "<group>"; };
 		8F5127E72D22F9078142F6EE /* CameraPreviewView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CameraPreviewView.swift; sourceTree = "<group>"; };
@@ -348,6 +348,11 @@
 			attributes = {
 				BuildIndependentTargetsInParallel = YES;
 				LastUpgradeCheck = 1600;
+				TargetAttributes = {
+					A7EDDBB8F04B431FAC25DB3C = {
+						DevelopmentTeam = 93SH436384;
+					};
+				};
 			};
 			buildConfigurationList = 35CA416E20D77D1A4BC6992A /* Build configuration list for PBXProject "CatVox" */;
 			developmentRegion = en;
@@ -526,7 +531,7 @@
 				CODE_SIGN_ENTITLEMENTS = CatVox/CatVox.entitlements;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
 				DEVELOPMENT_ASSET_PATHS = "\"CatVox/Preview Content\"";
-				DEVELOPMENT_TEAM = QYT76L5836;
+				DEVELOPMENT_TEAM = 93SH436384;
 				INFOPLIST_FILE = CatVox/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -606,7 +611,7 @@
 				CODE_SIGN_ENTITLEMENTS = CatVox/CatVox.entitlements;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
 				DEVELOPMENT_ASSET_PATHS = "\"CatVox/Preview Content\"";
-				DEVELOPMENT_TEAM = QYT76L5836;
+				DEVELOPMENT_TEAM = 93SH436384;
 				INFOPLIST_FILE = CatVox/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				LD_RUNPATH_SEARCH_PATHS = (
