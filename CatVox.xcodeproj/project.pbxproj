@@ -397,7 +397,7 @@
 						TestTargetID = A7EDDBB8F04B431FAC25DB3C;
 					};
 					A7EDDBB8F04B431FAC25DB3C = {
-						DevelopmentTeam = 93SH436384;
+						DevelopmentTeam = QYT76L5836;
 					};
 				};
 			};
@@ -597,7 +597,7 @@
 				CODE_SIGN_ENTITLEMENTS = CatVox/CatVox.entitlements;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
 				DEVELOPMENT_ASSET_PATHS = "\"CatVox/Preview Content\"";
-				DEVELOPMENT_TEAM = 93SH436384;
+				DEVELOPMENT_TEAM = QYT76L5836;
 				INFOPLIST_FILE = CatVox/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -681,7 +681,7 @@
 				CODE_SIGN_ENTITLEMENTS = CatVox/CatVox.entitlements;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
 				DEVELOPMENT_ASSET_PATHS = "\"CatVox/Preview Content\"";
-				DEVELOPMENT_TEAM = 93SH436384;
+				DEVELOPMENT_TEAM = QYT76L5836;
 				INFOPLIST_FILE = CatVox/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				LD_RUNPATH_SEARCH_PATHS = (
