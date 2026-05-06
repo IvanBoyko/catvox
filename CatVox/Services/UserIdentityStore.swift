@@ -12,4 +12,8 @@ enum UserIdentityStore {
         UserDefaults.standard.set(fresh, forKey: key)
         return fresh
     }
+
+    static func resetForUITesting() {
+        UserDefaults.standard.removeObject(forKey: key)
+    }
 }

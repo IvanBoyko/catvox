@@ -44,34 +44,36 @@ struct HomeView: View {
             }
         }
         .overlay {
-            if showQuotaCard {
-                ZStack {
-                    Color.black.opacity(0.55).ignoresSafeArea()
-                    QuotaExceededView { showQuotaCard = false }
-                        .padding(.horizontal, 20)
+            ZStack {
+                if showQuotaCard {
+                    quotaOverlay
                 }
-                .transition(.opacity)
-                .animation(.easeInOut(duration: 0.2), value: showQuotaCard)
+
+                if showSourceChoice && usesUITestSourceChoiceOverlay {
+                    uiTestSourceChoiceOverlay
+                }
             }
         }
         .preferredColorScheme(.dark)
         .confirmationDialog(
             "Choose Video Source",
-            isPresented: $showSourceChoice,
+            isPresented: sourceChoiceDialogPresented,
             titleVisibility: .visible
         ) {
             Button("Record New Video") {
-                AnalyticsService.capture(.scanSourceChosen, properties: ["source": "record"])
-                showRecording = true
+                chooseRecordSource()
             }
+            .accessibilityIdentifier("source.recordNewVideoButton")
 
             Button("Choose from Photos") {
-                AnalyticsService.capture(.scanSourceChosen, properties: ["source": "photos"])
-                AnalyticsService.capture(.photosPickerOpened)
-                showPhotoPicker = true
+                choosePhotosSource()
             }
+            .accessibilityIdentifier("source.chooseFromPhotosButton")
 
-            Button("Cancel", role: .cancel) {}
+            Button("Cancel", role: .cancel) {
+                showSourceChoice = false
+            }
+            .accessibilityIdentifier("source.cancelButton")
         } message: {
             Text("Start with a new recording or pick an existing clip.")
         }
@@ -133,6 +135,83 @@ struct HomeView: View {
         }
     }
 
+    private var quotaOverlay: some View {
+        ZStack {
+            Color.black.opacity(0.55).ignoresSafeArea()
+            QuotaExceededView { showQuotaCard = false }
+                .padding(.horizontal, 20)
+        }
+        .transition(.opacity)
+        .animation(.easeInOut(duration: 0.2), value: showQuotaCard)
+    }
+
+    private var uiTestSourceChoiceOverlay: some View {
+        ZStack {
+            Color.black.opacity(0.55).ignoresSafeArea()
+
+            VStack(spacing: 12) {
+                Button("Record New Video") {
+                    chooseRecordSource()
+                }
+                .font(.headline)
+                .foregroundStyle(.white)
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 16)
+                .background(CatVoxTheme.brandGradient, in: RoundedRectangle(cornerRadius: 14))
+                .accessibilityIdentifier("source.recordNewVideoButton")
+
+                Button("Choose from Photos") {
+                    choosePhotosSource()
+                }
+                .font(.headline)
+                .foregroundStyle(.white)
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 16)
+                .background(.white.opacity(0.10), in: RoundedRectangle(cornerRadius: 14))
+                .accessibilityIdentifier("source.chooseFromPhotosButton")
+
+                Button("Cancel") {
+                    showSourceChoice = false
+                }
+                .font(.subheadline)
+                .foregroundStyle(.white.opacity(0.7))
+                .padding(.vertical, 8)
+                .accessibilityIdentifier("source.cancelButton")
+            }
+            .padding(20)
+            .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 20))
+            .padding(.horizontal, 24)
+        }
+    }
+
+    private var sourceChoiceDialogPresented: Binding<Bool> {
+        Binding(
+            get: { showSourceChoice && !usesUITestSourceChoiceOverlay },
+            set: { isPresented in
+                if !isPresented {
+                    showSourceChoice = false
+                }
+            }
+        )
+    }
+
+    private var usesUITestSourceChoiceOverlay: Bool {
+        CatVoxLaunchConfiguration.current.isUITesting
+    }
+
+    private func chooseRecordSource() {
+        showSourceChoice = false
+        AnalyticsService.capture(.scanSourceChosen, properties: ["source": "record"])
+        showRecording = true
+    }
+
+    private func choosePhotosSource() {
+        showSourceChoice = false
+        AnalyticsService.capture(.scanSourceChosen, properties: ["source": "photos"])
+        AnalyticsService.capture(.photosPickerOpened)
+        showPhotoPicker = true
+    }
+
     private var logoSection: some View {
         VStack(spacing: 10) {
             Image("HomeAppIcon")
@@ -166,8 +245,10 @@ struct HomeView: View {
                         emptyHistoryCard
                     } else {
                         ForEach(savedScans) { scan in
+                            let index = savedScans.firstIndex { $0.id == scan.id } ?? 0
                             SavedScanRow(
                                 scan: scan,
+                                openAccessibilityIdentifier: "home.historyItem.\(index)",
                                 onOpen: { open(scan) },
                                 onDelete: { pendingDeletion = scan }
                             )
@@ -179,6 +260,7 @@ struct HomeView: View {
                 .padding(.vertical, 6)
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .accessibilityIdentifier("home.historyList")
             .onAppear {
                 scrollToLatestScan(using: proxy, animated: false)
             }
@@ -210,6 +292,7 @@ struct HomeView: View {
             RoundedRectangle(cornerRadius: 20, style: .continuous)
                 .strokeBorder(.white.opacity(0.08), lineWidth: 1)
         }
+        .accessibilityIdentifier("home.emptyHistory")
     }
 
     private var ctaSection: some View {
@@ -232,10 +315,12 @@ struct HomeView: View {
                         in: RoundedRectangle(cornerRadius: 16, style: .continuous)
                     )
             }
+            .accessibilityIdentifier("home.readMyCatButton")
 
             Text(quotaLabel)
                 .font(.caption)
                 .foregroundStyle(.white.opacity(0.35))
+                .accessibilityIdentifier("home.quotaStatus")
         }
     }
 

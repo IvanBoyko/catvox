@@ -2,6 +2,7 @@ import SwiftUI
 
 struct SavedScanRow: View {
     let scan: SavedScan
+    let openAccessibilityIdentifier: String
     let onOpen: () -> Void
     let onDelete: () -> Void
 
@@ -33,6 +34,7 @@ struct SavedScanRow: View {
                 .contentShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
             }
             .buttonStyle(.plain)
+            .accessibilityIdentifier(openAccessibilityIdentifier)
 
             Button(action: onDelete) {
                 Image(systemName: "trash")
@@ -42,6 +44,7 @@ struct SavedScanRow: View {
                     .background(.white.opacity(0.08), in: Circle())
             }
             .buttonStyle(.plain)
+            .accessibilityIdentifier("\(openAccessibilityIdentifier).deleteButton")
         }
         .padding(14)
         .background(

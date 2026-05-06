@@ -2,16 +2,18 @@ SHELL := /bin/bash
 
 IOS_PROJECT := CatVox.xcodeproj
 IOS_SCHEME := CatVox
+IOS_UI_TEST_SCHEME := CatVoxUITests
 IOS_CONFIGURATION := Debug
 IOS_BUILD_DESTINATION := generic/platform=iOS Simulator
 IOS_TEST_DESTINATION := platform=iOS Simulator,name=iPhone 16,OS=latest
+IOS_UI_TEST_DESTINATION := $(IOS_TEST_DESTINATION)
 
 GCP_PROJECT_ID ?= kathelix-catvox-prod
 FIREBASE_PROJECT ?= $(GCP_PROJECT_ID)
 CATVOX_PROJECT_ID ?= $(GCP_PROJECT_ID)
 
 .PHONY: help doctor \
-	ios-generate ios-build ios-build-only ios-test ios-test-only ios-ci ios-device-launch ios-device-console app-deploy \
+	ios-generate ios-build ios-build-only ios-test ios-test-only ios-ui-test ios-ui-test-only ios-ci ios-device-launch ios-device-console app-deploy \
 	functions-install functions-build functions-test functions-deploy functions-integration functions-ci \
 	backend-build backend-deploy backend-integration \
 	terraform-fmt-check terraform-init terraform-validate terraform-plan terraform-ci-plan terraform-apply terraform-ci-apply \
@@ -25,6 +27,7 @@ help:
 		'' \
 		'  make ios-build              Generate project and build simulator app' \
 		'  make ios-test               Generate project and run iOS unit tests' \
+		'  make ios-ui-test            Generate project and run iOS XCUITests' \
 		'  make ios-ci                 Generate, build, and test like CI' \
 		'  make ios-device-launch      Build, install, and launch on DEVICE_ID or default iPhone' \
 		'  make ios-device-console     Build, install, and launch with devicectl console' \
@@ -47,6 +50,7 @@ help:
 		'  CATVOX_APP_CHECK_DEBUG_TOKEN=... make functions-integration' \
 		'  functions-integration falls back to terraform/terraform.tfvars app_check_debug_token when no env token is set' \
 		'  IOS_TEST_DESTINATION="platform=iOS Simulator,name=iPhone 16,OS=latest"' \
+		'  IOS_UI_TEST_DESTINATION="platform=iOS Simulator,name=iPhone 16,OS=latest"' \
 		'  DEVICE_ID=... make ios-device-launch'
 
 doctor:
@@ -123,6 +127,36 @@ ios-test-only:
 		xcodebuild test \
 			-project "$(IOS_PROJECT)" \
 			-scheme "$(IOS_SCHEME)" \
+			-destination "$$destination" \
+			-configuration "$(IOS_CONFIGURATION)" \
+			CODE_SIGNING_ALLOWED=NO; \
+	fi
+
+ios-ui-test: ios-generate ios-ui-test-only
+
+ios-ui-test-only:
+	@destination="$(IOS_UI_TEST_DESTINATION)"; \
+	if [[ "$${CI:-}" != "true" && "$$destination" == "platform=iOS Simulator,name=iPhone 16,OS=latest" ]] && \
+		! xcrun simctl list devices available | grep -qE '^[[:space:]]+iPhone 16[[:space:](]'; then \
+		fallback="$$(xcrun simctl list devices available | awk -F ' \\(' '/^[[:space:]]+iPhone / { gsub(/^[[:space:]]+/, "", $$1); print $$1; exit }')"; \
+		if [[ -n "$$fallback" ]]; then \
+			printf 'iPhone 16 simulator not available locally; using %s\n' "$$fallback"; \
+			destination="platform=iOS Simulator,name=$$fallback,OS=latest"; \
+		fi; \
+	fi; \
+	set -o pipefail; \
+	if command -v xcpretty >/dev/null 2>&1; then \
+		xcodebuild test \
+			-project "$(IOS_PROJECT)" \
+			-scheme "$(IOS_UI_TEST_SCHEME)" \
+			-destination "$$destination" \
+			-configuration "$(IOS_CONFIGURATION)" \
+			CODE_SIGNING_ALLOWED=NO \
+		| xcpretty; \
+	else \
+		xcodebuild test \
+			-project "$(IOS_PROJECT)" \
+			-scheme "$(IOS_UI_TEST_SCHEME)" \
 			-destination "$$destination" \
 			-configuration "$(IOS_CONFIGURATION)" \
 			CODE_SIGNING_ALLOWED=NO; \

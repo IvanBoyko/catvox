@@ -71,6 +71,7 @@ final class GCPService {
     /// `true`  — simulated delays, mock CatAnalysis (no server required).
     /// `false` — real GCS upload + backend analysis.
     var mockMode: Bool = false
+    var forceQuotaExceeded: Bool = false
 
     // MARK: - Observable properties
 
@@ -164,6 +165,13 @@ final class GCPService {
     // MARK: - Mock pipeline
 
     private func mockPipeline(requestID: UUID) async throws {
+        if forceQuotaExceeded {
+            try await Task.sleep(for: .milliseconds(150))
+            try Task.checkCancellation()
+            setUploadState(.quotaExceeded, for: requestID)
+            return
+        }
+
         // Step 1 — simulate signed URL negotiation
         setUploadState(.fetchingSignedURL, for: requestID)
         try await Task.sleep(for: .seconds(0.7))

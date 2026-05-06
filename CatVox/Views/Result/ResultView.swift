@@ -133,6 +133,10 @@ struct ResultView: View {
 
     var body: some View {
         ZStack(alignment: .bottom) {
+            Color.clear
+                .frame(width: 1, height: 1)
+                .accessibilityElement()
+                .accessibilityIdentifier("result.screen")
 
             // ── 1. Background ──────────────────────────────────────────────
             backgroundView
@@ -244,6 +248,7 @@ struct ResultView: View {
             .padding(.horizontal, 20)
             .padding(.bottom, 60)
             .transition(.opacity)
+            .accessibilityIdentifier("upload.progressCard")
     }
 
     /// Full result UI — mirrors the original single-path layout.
@@ -425,6 +430,7 @@ struct ResultView: View {
         }
         .disabled(isShareExportInFlight)
         .opacity(isShareExportInFlight ? 0.55 : 1)
+        .accessibilityIdentifier("result.doneButton")
     }
 
     private func shareActions(_ vm: ResultViewModel) -> some View {
@@ -493,6 +499,9 @@ struct ResultView: View {
         if viewModel != nil {
             viewModel?.onAppear()
         } else if let url = videoURL, gcpService.uploadState == .idle {
+            let launchConfiguration = CatVoxLaunchConfiguration.current
+            gcpService.mockMode = launchConfiguration.isUITesting || launchConfiguration.mockBackend
+            gcpService.forceQuotaExceeded = launchConfiguration.forceQuotaExceeded
             // Recording path — kick off the upload pipeline.
             gcpService.uploadAndAnalyse(videoAt: url)
         }

@@ -14,6 +14,10 @@ struct QuotaExceededView: View {
 
     var body: some View {
         VStack(spacing: 20) {
+            Color.clear
+                .frame(width: 1, height: 1)
+                .accessibilityElement()
+                .accessibilityIdentifier("quota.card")
 
             // ── Icon ──────────────────────────────────────────────────────
             ZStack {
@@ -59,11 +63,13 @@ struct QuotaExceededView: View {
                             in: RoundedRectangle(cornerRadius: 14, style: .continuous)
                         )
                 }
+                .accessibilityIdentifier("quota.upgradeButton")
 
                 Button("Maybe Later", action: onDismiss)
                     .font(.subheadline)
                     .foregroundStyle(.white.opacity(0.55))
                     .padding(.vertical, 4)
+                    .accessibilityIdentifier("quota.maybeLaterButton")
             }
         }
         .padding(24)

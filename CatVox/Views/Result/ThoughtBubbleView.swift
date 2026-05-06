@@ -29,6 +29,7 @@ struct ThoughtBubbleView: View {
                 .foregroundStyle(.white)
                 .lineSpacing(5)
                 .fixedSize(horizontal: false, vertical: true)
+                .accessibilityIdentifier("result.catThoughtText")
         }
         .padding(.horizontal, 20)
         .padding(.vertical, 18)

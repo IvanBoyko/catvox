@@ -70,6 +70,22 @@ targets:
         TARGETED_DEVICE_FAMILY: "1"
         GENERATE_INFOPLIST_FILE: YES
 
+  CatVoxUITests:
+    type: bundle.ui-testing
+    platform: iOS
+    sources:
+      - CatVoxUITests
+    dependencies:
+      - target: CatVox
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.kathelix.catvox.uitests
+        SWIFT_VERSION: "5.0"
+        IPHONEOS_DEPLOYMENT_TARGET: "17.0"
+        TARGETED_DEVICE_FAMILY: "1"
+        GENERATE_INFOPLIST_FILE: YES
+        TEST_TARGET_NAME: CatVox
+
 schemes:
   CatVox:
     build:
@@ -81,6 +97,23 @@ schemes:
       config: Debug
       targets:
         - CatVoxTests
+    profile:
+      config: Release
+    analyze:
+      config: Debug
+    archive:
+      config: Release
+
+  CatVoxUITests:
+    build:
+      targets:
+        CatVox: all
+    run:
+      config: Debug
+    test:
+      config: Debug
+      targets:
+        - CatVoxUITests
     profile:
       config: Release
     analyze:

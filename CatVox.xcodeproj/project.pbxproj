@@ -14,6 +14,7 @@
 		18A039960A12961EBFEBC651 /* LoopingVideoBackground.swift in Sources */ = {isa = PBXBuildFile; fileRef = 431ED6A02525A346D288F5CA /* LoopingVideoBackground.swift */; };
 		19CF3C0B8D875672AF8B7A15 /* FirebaseCore in Frameworks */ = {isa = PBXBuildFile; productRef = 8E865FA0F52929C0386ECF63 /* FirebaseCore */; };
 		19F624038D417F767050CF21 /* UserIdentityStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 48EA24A52C870000B3D3280E /* UserIdentityStore.swift */; };
+		19F7755D3C621020F8D89AB7 /* CatVoxUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DE49957B358DEC3A3E7DF00A /* CatVoxUITests.swift */; };
 		2052FB6C170E9EEC2531E86A /* CatAnalysisTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6364ED5AE4CAAE1E2AC30B29 /* CatAnalysisTests.swift */; };
 		20BE71B74167716C5467545B /* GCPServiceRequestTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 956E52E26ED05B63972F72FD /* GCPServiceRequestTests.swift */; };
 		281365429F072D278D203C44 /* PostHog in Frameworks */ = {isa = PBXBuildFile; productRef = EC01C7226C91D747F131797E /* PostHog */; };
@@ -23,6 +24,7 @@
 		37039B5FADDEA9E57A423699 /* HomeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4F5C098EA923D7B7D2B7746F /* HomeView.swift */; };
 		374FEBF00E6B6956F5361432 /* ScanHistoryStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = A6E8BBD7D810A695BAAAB6ED /* ScanHistoryStore.swift */; };
 		3A76BB65F25DB94D7E779AA1 /* ConfidenceTierTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D8AD2459F0FB2E469B3A8EBF /* ConfidenceTierTests.swift */; };
+		3C5BBA33A1795D86EC0491C3 /* CatVoxUITestSupport.swift in Sources */ = {isa = PBXBuildFile; fileRef = C97363627F42884D74A0751E /* CatVoxUITestSupport.swift */; };
 		4266499BA9E91B5D6B035BB7 /* ResultVideoBackdrop.swift in Sources */ = {isa = PBXBuildFile; fileRef = C772B5F55DE9DC6D8C628BB8 /* ResultVideoBackdrop.swift */; };
 		44C6BC1CB2E18E7DDD3361F3 /* HomeVideoPicker.swift in Sources */ = {isa = PBXBuildFile; fileRef = 54EFAA94F5454E9ABF6B9D09 /* HomeVideoPicker.swift */; };
 		46ECBCFF9DD385E7670A980D /* CameraService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 215145685222056D654FFBD5 /* CameraService.swift */; };
@@ -46,6 +48,7 @@
 		C3ADEFA683DE26DFF3392AD6 /* RecordingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 19667502574A1D26D0A51E54 /* RecordingView.swift */; };
 		C93725BB3023F1154E1DCB70 /* ScanQuotaStoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AE8291820F5D680D455B4DB9 /* ScanQuotaStoreTests.swift */; };
 		CC4D468FA76148B25B2DFE40 /* Theme.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4C40315F8DBC5B5AD38A13C2 /* Theme.swift */; };
+		D5A1D3AC43BF9708A681A0B7 /* CatVoxLaunchConfiguration.swift in Sources */ = {isa = PBXBuildFile; fileRef = 19AE93315B15E827FC62B553 /* CatVoxLaunchConfiguration.swift */; };
 		E38E18F089FE09158754DE37 /* AnalyticsService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 481D6275DC1528B2394E82A1 /* AnalyticsService.swift */; };
 		E66C3E964387260252BC45F3 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = 13B1A8A31D1EAAB998A22160 /* PrivacyInfo.xcprivacy */; };
 		ED83E27532C2FF6FCBB3FF6B /* ImportedVideoService.swift in Sources */ = {isa = PBXBuildFile; fileRef = C2F3ADCCFC50AD8360715D2E /* ImportedVideoService.swift */; };
@@ -64,13 +67,21 @@
 			remoteGlobalIDString = A7EDDBB8F04B431FAC25DB3C;
 			remoteInfo = CatVox;
 		};
+		9FD7D03CE5850E5EBC40A7C1 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 6E889E5E24CD6285788492AD /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = A7EDDBB8F04B431FAC25DB3C;
+			remoteInfo = CatVox;
+		};
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
 		0D8439BECE45A0303556B1C1 /* CatVox.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = CatVox.entitlements; sourceTree = "<group>"; };
 		0F8AF485DF075ADE029435E4 /* GCPService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GCPService.swift; sourceTree = "<group>"; };
-		13B1A8A31D1EAAB998A22160 /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; lastKnownFileType = text.xml; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
+		13B1A8A31D1EAAB998A22160 /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
 		19667502574A1D26D0A51E54 /* RecordingView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecordingView.swift; sourceTree = "<group>"; };
+		19AE93315B15E827FC62B553 /* CatVoxLaunchConfiguration.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CatVoxLaunchConfiguration.swift; sourceTree = "<group>"; };
 		1A557949F28BBD9853A801AE /* GoogleService-Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = "GoogleService-Info.plist"; sourceTree = "<group>"; };
 		215145685222056D654FFBD5 /* CameraService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CameraService.swift; sourceTree = "<group>"; };
 		337DB0A3CC6E2C83B8244190 /* ExpertInsightsDrawer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExpertInsightsDrawer.swift; sourceTree = "<group>"; };
@@ -85,9 +96,10 @@
 		6313F1146262336F3B4CE566 /* CatPersonaTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CatPersonaTests.swift; sourceTree = "<group>"; };
 		6364ED5AE4CAAE1E2AC30B29 /* CatAnalysisTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CatAnalysisTests.swift; sourceTree = "<group>"; };
 		689AC1D0436D57C04DBE7694 /* CatPersona.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CatPersona.swift; sourceTree = "<group>"; };
+		6ACE993B64A7FED98D546BC0 /* CatVoxUITests.xctest */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.cfbundle; path = CatVoxUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		6B2B3D6279B0CBA2AEBDEB41 /* UploadProgressView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UploadProgressView.swift; sourceTree = "<group>"; };
-		7656DF1FA69C366617629924 /* CatVoxTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = CatVoxTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
-		7BC4DFCD54831F1AA990A7C3 /* CatVox.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = CatVox.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		7656DF1FA69C366617629924 /* CatVoxTests.xctest */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.cfbundle; path = CatVoxTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		7BC4DFCD54831F1AA990A7C3 /* CatVox.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = CatVox.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		7CDA1F15EF954A1E30D11AE3 /* ActivityView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ActivityView.swift; sourceTree = "<group>"; };
 		82B4E92B6085484FE9DDDA8B /* ScanQuotaStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScanQuotaStore.swift; sourceTree = "<group>"; };
 		8F5127E72D22F9078142F6EE /* CameraPreviewView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CameraPreviewView.swift; sourceTree = "<group>"; };
@@ -108,10 +120,12 @@
 		C5502025B9115BEAD8E634EF /* ShareVideoRenderer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShareVideoRenderer.swift; sourceTree = "<group>"; };
 		C772B5F55DE9DC6D8C628BB8 /* ResultVideoBackdrop.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ResultVideoBackdrop.swift; sourceTree = "<group>"; };
 		C7BA98BD11A2006135A1026D /* Preview Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = "Preview Assets.xcassets"; sourceTree = "<group>"; };
+		C97363627F42884D74A0751E /* CatVoxUITestSupport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CatVoxUITestSupport.swift; sourceTree = "<group>"; };
 		D7288FA38F10CB18B8FAAA8D /* ConfidenceTier.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConfidenceTier.swift; sourceTree = "<group>"; };
 		D81F4FC3E926629C4422BFA0 /* SavedScanRow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SavedScanRow.swift; sourceTree = "<group>"; };
 		D8AD2459F0FB2E469B3A8EBF /* ConfidenceTierTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConfidenceTierTests.swift; sourceTree = "<group>"; };
 		DE20F331A3A02FFAF0D011F0 /* PersonaBadgeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PersonaBadgeView.swift; sourceTree = "<group>"; };
+		DE49957B358DEC3A3E7DF00A /* CatVoxUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CatVoxUITests.swift; sourceTree = "<group>"; };
 		E100F9FEEC3B2CF509B41F20 /* CatAnalysis.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CatAnalysis.swift; sourceTree = "<group>"; };
 		F08F33CD1AC4F31C7769CE96 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
 		FEBC2D72ADC3729A73D65E8D /* CatVoxApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CatVoxApp.swift; sourceTree = "<group>"; };
@@ -164,6 +178,7 @@
 			children = (
 				7BC4DFCD54831F1AA990A7C3 /* CatVox.app */,
 				7656DF1FA69C366617629924 /* CatVoxTests.xctest */,
+				6ACE993B64A7FED98D546BC0 /* CatVoxUITests.xctest */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -216,6 +231,8 @@
 			isa = PBXGroup;
 			children = (
 				FEBC2D72ADC3729A73D65E8D /* CatVoxApp.swift */,
+				19AE93315B15E827FC62B553 /* CatVoxLaunchConfiguration.swift */,
+				C97363627F42884D74A0751E /* CatVoxUITestSupport.swift */,
 				F08F33CD1AC4F31C7769CE96 /* ContentView.swift */,
 			);
 			path = App;
@@ -265,6 +282,14 @@
 			path = Views;
 			sourceTree = "<group>";
 		};
+		C99F0157F9654EE31686A685 /* CatVoxUITests */ = {
+			isa = PBXGroup;
+			children = (
+				DE49957B358DEC3A3E7DF00A /* CatVoxUITests.swift */,
+			);
+			path = CatVoxUITests;
+			sourceTree = "<group>";
+		};
 		DB0F9041CE7EFE223DE01133 /* Recording */ = {
 			isa = PBXGroup;
 			children = (
@@ -278,6 +303,7 @@
 			children = (
 				7999165DC9E8C948CFB7E844 /* CatVox */,
 				FB5B11DC480CF0958CCC390A /* CatVoxTests */,
+				C99F0157F9654EE31686A685 /* CatVoxUITests */,
 				4C9BA6609FEE1ADFF6BA2072 /* Products */,
 			);
 			sourceTree = "<group>";
@@ -318,6 +344,24 @@
 			productReference = 7656DF1FA69C366617629924 /* CatVoxTests.xctest */;
 			productType = "com.apple.product-type.bundle.unit-test";
 		};
+		4DF3DE52DEB7BC6BDD20B322 /* CatVoxUITests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 9CFD856539FFC8765047FA3E /* Build configuration list for PBXNativeTarget "CatVoxUITests" */;
+			buildPhases = (
+				B1A33555C2C254BD187557D6 /* Sources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				E5A47412E1229E486EAD46D0 /* PBXTargetDependency */,
+			);
+			name = CatVoxUITests;
+			packageProductDependencies = (
+			);
+			productName = CatVoxUITests;
+			productReference = 6ACE993B64A7FED98D546BC0 /* CatVoxUITests.xctest */;
+			productType = "com.apple.product-type.bundle.ui-testing";
+		};
 		A7EDDBB8F04B431FAC25DB3C /* CatVox */ = {
 			isa = PBXNativeTarget;
 			buildConfigurationList = EFD8A9F258F409C1D2C31F34 /* Build configuration list for PBXNativeTarget "CatVox" */;
@@ -347,7 +391,15 @@
 			isa = PBXProject;
 			attributes = {
 				BuildIndependentTargetsInParallel = YES;
-				LastUpgradeCheck = 2640;
+				LastUpgradeCheck = 1600;
+				TargetAttributes = {
+					4DF3DE52DEB7BC6BDD20B322 = {
+						TestTargetID = A7EDDBB8F04B431FAC25DB3C;
+					};
+					A7EDDBB8F04B431FAC25DB3C = {
+						DevelopmentTeam = 93SH436384;
+					};
+				};
 			};
 			buildConfigurationList = 35CA416E20D77D1A4BC6992A /* Build configuration list for PBXProject "CatVox" */;
 			developmentRegion = en;
@@ -369,6 +421,7 @@
 			targets = (
 				A7EDDBB8F04B431FAC25DB3C /* CatVox */,
 				187F9CB2E713B4E21A252580 /* CatVoxTests */,
+				4DF3DE52DEB7BC6BDD20B322 /* CatVoxUITests */,
 			);
 		};
 /* End PBXProject section */
@@ -415,6 +468,8 @@
 				1861803EF64D9F7FE6C77560 /* CatAnalysis.swift in Sources */,
 				9CD5CA08C5225D84F30B2646 /* CatPersona.swift in Sources */,
 				2B1DF66382C3129D895D785C /* CatVoxApp.swift in Sources */,
+				D5A1D3AC43BF9708A681A0B7 /* CatVoxLaunchConfiguration.swift in Sources */,
+				3C5BBA33A1795D86EC0491C3 /* CatVoxUITestSupport.swift in Sources */,
 				5F6C5D7BE130E488556FC65A /* ConfidenceTier.swift in Sources */,
 				61C87E117CBDFD72736557E7 /* ContentView.swift in Sources */,
 				A5C4EECE806C37E8D53F28E0 /* ExpertInsightsDrawer.swift in Sources */,
@@ -442,6 +497,14 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		B1A33555C2C254BD187557D6 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				19F7755D3C621020F8D89AB7 /* CatVoxUITests.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXSourcesBuildPhase section */
 
 /* Begin PBXTargetDependency section */
@@ -449,6 +512,11 @@
 			isa = PBXTargetDependency;
 			target = A7EDDBB8F04B431FAC25DB3C /* CatVox */;
 			targetProxy = 208BD4D2A34AEF3FDB43A139 /* PBXContainerItemProxy */;
+		};
+		E5A47412E1229E486EAD46D0 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = A7EDDBB8F04B431FAC25DB3C /* CatVox */;
+			targetProxy = 9FD7D03CE5850E5EBC40A7C1 /* PBXContainerItemProxy */;
 		};
 /* End PBXTargetDependency section */
 
@@ -490,7 +558,6 @@
 				DEBUG_INFORMATION_FORMAT = dwarf;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
 				ENABLE_TESTABILITY = YES;
-				ENABLE_USER_SCRIPT_SANDBOXING = YES;
 				GCC_C_LANGUAGE_STANDARD = gnu11;
 				GCC_DYNAMIC_NO_PIC = NO;
 				GCC_NO_COMMON_BLOCKS = YES;
@@ -511,7 +578,6 @@
 				ONLY_ACTIVE_ARCH = YES;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = iphoneos;
-				STRING_CATALOG_GENERATE_SYMBOLS = YES;
 				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
 				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
 				SWIFT_VERSION = 5.0;
@@ -528,7 +594,7 @@
 				CODE_SIGN_ENTITLEMENTS = CatVox/CatVox.entitlements;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
 				DEVELOPMENT_ASSET_PATHS = "\"CatVox/Preview Content\"";
-				DEVELOPMENT_TEAM = QYT76L5836;
+				DEVELOPMENT_TEAM = 93SH436384;
 				INFOPLIST_FILE = CatVox/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -579,7 +645,6 @@
 				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
 				ENABLE_NS_ASSERTIONS = NO;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
-				ENABLE_USER_SCRIPT_SANDBOXING = YES;
 				GCC_C_LANGUAGE_STANDARD = gnu11;
 				GCC_NO_COMMON_BLOCKS = YES;
 				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
@@ -593,7 +658,6 @@
 				MTL_FAST_MATH = YES;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = iphoneos;
-				STRING_CATALOG_GENERATE_SYMBOLS = YES;
 				SWIFT_COMPILATION_MODE = wholemodule;
 				SWIFT_OPTIMIZATION_LEVEL = "-O";
 				SWIFT_VERSION = 5.0;
@@ -610,7 +674,7 @@
 				CODE_SIGN_ENTITLEMENTS = CatVox/CatVox.entitlements;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
 				DEVELOPMENT_ASSET_PATHS = "\"CatVox/Preview Content\"";
-				DEVELOPMENT_TEAM = QYT76L5836;
+				DEVELOPMENT_TEAM = 93SH436384;
 				INFOPLIST_FILE = CatVox/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -643,6 +707,25 @@
 			};
 			name = Release;
 		};
+		89C9F435693577FAEC286DDE /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@loader_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.kathelix.catvox.uitests;
+				SDKROOT = iphoneos;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 1;
+				TEST_TARGET_NAME = CatVox;
+			};
+			name = Debug;
+		};
 		AF6F19E451A988483ACD4579 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
@@ -662,6 +745,25 @@
 			};
 			name = Debug;
 		};
+		F8390F83D1C9F4503744DFF4 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@loader_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.kathelix.catvox.uitests;
+				SDKROOT = iphoneos;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 1;
+				TEST_TARGET_NAME = CatVox;
+			};
+			name = Release;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -670,6 +772,15 @@
 			buildConfigurations = (
 				01943A8224D832B90D99AFF8 /* Debug */,
 				447D3839A7E071606061BC09 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		9CFD856539FFC8765047FA3E /* Build configuration list for PBXNativeTarget "CatVoxUITests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				89C9F435693577FAEC286DDE /* Debug */,
+				F8390F83D1C9F4503744DFF4 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Debug;
