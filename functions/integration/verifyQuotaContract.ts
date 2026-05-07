@@ -1,11 +1,6 @@
-import { Firestore } from '@google-cloud/firestore';
+import { FieldValue, Firestore, Timestamp } from '@google-cloud/firestore';
 import { spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { getApps, initializeApp } from 'firebase-admin/app';
-import {
-  isLimitExceededError,
-  reserveUsage,
-} from '../src/usageGuard';
 
 const DEFAULT_PROJECT_ID = 'kathelix-catvox-prod';
 const DEFAULT_SIGNED_URL_ENDPOINT =
@@ -15,6 +10,10 @@ const DEFAULT_ANALYSE_ENDPOINT =
 const DEFAULT_FIREBASE_APP_ID = '1:953500951129:ios:1595a4c27cd8f3f7964748';
 const DEFAULT_FIREBASE_API_KEY = 'AIzaSyAMKDQ_mIGQWQF4VhU8lytvvGx1TpuoBMI';
 const DEFAULT_IOS_BUNDLE_ID = 'com.kathelix.catvox';
+const DAILY_LIMIT = 5;
+const RESERVATION_TTL_MS = 5 * 60 * 1000;
+const LIMIT_EXCEEDED = 'LIMIT_EXCEEDED';
+const RESERVATION_ALREADY_EXISTS = 'RESERVATION_ALREADY_EXISTS';
 
 type AppCheckUnauthorizedResponseBody = {
   code?: unknown;
@@ -48,6 +47,12 @@ type UTCQuotaWindow = {
   usageDate: string;
   resetAt: string;
 };
+
+type ReservationRecord = {
+  expiresAt?: unknown;
+};
+
+type ActiveReservations = Record<string, ReservationRecord>;
 
 const args = new Set(process.argv.slice(2));
 const confirmed = args.has('--confirm');
@@ -148,10 +153,172 @@ function describeDebugToken(): string {
   return `sha256:${fingerprintSecret(appCheckDebugToken)} length:${appCheckDebugToken.length}${trimmedNote}`;
 }
 
-function ensureFirebaseAdminApp(): void {
-  if (getApps().length === 0) {
-    initializeApp({ projectId });
+function normalizedCount(value: unknown): number {
+  return typeof value === 'number' && Number.isInteger(value) && value > 0
+    ? value
+    : 0;
+}
+
+function normalizedReservations(value: unknown): ActiveReservations {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) {
+    return {};
   }
+
+  const reservations: ActiveReservations = {};
+
+  for (const [id, reservation] of Object.entries(value)) {
+    if (typeof reservation === 'object' && reservation !== null && !Array.isArray(reservation)) {
+      reservations[id] = reservation as ReservationRecord;
+    }
+  }
+
+  return reservations;
+}
+
+function timestampLikeToMillis(value: unknown): number | null {
+  if (value instanceof Timestamp) {
+    return value.toMillis();
+  }
+
+  if (value instanceof Date) {
+    return value.getTime();
+  }
+
+  if (
+    typeof value === 'object' &&
+    value !== null &&
+    'toMillis' in value &&
+    typeof value.toMillis === 'function'
+  ) {
+    const millis = value.toMillis() as unknown;
+    return typeof millis === 'number' && Number.isFinite(millis) ? millis : null;
+  }
+
+  return null;
+}
+
+function summarizeIntegrationUsageQuota(
+  data: Record<string, unknown>,
+  today: string,
+  nowMs: number
+): {
+  count: number;
+  activeReservations: ActiveReservations;
+  expiredReservationIds: string[];
+  usedSlots: number;
+} {
+  const isNewDay = data.lastResetDate !== today;
+  const count = isNewDay ? 0 : normalizedCount(data.count);
+  const reservations = normalizedReservations(data.reservations);
+  const activeReservations: ActiveReservations = {};
+  const expiredReservationIds: string[] = [];
+
+  for (const [id, reservation] of Object.entries(reservations)) {
+    const expiresAtMs = timestampLikeToMillis(reservation.expiresAt);
+
+    if (expiresAtMs !== null && expiresAtMs > nowMs) {
+      activeReservations[id] = reservation;
+    } else {
+      expiredReservationIds.push(id);
+    }
+  }
+
+  return {
+    count,
+    activeReservations,
+    expiredReservationIds,
+    usedSlots: count + Object.keys(activeReservations).length,
+  };
+}
+
+function buildIntegrationReservation(
+  gcsUri: string,
+  nowMs: number
+): {
+  gcsUriHash: string;
+  createdAt: Timestamp;
+  expiresAt: Timestamp;
+} {
+  return {
+    gcsUriHash: createHash('sha256').update(gcsUri).digest('hex'),
+    createdAt: Timestamp.fromMillis(nowMs),
+    expiresAt: Timestamp.fromMillis(nowMs + RESERVATION_TTL_MS),
+  };
+}
+
+function reservationDeleteUpdate(ids: string[]): Record<string, FieldValue> {
+  const update: Record<string, FieldValue> = {};
+
+  for (const id of ids) {
+    update[`reservations.${id}`] = FieldValue.delete();
+  }
+
+  return update;
+}
+
+function isLimitExceededError(err: unknown): boolean {
+  return err instanceof Error && err.message === LIMIT_EXCEEDED;
+}
+
+async function reserveUsageForIntegrationProbe(
+  firestore: Firestore,
+  userId: string,
+  analysisRequestId: string,
+  gcsUri: string,
+  quotaWindow: UTCQuotaWindow
+): Promise<void> {
+  // Keep this probe on @google-cloud/firestore because GitHub Actions WIF
+  // credentials are accepted here, but not by Firebase Admin ADC loading.
+  const ref = firestore.collection('usage').doc(userId);
+  const nowMs = Date.now();
+  const reservation = buildIntegrationReservation(gcsUri, nowMs);
+
+  await firestore.runTransaction(async (tx) => {
+    const snap = await tx.get(ref);
+
+    if (!snap.exists) {
+      tx.set(ref, {
+        count: 0,
+        lastResetDate: quotaWindow.usageDate,
+        reservations: {
+          [analysisRequestId]: reservation,
+        },
+      });
+      return;
+    }
+
+    const summary = summarizeIntegrationUsageQuota(
+      snap.data() || {},
+      quotaWindow.usageDate,
+      nowMs
+    );
+
+    if (Object.prototype.hasOwnProperty.call(
+      summary.activeReservations,
+      analysisRequestId
+    )) {
+      throw new Error(RESERVATION_ALREADY_EXISTS);
+    }
+
+    if (summary.usedSlots >= DAILY_LIMIT) {
+      throw new Error(LIMIT_EXCEEDED);
+    }
+
+    tx.update(ref, {
+      ...reservationDeleteUpdate(summary.expiredReservationIds),
+      count: summary.count,
+      lastResetDate: quotaWindow.usageDate,
+      [`reservations.${analysisRequestId}`]: reservation,
+    });
+  });
+}
+
+function activeReservationCount(value: unknown): number {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) {
+    return 0;
+  }
+
+  return Object.keys(value).length;
 }
 
 async function exchangeDebugTokenForAppCheckToken(): Promise<string> {
@@ -380,8 +547,6 @@ async function verifyAtomicReservationRace(
   testUserId: string,
   quotaWindow: UTCQuotaWindow
 ): Promise<void> {
-  ensureFirebaseAdminApp();
-
   const doc = firestore.collection('usage').doc(testUserId);
   await doc.set({
     count: 4,
@@ -389,15 +554,19 @@ async function verifyAtomicReservationRace(
   });
 
   const results = await Promise.allSettled([
-    reserveUsage(
+    reserveUsageForIntegrationProbe(
+      firestore,
       testUserId,
       '10000000-0000-4000-8000-000000000001',
-      `gs://catvox-raw-videos-${projectId}/reservation-race-a.mov`
+      `gs://catvox-raw-videos-${projectId}/reservation-race-a.mov`,
+      quotaWindow
     ),
-    reserveUsage(
+    reserveUsageForIntegrationProbe(
+      firestore,
       testUserId,
       '10000000-0000-4000-8000-000000000002',
-      `gs://catvox-raw-videos-${projectId}/reservation-race-b.mov`
+      `gs://catvox-raw-videos-${projectId}/reservation-race-b.mov`,
+      quotaWindow
     ),
   ]);
 
@@ -421,8 +590,7 @@ async function verifyAtomicReservationRace(
 
   const snap = await doc.get();
   const data = snap.data();
-  const reservations = data?.reservations as Record<string, unknown> | undefined;
-  const reservationCount = reservations ? Object.keys(reservations).length : 0;
+  const reservationCount = activeReservationCount(data?.reservations);
 
   assert(data?.count === 4, `Expected count to remain 4, got ${String(data?.count)}`);
   assert(
