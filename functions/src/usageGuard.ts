@@ -1,8 +1,15 @@
 import * as logger from 'firebase-functions/logger';
-import { getFirestore, FieldValue } from 'firebase-admin/firestore';
+import { createHash } from 'crypto';
+import {
+  getFirestore,
+  FieldValue,
+  Timestamp,
+} from 'firebase-admin/firestore';
 
 const DAILY_LIMIT = 5;
+const RESERVATION_TTL_MS = 5 * 60 * 1000;
 export const LIMIT_EXCEEDED = 'LIMIT_EXCEEDED';
+export const RESERVATION_ALREADY_EXISTS = 'RESERVATION_ALREADY_EXISTS';
 export const DAILY_SCAN_QUOTA_EXCEEDED_CODE = 'daily_scan_quota_exceeded';
 const DAILY_SCAN_QUOTA_EXCEEDED_MESSAGE =
   'Daily scan limit reached. Come back tomorrow.';
@@ -29,41 +36,117 @@ type QuotaResponseLike = {
   };
 };
 
+type ReservationRecord = {
+  gcsUriHash?: unknown;
+  createdAt?: unknown;
+  expiresAt?: unknown;
+};
+
+type ActiveReservations = Record<string, ReservationRecord>;
+
+export type UsageQuotaSummary = {
+  count: number;
+  activeReservations: ActiveReservations;
+  expiredReservationIds: string[];
+  usedSlots: number;
+};
+
 function todayUTC(): string {
   return new Date().toISOString().slice(0, 10); // YYYY-MM-DD
 }
 
 /**
- * Non-mutating quota check used at request gates where we want to reject
- * already-exhausted users without consuming a usage unit yet.
+ * Availability check used at request gates where we want to reject
+ * already-exhausted users without consuming a usage unit yet. It counts active
+ * analysis reservations so signed URL issuance cannot get ahead of in-flight
+ * quota claims, and it may prune expired reservations opportunistically.
  */
 export async function checkUsageAvailable(userId: string): Promise<void> {
   const db = getFirestore();
   const ref = db.collection('usage').doc(userId);
   const today = todayUTC();
+  const nowMs = Date.now();
 
-  const snap = await ref.get();
-  if (!snap.exists) {
-    return;
-  }
+  await db.runTransaction(async (tx) => {
+    const snap = await tx.get(ref);
+    if (!snap.exists) {
+      return;
+    }
 
-  const data = snap.data()!;
-  const isNewDay = data.lastResetDate !== today;
-  const count: number = isNewDay ? 0 : data.count;
+    const summary = summarizeUsageQuota(snap.data()!, today, nowMs);
 
-  if (count >= DAILY_LIMIT) {
-    throw new Error(LIMIT_EXCEEDED);
-  }
+    if (summary.expiredReservationIds.length > 0) {
+      tx.update(ref, reservationDeleteUpdate(summary.expiredReservationIds));
+    }
+
+    if (summary.usedSlots >= DAILY_LIMIT) {
+      throw new Error(LIMIT_EXCEEDED);
+    }
+  });
 }
 
 /**
- * Records one successful analysis completion for the given user.
- * Resets the counter when the calendar date (UTC) has changed.
+ * Atomically reserves one scan slot before Vertex AI work starts. The expensive
+ * model call must happen only after this transaction commits.
  */
-export async function incrementUsage(userId: string): Promise<void> {
+export async function reserveUsage(
+  userId: string,
+  analysisRequestId: string,
+  gcsUri: string
+): Promise<void> {
   const db = getFirestore();
   const ref = db.collection('usage').doc(userId);
   const today = todayUTC();
+  const nowMs = Date.now();
+  const reservation = buildReservation(gcsUri, nowMs);
+
+  await db.runTransaction(async (tx) => {
+    const snap = await tx.get(ref);
+
+    if (!snap.exists) {
+      tx.set(ref, {
+        count: 0,
+        lastResetDate: today,
+        reservations: {
+          [analysisRequestId]: reservation,
+        },
+      });
+      return;
+    }
+
+    const summary = summarizeUsageQuota(snap.data()!, today, nowMs);
+
+    if (Object.prototype.hasOwnProperty.call(
+      summary.activeReservations,
+      analysisRequestId
+    )) {
+      throw new Error(RESERVATION_ALREADY_EXISTS);
+    }
+
+    if (summary.usedSlots >= DAILY_LIMIT) {
+      throw new Error(LIMIT_EXCEEDED);
+    }
+
+    tx.update(ref, {
+      ...reservationDeleteUpdate(summary.expiredReservationIds),
+      count: summary.count,
+      lastResetDate: today,
+      [`reservations.${analysisRequestId}`]: reservation,
+    });
+  });
+}
+
+/**
+ * Converts a successful reservation into a burned quota unit.
+ */
+export async function completeUsageReservation(
+  userId: string,
+  analysisRequestId: string
+): Promise<void> {
+  const db = getFirestore();
+  const ref = db.collection('usage').doc(userId);
+  const today = todayUTC();
+  const nowMs = Date.now();
 
   await db.runTransaction(async (tx) => {
     const snap = await tx.get(ref);
@@ -73,19 +156,49 @@ export async function incrementUsage(userId: string): Promise<void> {
       return;
     }
 
-    const data = snap.data()!;
-    const isNewDay = data.lastResetDate !== today;
+    tx.update(ref, buildCompleteReservationUpdate(
+      snap.data()!,
+      today,
+      nowMs,
+      analysisRequestId
+    ));
+  });
+}
 
-    if (isNewDay) {
-      tx.set(ref, { count: 1, lastResetDate: today });
-    } else {
-      tx.update(ref, { count: FieldValue.increment(1) });
+/**
+ * Releases an in-flight reservation when analysis fails before a valid payload
+ * is produced. If this best-effort cleanup fails, the reservation expires.
+ */
+export async function releaseUsageReservation(
+  userId: string,
+  analysisRequestId: string
+): Promise<void> {
+  const db = getFirestore();
+  const ref = db.collection('usage').doc(userId);
+  const today = todayUTC();
+  const nowMs = Date.now();
+
+  await db.runTransaction(async (tx) => {
+    const snap = await tx.get(ref);
+    if (!snap.exists) {
+      return;
     }
+
+    tx.update(ref, buildReleaseReservationUpdate(
+      snap.data()!,
+      today,
+      nowMs,
+      analysisRequestId
+    ));
   });
 }
 
 export function isLimitExceededError(err: unknown): boolean {
   return err instanceof Error && err.message === LIMIT_EXCEEDED;
+}
+
+export function isReservationAlreadyExistsError(err: unknown): boolean {
+  return err instanceof Error && err.message === RESERVATION_ALREADY_EXISTS;
 }
 
 export function buildDailyQuotaExceededResponse(
@@ -143,4 +256,134 @@ function nextUTCDate(from: Date): Date {
 
 function formatUTCInstant(date: Date): string {
   return date.toISOString().replace('.000Z', 'Z');
+}
+
+export function summarizeUsageQuota(
+  data: Record<string, unknown>,
+  today: string,
+  nowMs: number
+): UsageQuotaSummary {
+  const isNewDay = data.lastResetDate !== today;
+  const count = isNewDay ? 0 : normalizedCount(data.count);
+  const reservations = normalizedReservations(data.reservations);
+  const activeReservations: ActiveReservations = {};
+  const expiredReservationIds: string[] = [];
+
+  for (const [id, reservation] of Object.entries(reservations)) {
+    const expiresAtMs = timestampLikeToMillis(reservation.expiresAt);
+
+    if (expiresAtMs !== null && expiresAtMs > nowMs) {
+      activeReservations[id] = reservation;
+    } else {
+      expiredReservationIds.push(id);
+    }
+  }
+
+  return {
+    count,
+    activeReservations,
+    expiredReservationIds,
+    usedSlots: count + Object.keys(activeReservations).length,
+  };
+}
+
+export function buildReservation(
+  gcsUri: string,
+  nowMs: number
+): {
+  gcsUriHash: string;
+  createdAt: Timestamp;
+  expiresAt: Timestamp;
+} {
+  return {
+    gcsUriHash: createHash('sha256').update(gcsUri).digest('hex'),
+    createdAt: Timestamp.fromMillis(nowMs),
+    expiresAt: Timestamp.fromMillis(nowMs + RESERVATION_TTL_MS),
+  };
+}
+
+export function buildCompleteReservationUpdate(
+  data: Record<string, unknown>,
+  today: string,
+  nowMs: number,
+  analysisRequestId: string
+): Record<string, unknown> {
+  const summary = summarizeUsageQuota(data, today, nowMs);
+
+  return {
+    ...reservationDeleteUpdate([
+      ...summary.expiredReservationIds,
+      analysisRequestId,
+    ]),
+    count: summary.count + 1,
+    lastResetDate: today,
+  };
+}
+
+export function buildReleaseReservationUpdate(
+  data: Record<string, unknown>,
+  today: string,
+  nowMs: number,
+  analysisRequestId: string
+): Record<string, unknown> {
+  const summary = summarizeUsageQuota(data, today, nowMs);
+
+  return reservationDeleteUpdate([
+    ...summary.expiredReservationIds,
+    analysisRequestId,
+  ]);
+}
+
+function normalizedCount(value: unknown): number {
+  return typeof value === 'number' && Number.isInteger(value) && value > 0
+    ? value
+    : 0;
+}
+
+function normalizedReservations(value: unknown): ActiveReservations {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) {
+    return {};
+  }
+
+  const reservations: ActiveReservations = {};
+
+  for (const [id, reservation] of Object.entries(value)) {
+    if (typeof reservation === 'object' && reservation !== null && !Array.isArray(reservation)) {
+      reservations[id] = reservation as ReservationRecord;
+    }
+  }
+
+  return reservations;
+}
+
+function timestampLikeToMillis(value: unknown): number | null {
+  if (value instanceof Timestamp) {
+    return value.toMillis();
+  }
+
+  if (value instanceof Date) {
+    return value.getTime();
+  }
+
+  if (
+    typeof value === 'object' &&
+    value !== null &&
+    'toMillis' in value &&
+    typeof value.toMillis === 'function'
+  ) {
+    const millis = value.toMillis() as unknown;
+    return typeof millis === 'number' && Number.isFinite(millis) ? millis : null;
+  }
+
+  return null;
+}
+
+function reservationDeleteUpdate(ids: string[]): Record<string, FieldValue> {
+  const update: Record<string, FieldValue> = {};
+
+  for (const id of ids) {
+    update[`reservations.${id}`] = FieldValue.delete();
+  }
+
+  return update;
 }
