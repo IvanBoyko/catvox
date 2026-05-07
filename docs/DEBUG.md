@@ -149,20 +149,23 @@ the failure was downstream (Vertex AI call).
 ### Step 6 — Run Dev backend integration tests
 
 Use this against the current Dev backend after deploying Functions changes. The
-current integration suite includes the daily-quota contract test: it writes a
-temporary `usage/{userId}` document with `count: 5`, calls `getSignedUploadURL`,
-verifies the machine-readable HTTP `429` response, checks for the structured
-`quota_exceeded` log entry, and deletes the temporary Firestore document in a
-`finally` block.
+current integration suite exchanges the registered App Check debug token,
+verifies both HTTP Functions reject missing App Check tokens, checks the
+Firestore quota reservation race contract with temporary `usage/{userId}` data,
+then runs the daily-quota contract test: it writes a temporary usage document
+with `count: 5`, calls `getSignedUploadURL`, verifies the machine-readable HTTP
+`429` response, checks for the structured `quota_exceeded` log entry, and
+deletes temporary Firestore documents in a `finally` block.
 
-Run the suite with:
+Prefer the Makefile target because it accepts `CATVOX_APP_CHECK_DEBUG_TOKEN`,
+`TF_VAR_app_check_debug_token`, or the local `terraform/terraform.tfvars`
+fallback:
 
 ```bash
-npm --prefix functions run test:integration
+make functions-integration
 ```
 
-For quota-contract debugging, pass script flags through the suite command. The
-suite already makes its Dev data-plane write explicit:
+The underlying npm command is:
 
 ```bash
 npm --prefix functions run test:integration
@@ -183,6 +186,7 @@ npm --prefix functions run test:integration -- --skip-log
 |---|---|---|
 | `Vertex AI returned invalid JSON: { "primary_emotion": ...` (truncated) | `MAX_OUTPUT_TOKENS` too low — thinking model consumed budget before finishing JSON | Raise `MAX_OUTPUT_TOKENS` in `functions/src/gemini.ts` |
 | `Retrying malformed Vertex AI analysis payload` then `Vertex AI returned malformed analysis payload` | First Gemini response was malformed, retry also failed, and the backend converted the request to a controlled `502` instead of crashing | Inspect `issues`, `attempt`, and `rawResponsePreview` in logs; if frequent, revisit prompt / output constraints or `MAX_OUTPUT_TOKENS` |
+| `FirebaseAppError: Invalid contents in the credentials file` in GitHub Actions integration tests | The test harness initialized Firebase Admin SDK against the WIF external-account Application Default Credentials (ADC) file. Google Cloud clients such as `@google-cloud/firestore` accept that CI auth path, but Firebase Admin ADC loading may reject it. | Keep direct Firestore integration probes on `@google-cloud/firestore`, or explicitly verify Firebase Admin initialization under GitHub Actions WIF before using it in `functions/integration/**`. Deployed Functions may still use Firebase Admin normally. |
 | `Empty response from Vertex AI` | Response had only `thought` parts, no output part | Check `finishReason` in the error summary; may indicate safety block or token exhaustion |
 | `The VertexAI class and all its dependencies are deprecated` | Backend was using the deprecated `@google-cloud/vertexai` generative AI module | Migrate Functions Gemini calls to `@google/genai` configured for Vertex AI; see ADR-0012 |
 | `signBlob` permission denied | Cloud Run running as wrong service account | Verify `serviceAccount:` is set in both function options; redeploy |

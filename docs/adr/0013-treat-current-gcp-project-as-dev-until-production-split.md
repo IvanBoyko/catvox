@@ -51,6 +51,12 @@ Live integration tests must follow these rules:
 - avoid reading, modifying, or depending on real user data
 - verify externally observable contracts that unit tests cannot fully cover
 - stay narrow enough that failures identify a specific deployed contract issue
+- use the same authentication path that GitHub Actions uses when the test
+  performs direct GCP data-plane probes
+- avoid initializing Firebase Admin SDK inside the CI integration test harness
+  unless that exact path has been verified under GitHub Actions WIF; use
+  Google Cloud client libraries such as `@google-cloud/firestore` for direct
+  Firestore probes
 
 Before public launch, CatVox must split the real production environment from
 this Dev environment. After that split, Firestore-mutating integration tests
@@ -77,6 +83,10 @@ non-invasive, and documented in a separate runbook.
   until launch
 - A merge-to-main integration failure happens after deployment, so rollback or a
   follow-up fix may be needed if a deployed contract is broken
+- Auth differences between local Application Default Credentials (ADC) and
+  GitHub Actions WIF can surface only in the post-merge integration job if the
+  integration harness uses a client library path that PR checks and local runs
+  do not exercise
 - The Dev environment may contain temporary test logs and briefly contain
   temporary test Firestore documents
 - Future App Check enforcement may require the integration test runner to supply
@@ -84,8 +94,12 @@ non-invasive, and documented in a separate runbook.
 
 ## Implementation Notes
 
-- Current integration baseline: daily quota contract integration test for
-  `getSignedUploadURL`
+- Current integration baseline: App Check rejection checks for both HTTP
+  Functions, a direct Firestore quota-reservation race probe, and the daily
+  quota contract integration test for `getSignedUploadURL`
+- The direct Firestore integration probe uses `@google-cloud/firestore` rather
+  than Firebase Admin SDK so the test harness works with GitHub Actions WIF
+  external-account Application Default Credentials (ADC)
 - CI entry points:
   - post-deploy job in `.github/workflows/functions.yml`
 - Local Dev command: `npm --prefix functions run test:integration`

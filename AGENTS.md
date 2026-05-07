@@ -260,6 +260,8 @@ Keyless auth via Workload Identity Federation — no long-lived service account 
 
 The WIF pool is locked to `kathelix/catvox` via `attribute-condition` — no other repo can impersonate the SA.
 
+GitHub Actions WIF produces an external-account Application Default Credentials (ADC) file. Google Cloud client libraries such as `@google-cloud/firestore` accept that path in CI, but Firebase Admin SDK ADC loading may reject it with `app/invalid-credential`. Deployed Cloud Functions can and should use Firebase Admin normally. CI integration test harnesses that perform direct Firestore probes should use `@google-cloud/firestore` unless Firebase Admin has been explicitly verified under GitHub Actions WIF.
+
 ### CI/CD Pipelines
 
 | Workflow | Trigger | What it does |
@@ -364,6 +366,12 @@ Before merging a feature PR, verify all of the following:
 - `docs/HLD.md` still matches the implemented MVP boundary
 - no leftover dev-only UI, preview shortcuts, or debug scaffolding remains in the user-facing flow
 
+For backend integration-test changes, also verify:
+- PR checks only run Functions build/unit tests; deploy and live integration run after merge to `main`
+- local `make functions-integration` has been run when the change touches `functions/integration/**` or live-backend contracts
+- any direct Firestore probe in the integration harness uses `@google-cloud/firestore` under CI WIF unless Firebase Admin has been explicitly verified there
+- the merge plan includes post-merge monitoring and a quick follow-up path if the main-only integration job fails
+
 For XcodeGen or generated-project changes, also verify:
 - regeneration preserves the intended Xcode upgrade markers (`LastUpgradeCheck` and shared scheme `LastUpgradeVersion`)
 - regeneration preserves the expected signing team (`DEVELOPMENT_TEAM = QYT76L5836` for the app target)
@@ -395,7 +403,8 @@ If a feature that was originally tracked under one broad backlog item becomes se
 
 - The Firebase Functions runtime is Node.js 22. For local validation, prefer running `functions` commands under Node.js 22 so `make functions-install`, `make functions-build`, and `make functions-test` match CI and do not emit avoidable engine warnings.
 - If Node.js 22 is unavailable locally, it is acceptable to run the build under the installed Node version, but explicitly report any expected `EBADENGINE` warning as an environment mismatch rather than treating it as a workflow failure.
-- Backend integration tests may write temporary Firestore documents and are safe to run against the current Dev backend with `make functions-integration` or `npm --prefix functions run test:integration`. The suite exchanges the registered App Check debug token for a valid App Check token, verifies that both HTTP Functions reject missing App Check tokens with `401 app_check_unauthorized`, then verifies the daily-quota contract and structured quota log. Do not run Firestore-mutating integration tests against a future real Prod environment; future Prod should use only a separate, protected, non-invasive smoke-test runbook.
+- Backend integration tests may write temporary Firestore documents and are safe to run against the current Dev backend with `make functions-integration` or `npm --prefix functions run test:integration`. The suite exchanges the registered App Check debug token for a valid App Check token, verifies that both HTTP Functions reject missing App Check tokens with `401 app_check_unauthorized`, verifies the Firestore quota reservation race contract, then verifies the daily-quota contract and structured quota log. Do not run Firestore-mutating integration tests against a future real Prod environment; future Prod should use only a separate, protected, non-invasive smoke-test runbook.
+- Integration scripts should not import production helpers merely to reuse Firestore transaction code if doing so initializes Firebase Admin in the test process. Prefer a small, explicit test-harness Firestore probe using `@google-cloud/firestore` so local ADC and GitHub Actions WIF behave consistently.
 
 ### HLD vs TRD
 
