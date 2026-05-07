@@ -34,6 +34,7 @@ final class GCPServiceRequestTests: XCTestCase {
             endpoint: endpoint,
             gcsUri: "gs://catvox-raw-videos-test/cat.mov",
             userId: "user-123",
+            analysisRequestID: UUID(uuidString: "A6F97F91-330D-4BD8-A184-86EB520CF691")!,
             appCheckToken: "app-check-token"
         )
 
@@ -46,6 +47,7 @@ final class GCPServiceRequestTests: XCTestCase {
         let decoded = try JSONDecoder().decode([String: String].self, from: body)
         XCTAssertEqual(decoded["gcsUri"], "gs://catvox-raw-videos-test/cat.mov")
         XCTAssertEqual(decoded["userId"], "user-123")
+        XCTAssertEqual(decoded["analysisRequestId"], "A6F97F91-330D-4BD8-A184-86EB520CF691")
     }
 
     func testBackendSessionConfigurationUsesExplicitTimeouts() {

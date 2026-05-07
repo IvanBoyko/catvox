@@ -73,7 +73,7 @@ For MVP, the user can either record a new video in-app or select an existing vid
 
 ### 3.2 Monetization & Sustainability
 * **Credit System:** 5 free scans/day to manage GCP costs.
-* **Quota Burn Rule:** A quota unit is consumed only when analysis completes successfully and a result payload is returned. Failed local validation attempts, rejected selections, and abandoned uploads do not consume quota.
+* **Quota Burn Rule:** The backend reserves a quota slot in Firestore after uploaded-object validation succeeds and before invoking Vertex AI. The reservation is converted into a consumed quota unit only when analysis completes successfully and a valid result payload is returned. Failed local validation attempts, rejected selections, abandoned uploads, and analysis failures before a valid result payload do not consume quota. Abandoned in-flight reservations expire automatically. See ADR-0015.
 * **Quota Error Contract:** When the daily scan quota is exhausted, backend entry points must return HTTP `429` with `Retry-After` set to the number of seconds until the next UTC quota reset, and a JSON body with `code: "daily_scan_quota_exceeded"`, a user-readable `message`, `limit: 5`, `remaining: 0`, and `resetAt` as an ISO-8601 UTC timestamp. The iOS client must treat only this machine-readable code as the quota-exceeded state; other `429` causes must fall through to normal failure handling.
 * **Pro Tier (IAP):** One-time in-app purchase for unlimited scans and watermark removal.
 * **Brand Promotion:** Subtle "Powered by Kathelix" watermark on all free-tier exports.
@@ -251,8 +251,18 @@ percentage. See ADR-0010 and ADR-0012.
     * **Vertex AI service agent** (`service-{PROJECT_NUMBER}@gcp-sa-aiplatform.iam.gserviceaccount.com`) requires `roles/storage.objectViewer` on this bucket so that Vertex AI can fetch the video via the `fileData` GCS URI. This binding is managed by Terraform (`google_storage_bucket_iam_member.vertexai_sa_raw_videos_viewer`).
 * **Firestore (Usage Guard):**
     * Collection: `usage/{userId}`.
-    * Schema: `{ count: integer, lastResetDate: string (YYYY-MM-DD) }`.
-    * **Logic:** Backend increments count; rejects request with the quota error contract (HTTP `429`, `code: "daily_scan_quota_exceeded"`) if limit reached.
+    * Schema: `{ count: integer, lastResetDate: string (YYYY-MM-DD), reservations: map }`.
+    * Reservation map shape:
+      ```ts
+      reservations: {
+        [analysisRequestId: string]: {
+          gcsUriHash: string,
+          createdAt: Timestamp,
+          expiresAt: Timestamp
+        }
+      }
+      ```
+    * **Logic:** Backend checks `count + activeReservations` against the daily limit. `analyseVideo` creates an atomic Firestore reservation after cheap uploaded-object validation and before invoking Vertex AI, then converts that reservation into an incremented `count` after a valid analysis result is produced. Expired reservations are pruned opportunistically during quota checks and reservation transactions. Requests rejected by quota use the quota error contract (HTTP `429`, `code: "daily_scan_quota_exceeded"`). See ADR-0015.
 * **userId:** A UUID generated once on first launch and persisted in `UserDefaults` under the key `"catvox.userId"`. Sent by the iOS client with every `analyseVideo` request and reused as the anonymous PostHog analytics identity. Forward-compatible with Firebase Auth — when Auth is introduced, the shared client identity value is replaced with the authenticated UID and the Firestore schema requires no changes. (See ADR-0007 and ADR-0011.)
 * **App-Local Scan Persistence:**
     * Local scan history is stored on-device using SwiftData for metadata persistence.
@@ -433,6 +443,7 @@ After step 1 the GitHub Actions CI pipeline is fully functional — all subseque
 * [x] **Video Upload:** Swift upload of the recorded HEVC file to GCS via signed URL; real pipeline live (`mockMode = false`).
 * [x] **AI Connection:** Cloud Function calls Vertex AI Gemini 2.5 Flash via the Google Gen AI SDK and `fileData` GCS URI.
 * [x] **Quota Exceeded UI:** Dedicated glassmorphic card shown when the daily scan limit is reached (HTTP 429); includes stub "Upgrade to Pro" CTA (shows "Coming soon" alert) and "Maybe Later" dismiss. StoreKit 2 wiring deferred to the Monetization backlog item.
+* [x] **Atomic Quota Reservations:** `analyseVideo` reserves quota in Firestore before invoking Vertex AI, converts the reservation into a consumed unit only after a valid result payload, and counts active reservations during quota checks. See ADR-0015.
 * [x] **Photos Import:** Add support for selecting an existing video from Photos through the unified scan flow, with local validation for duration, size, and unsupported formats before upload.
 * [x] **Early Stop Recording:** Allow users to stop in-app recording after a 2.0-second minimum threshold using the main capture control.
 * [x] **Post-Capture Review:** Add `Retake` and `Use This Clip` actions after recording ends; only `Use This Clip` continues to upload and analysis.
@@ -469,7 +480,6 @@ After step 1 the GitHub Actions CI pipeline is fully functional — all subseque
     3. **Collect in-app feedback**: from users, automatic sending of errors, special "Feedback" dialog
 * **Picker Eligibility UX:** Consider richer pre-selection eligibility hints or a more advanced gallery experience only if later product testing shows clear value over the simpler MVP rejection flow.
 * **Signed URL Issuance Rate-Limit:** Add a dedicated anti-abuse rate-limit for signed upload URL requests if App Check plus upload-gate quota enforcement prove insufficient.
-* **Quota Race Hardening:** The MVP may intentionally accept a small race between non-mutating quota pre-checks and post-success usage increments when concurrent requests start near the daily limit. Add reservation or idempotency-based quota accounting later if this becomes visible in production.
 * **Analysis Request Idempotency:** Design idempotent `analyseVideo` semantics before adding automatic client retries for analysis POST failures. The design should prevent duplicate Vertex AI calls, quota increments, or user-visible duplicate scans when the backend finishes after the client loses the connection.
 * **Backend Analysis Timing Telemetry:** Add structured timing logs around `analyseVideo` phases, including App Check pass, quota pre-check, GCS metadata lookup, Gemini request start/end, response validation, quota increment, and final response status, so slow device-observed analysis runs can be attributed without relying on Xcode networking logs.
 * **Backend Duration Validation:** Add backend validation for uploaded video duration <= 10 seconds before Vertex AI is invoked, rather than relying only on client-side duration checks.

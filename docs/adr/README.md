@@ -61,6 +61,7 @@ Each ADR should usually contain:
 | 0012 | Use Google Gen AI SDK for Vertex Gemini Calls | Accepted |
 | 0013 | Treat Current GCP Project as Dev Until Production Split | Accepted |
 | 0014 | Use Makefile as Local and CI Command Facade | Accepted |
+| 0015 | Reserve Quota Before Vertex Analysis | Accepted |
 
 ## Workflow
 

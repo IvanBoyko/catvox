@@ -1,7 +1,11 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 
-const { getAnalysisPayload, parseAnalysisPayload } = require('../lib/analyse.js');
+const {
+  getAnalysisPayload,
+  isValidAnalysisRequestId,
+  parseAnalysisPayload,
+} = require('../lib/analyse.js');
 
 test('parseAnalysisPayload rejects truncated Vertex JSON', () => {
   const truncatedPayload = `{
@@ -61,4 +65,17 @@ test('getAnalysisPayload fails cleanly after repeated malformed output', async (
     () => getAnalysisPayload(async () => '{"primary_emotion":"Attentive"'),
     /Vertex AI returned invalid JSON\./
   );
+});
+
+test('isValidAnalysisRequestId accepts UUID request IDs', () => {
+  assert.equal(
+    isValidAnalysisRequestId('A6F97F91-330D-4BD8-A184-86EB520CF691'),
+    true
+  );
+});
+
+test('isValidAnalysisRequestId rejects missing or malformed request IDs', () => {
+  assert.equal(isValidAnalysisRequestId(''), false);
+  assert.equal(isValidAnalysisRequestId('not-a-uuid'), false);
+  assert.equal(isValidAnalysisRequestId('a6f97f91-330d-7bd8-a184-86eb520cf691'), false);
 });

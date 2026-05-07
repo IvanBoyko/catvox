@@ -2,9 +2,11 @@ import { onRequest } from 'firebase-functions/v2/https';
 import * as logger from 'firebase-functions/logger';
 import { getStorage } from 'firebase-admin/storage';
 import {
-  checkUsageAvailable,
-  incrementUsage,
+  completeUsageReservation,
   isLimitExceededError,
+  isReservationAlreadyExistsError,
+  releaseUsageReservation,
+  reserveUsage,
   sendDailyQuotaExceededResponse,
 } from './usageGuard';
 import { callGemini } from './gemini';
@@ -51,24 +53,22 @@ export const analyseVideo = onRequest(
         return;
       }
 
-      const { gcsUri, userId } = req.body as {
+      const { gcsUri, userId, analysisRequestId } = req.body as {
         gcsUri?: string;
         userId?: string;
+        analysisRequestId?: string;
       };
 
-      if (!gcsUri || !userId) {
-        res.status(400).json({ error: 'gcsUri and userId are required' });
+      if (!gcsUri || !userId || !analysisRequestId) {
+        res.status(400).json({
+          error: 'gcsUri, userId, and analysisRequestId are required',
+        });
         return;
       }
 
-      try {
-        await checkUsageAvailable(userId);
-      } catch (err: unknown) {
-        if (isLimitExceededError(err)) {
-          sendDailyQuotaExceededResponse(res, 'analyseVideo');
-          return;
-        }
-        throw err;
+      if (!isValidAnalysisRequestId(analysisRequestId)) {
+        res.status(400).json({ error: 'analysisRequestId must be a valid UUID.' });
+        return;
       }
 
       const projectId = process.env.GCLOUD_PROJECT;
@@ -102,14 +102,40 @@ export const analyseVideo = onRequest(
         return;
       }
 
+      let shouldReleaseReservation = false;
+
       try {
+        try {
+          await reserveUsage(userId, analysisRequestId, gcsUri);
+          shouldReleaseReservation = true;
+        } catch (err: unknown) {
+          if (isLimitExceededError(err)) {
+            sendDailyQuotaExceededResponse(res, 'analyseVideo');
+            return;
+          }
+
+          if (isReservationAlreadyExistsError(err)) {
+            res.status(409).json({
+              error: 'analysisRequestId already has an active quota reservation.',
+            });
+            return;
+          }
+
+          throw err;
+        }
+
         const parsed = await getAnalysisPayload(() =>
           callGemini(projectId, gcsUri, mimeType)
         );
 
-        await incrementUsage(userId);
+        shouldReleaseReservation = false;
+        await completeUsageReservation(userId, analysisRequestId);
         res.status(200).json(parsed);
       } catch (err: unknown) {
+        if (shouldReleaseReservation) {
+          await releaseReservationBestEffort(userId, analysisRequestId);
+        }
+
         if (err instanceof InvalidVertexResponseError) {
           logger.error('Vertex AI returned malformed analysis payload', {
             issues: err.issues,
@@ -127,6 +153,11 @@ export const analyseVideo = onRequest(
     });
   }
 );
+
+export function isValidAnalysisRequestId(value: string): boolean {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
+    .test(value);
+}
 
 export async function getAnalysisPayload(
   getRawResponse: () => Promise<string>
@@ -252,4 +283,18 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 function previewRawResponse(rawResponse: string): string {
   return rawResponse.length > 500 ? `${rawResponse.slice(0, 500)}...` : rawResponse;
+}
+
+async function releaseReservationBestEffort(
+  userId: string,
+  analysisRequestId: string
+): Promise<void> {
+  try {
+    await releaseUsageReservation(userId, analysisRequestId);
+  } catch (releaseErr: unknown) {
+    logger.warn('Failed to release quota reservation after analysis failure', {
+      analysisRequestId,
+      error: releaseErr instanceof Error ? releaseErr.message : String(releaseErr),
+    });
+  }
 }

@@ -220,7 +220,7 @@ final class GCPService {
 
         setUploadState(.analysing, for: requestID)
         let analysis = try await runPipelinePhase(.analysing) {
-            try await triggerAnalysis(gcsUri: gcsUri)
+            try await triggerAnalysis(gcsUri: gcsUri, analysisRequestID: requestID)
         }
         setUploadState(.complete(analysis), for: requestID)
     }
@@ -332,12 +332,13 @@ final class GCPService {
         return false
     }
 
-    private func triggerAnalysis(gcsUri: String) async throws -> CatAnalysis {
+    private func triggerAnalysis(gcsUri: String, analysisRequestID: UUID) async throws -> CatAnalysis {
         let appCheckToken = try await fetchAppCheckToken()
         let request = try Self.makeAnalysisRequest(
             endpoint: Endpoint.analyse,
             gcsUri: gcsUri,
             userId: userId,
+            analysisRequestID: analysisRequestID,
             appCheckToken: appCheckToken
         )
 
@@ -408,6 +409,7 @@ final class GCPService {
         endpoint: URL,
         gcsUri: String,
         userId: String,
+        analysisRequestID: UUID,
         appCheckToken: String
     ) throws -> URLRequest {
         var request = URLRequest(url: endpoint)
@@ -417,6 +419,7 @@ final class GCPService {
         let payload: [String: String] = [
             "gcsUri": gcsUri,
             "userId": userId,
+            "analysisRequestId": analysisRequestID.uuidString,
         ]
         request.httpBody = try JSONEncoder().encode(payload)
         return request

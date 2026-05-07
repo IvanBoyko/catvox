@@ -240,6 +240,7 @@ async function verifyAppCheckUnauthorizedPreflight(testUserId: string): Promise<
     {
       gcsUri: `gs://catvox-raw-videos-${projectId}/app-check-preflight.mov`,
       userId: testUserId,
+      analysisRequestId: 'a6f97f91-330d-4bd8-a184-86eb520cf691',
     }
   );
 }
