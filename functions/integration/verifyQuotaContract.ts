@@ -1,6 +1,11 @@
 import { Firestore } from '@google-cloud/firestore';
 import { spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
+import { getApps, initializeApp } from 'firebase-admin/app';
+import {
+  isLimitExceededError,
+  reserveUsage,
+} from '../src/usageGuard';
 
 const DEFAULT_PROJECT_ID = 'kathelix-catvox-prod';
 const DEFAULT_SIGNED_URL_ENDPOINT =
@@ -75,7 +80,7 @@ Usage:
   npm --prefix functions run test:integration
 
 Options:
-  --confirm   Required. Writes and deletes a temporary Firestore usage doc.
+  --confirm   Required. Writes and deletes temporary Firestore usage docs.
   --skip-log  Verify only the HTTP response, not the Cloud Logging entry.
 
 Environment:
@@ -141,6 +146,12 @@ function describeDebugToken(): string {
     rawAppCheckDebugToken === appCheckDebugToken ? '' : ', trimmed surrounding whitespace';
 
   return `sha256:${fingerprintSecret(appCheckDebugToken)} length:${appCheckDebugToken.length}${trimmedNote}`;
+}
+
+function ensureFirebaseAdminApp(): void {
+  if (getApps().length === 0) {
+    initializeApp({ projectId });
+  }
 }
 
 async function exchangeDebugTokenForAppCheckToken(): Promise<string> {
@@ -364,6 +375,64 @@ async function verifyStructuredLog(expectedResetAt: unknown, startTime: Date): P
   throw new Error('No matching quota_exceeded structured log found');
 }
 
+async function verifyAtomicReservationRace(
+  firestore: Firestore,
+  testUserId: string,
+  quotaWindow: UTCQuotaWindow
+): Promise<void> {
+  ensureFirebaseAdminApp();
+
+  const doc = firestore.collection('usage').doc(testUserId);
+  await doc.set({
+    count: 4,
+    lastResetDate: quotaWindow.usageDate,
+  });
+
+  const results = await Promise.allSettled([
+    reserveUsage(
+      testUserId,
+      '10000000-0000-4000-8000-000000000001',
+      `gs://catvox-raw-videos-${projectId}/reservation-race-a.mov`
+    ),
+    reserveUsage(
+      testUserId,
+      '10000000-0000-4000-8000-000000000002',
+      `gs://catvox-raw-videos-${projectId}/reservation-race-b.mov`
+    ),
+  ]);
+
+  const fulfilled = results.filter((result) => result.status === 'fulfilled');
+  const rejected = results.filter((result) => result.status === 'rejected');
+
+  assert(
+    fulfilled.length === 1,
+    `Expected exactly one reservation to commit, got ${fulfilled.length}`
+  );
+  assert(
+    rejected.length === 1,
+    `Expected exactly one reservation to be rejected, got ${rejected.length}`
+  );
+
+  const rejection = rejected[0];
+  assert(
+    rejection.status === 'rejected' && isLimitExceededError(rejection.reason),
+    'Expected rejected reservation to fail with LIMIT_EXCEEDED'
+  );
+
+  const snap = await doc.get();
+  const data = snap.data();
+  const reservations = data?.reservations as Record<string, unknown> | undefined;
+  const reservationCount = reservations ? Object.keys(reservations).length : 0;
+
+  assert(data?.count === 4, `Expected count to remain 4, got ${String(data?.count)}`);
+  assert(
+    reservationCount === 1,
+    `Expected one active reservation after race, got ${reservationCount}`
+  );
+
+  console.log('Atomic quota reservation race verified');
+}
+
 async function main(): Promise<void> {
   if (!confirmed) {
     usage();
@@ -371,29 +440,36 @@ async function main(): Promise<void> {
   }
 
   const testUserId = `quota-contract-test-${Date.now()}`;
+  const reservationRaceUserId = `reservation-race-test-${Date.now()}`;
   const startTime = new Date(Date.now() - 1000);
   const quotaWindow = currentUTCQuotaWindow();
   const firestore = new Firestore({ projectId });
   const doc = firestore.collection('usage').doc(testUserId);
+  const reservationRaceDoc = firestore.collection('usage').doc(reservationRaceUserId);
 
   console.log('Project:', projectId);
   console.log('Signed URL endpoint:', signedUrlEndpoint);
   console.log('Analyse endpoint:', analyseEndpoint);
   console.log('Temporary userId:', testUserId);
+  console.log('Temporary reservation race userId:', reservationRaceUserId);
   console.log('App Check debug token:', describeDebugToken());
 
-  let quotaDocCreated = false;
   try {
     const appCheckToken = await exchangeDebugTokenForAppCheckToken();
     console.log('App Check debug token exchanged');
 
     await verifyAppCheckUnauthorizedPreflight(testUserId);
 
+    await verifyAtomicReservationRace(
+      firestore,
+      reservationRaceUserId,
+      quotaWindow
+    );
+
     await doc.set({
       count: 5,
       lastResetDate: quotaWindow.usageDate,
     });
-    quotaDocCreated = true;
     console.log('Temporary Firestore quota doc created');
 
     const body = await verifyHttpContract(
@@ -408,12 +484,15 @@ async function main(): Promise<void> {
       await verifyStructuredLog(body.resetAt, startTime);
     }
   } finally {
-    if (quotaDocCreated) {
-      await doc.delete().catch((err: unknown) => {
-        console.error('Failed to delete temporary Firestore doc:', err);
-      });
-      console.log('Temporary Firestore quota doc deleted');
-    }
+    await Promise.all([
+      doc.delete().catch((err: unknown) => {
+        console.error('Failed to delete temporary quota doc:', err);
+      }),
+      reservationRaceDoc.delete().catch((err: unknown) => {
+        console.error('Failed to delete temporary reservation race doc:', err);
+      }),
+    ]);
+    console.log('Temporary Firestore docs deleted');
     await firestore.terminate();
   }
 }
