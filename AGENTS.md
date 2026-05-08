@@ -305,11 +305,16 @@ GCP_PROJECT_ID=kathelix-catvox-prod make bootstrap-wif
 - Before opening or finalizing a PR, compare the branch against `origin/main` and rebase or merge as needed so PR review and conflict resolution happen before the final merge step.
 - Use descriptive branch names: `feature/`, `fix/`, `infra/`.
 
+### Documentation Editing Notes
+
+- When updating repeated Markdown status blocks such as audit findings, patch with heading-specific context or line-number-anchored inspection. Do not rely on replacing the first identical `Status` / `Resolution` block. Always review the focused diff before committing.
+
 ### GitHub PR Publishing Notes
 
 - Prefer the GitHub connector for creating PRs when available, but if it returns `403 Resource not accessible by integration`, do not retry the same connector path. Fall back to the authenticated `gh` CLI and mention the fallback in the final summary.
 - When creating or editing GitHub PR descriptions via `gh pr ...`, prefer plain Markdown with simple shell-safe quoting. Avoid unnecessary escaping of inline code or symbols; if the body is complex, write it to a temporary file and pass it with `--body-file` rather than packing heavily escaped Markdown into one shell argument.
 - When scripting in the default `zsh` shell, avoid reserved or read-only variable names such as `status`. Use names such as `rc` or `exit_code` for command exit codes.
+- When watching a known workflow run, prefer `gh run watch <run-id> --exit-status` or `gh run view <run-id> --json ...` over `gh pr checks --watch`, which can lag or show stale pending states. Use `gh pr checks` at the end for the final PR rollup.
 - For temporary PR body files, prefer:
   ```bash
   tmpfile=$(mktemp)
@@ -317,6 +322,12 @@ GCP_PROJECT_ID=kathelix-catvox-prod make bootstrap-wif
   # write body to "$tmpfile"
   gh pr create --body-file "$tmpfile" ...
   ```
+
+### GitHub Actions Workflow Notes
+
+- In `actions/github-script`, distinguish GitHub Actions expression context from JavaScript runtime objects. `github` inside the script is the Octokit client, not the workflow context. Inject workflow values explicitly, for example `const actor = '${{ github.actor }}';`.
+- When passing multiline step outputs into `actions/github-script`, prefer `${{ toJSON(steps.<id>.outputs.<name>) }}` so newlines, backticks, and quotes are represented safely as JavaScript string values.
+- Plain `run:` step stdout is not automatically available as `steps.<id>.outputs.stdout`; write needed values to `$GITHUB_OUTPUT`.
 
 ### Product Feature Workflow
 
