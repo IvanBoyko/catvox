@@ -69,3 +69,6 @@ terraform/*.tfstate
 terraform/*.tfstate.backup
 terraform/terraform.tfvars
 .env
+
+# Codex
+.agents/
