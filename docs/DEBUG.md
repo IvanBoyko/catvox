@@ -180,10 +180,37 @@ npm --prefix functions run test:integration -- --skip-log
 
 ---
 
-## 3. Known Error Signatures
+## 3. iOS App Check Debug Failures
+
+If the app shows a connection failure whose detail includes
+`firebaseappcheck.googleapis.com`, `exchangeDebugToken`, HTTP `403`, and
+`App attestation failed`, the request failed before CatVox reached its backend
+Functions.
+
+For Debug builds on a physical iPhone, launch once with the registered debug
+token so the app can persist it locally:
+
+```bash
+CATVOX_APP_CHECK_DEBUG_TOKEN=<registered-token> make ios-device-launch
+```
+
+`make ios-device-launch` also accepts `TF_VAR_app_check_debug_token` and falls
+back to local `terraform/terraform.tfvars` when present. It passes the token to
+`devicectl` without printing it. After that launch, later Debug app-icon
+launches reuse the locally persisted token for Firebase App Check refreshes.
+
+Deleting and reinstalling the app clears the local App Check state, which can
+temporarily hide the issue, but it is not the durable fix. If the error returns,
+verify that the registered debug token still exchanges successfully and has not
+been revoked in Firebase App Check.
+
+---
+
+## 4. Known Error Signatures
 
 | Log message | Root cause | Fix |
 |---|---|---|
+| iOS alert includes `firebaseappcheck.googleapis.com`, `exchangeDebugToken`, HTTP `403`, and `App attestation failed` | Debug iPhone build refreshed App Check without a registered debug token in the process environment or local Debug token cache | Launch once with `CATVOX_APP_CHECK_DEBUG_TOKEN=<registered-token> make ios-device-launch`, then retry from the app icon. If it still fails, confirm the token is registered and not revoked in Firebase App Check |
 | `Vertex AI returned invalid JSON: { "primary_emotion": ...` (truncated) | `MAX_OUTPUT_TOKENS` too low — thinking model consumed budget before finishing JSON | Raise `MAX_OUTPUT_TOKENS` in `functions/src/gemini.ts` |
 | `Retrying malformed Vertex AI analysis payload` then `Vertex AI returned malformed analysis payload` | First Gemini response was malformed, retry also failed, and the backend converted the request to a controlled `502` instead of crashing | Inspect `issues`, `attempt`, and `rawResponsePreview` in logs; if frequent, revisit prompt / output constraints or `MAX_OUTPUT_TOKENS` |
 | `FirebaseAppError: Invalid contents in the credentials file` in GitHub Actions integration tests | The test harness initialized Firebase Admin SDK against the WIF external-account Application Default Credentials (ADC) file. Google Cloud clients such as `@google-cloud/firestore` accept that CI auth path, but Firebase Admin ADC loading may reject it. | Keep direct Firestore integration probes on `@google-cloud/firestore`, or explicitly verify Firebase Admin initialization under GitHub Actions WIF before using it in `functions/integration/**`. Deployed Functions may still use Firebase Admin normally. |
@@ -196,7 +223,7 @@ npm --prefix functions run test:integration -- --skip-log
 
 ---
 
-## 4. Observability Options
+## 5. Observability Options
 
 The manual workflow above requires someone to notice a failure, then dig into
 logs reactively. Below are the options for moving to proactive detection.
@@ -358,7 +385,7 @@ Crashlytics.
 
 ---
 
-## 5. Recommendation
+## 6. Recommendation
 
 For the current stage of CatVox (single developer, low user volume):
 

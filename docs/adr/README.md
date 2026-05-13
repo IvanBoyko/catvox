@@ -62,6 +62,7 @@ Each ADR should usually contain:
 | 0013 | Treat Current GCP Project as Dev Until Production Split | Accepted |
 | 0014 | Use Makefile as Local and CI Command Facade | Accepted |
 | 0015 | Reserve Quota Before Vertex Analysis | Accepted |
+| 0016 | Persist App Check Debug Token for Local iPhone Builds | Accepted |
 
 ## Workflow
 

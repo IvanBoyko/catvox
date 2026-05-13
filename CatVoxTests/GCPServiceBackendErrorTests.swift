@@ -46,7 +46,7 @@ final class GCPServiceBackendErrorTests: XCTestCase {
         XCTAssertNil(error)
     }
 
-    func testAppCheckUnauthorizedDoesNotMapToQuotaError() {
+    func testAppCheckUnauthorizedPayloadMapsToVerificationFailure() {
         let payload = """
         {
           "code": "app_check_unauthorized",
@@ -59,6 +59,13 @@ final class GCPServiceBackendErrorTests: XCTestCase {
             data: Data(payload.utf8)
         )
 
-        XCTAssertNil(error)
+        XCTAssertEqual(error, .appVerificationFailed)
+    }
+
+    func testAppVerificationFailureHasCleanUserFacingMessage() {
+        XCTAssertEqual(
+            GCPError.appVerificationFailed.localizedDescription,
+            "We couldn't verify this CatVox build. Please relaunch the app and try again."
+        )
     }
 }

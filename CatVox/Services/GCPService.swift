@@ -361,8 +361,17 @@ final class GCPService {
     }
 
     private func fetchAppCheckToken() async throws -> String {
-        let token = try await AppCheck.appCheck().token(forcingRefresh: false)
-        return token.token
+        do {
+            let token = try await AppCheck.appCheck().token(forcingRefresh: false)
+            return token.token
+        } catch {
+            if isCancellation(error) {
+                throw error
+            }
+
+            logger.error("App Check token fetch failed: \(error.localizedDescription, privacy: .public)")
+            throw GCPError.appVerificationFailed
+        }
     }
 
     private func data(
@@ -437,23 +446,39 @@ struct BackendErrorResponse: Decodable, Equatable {
 }
 
 enum GCPError: LocalizedError, Equatable {
+    case appVerificationFailed
     case quotaExceeded
 
+    private static let appCheckUnauthorizedCode = "app_check_unauthorized"
     private static let dailyScanQuotaExceededCode = "daily_scan_quota_exceeded"
 
     static func fromBackendResponse(statusCode: Int, data: Data) -> GCPError? {
-        guard statusCode == 429 else { return nil }
-
         guard let response = try? JSONDecoder().decode(BackendErrorResponse.self, from: data),
-              response.code == dailyScanQuotaExceededCode else {
+              let error = fromBackendError(statusCode: statusCode, code: response.code) else {
             return nil
         }
 
-        return .quotaExceeded
+        return error
+    }
+
+    static func fromBackendError(statusCode: Int, code: String) -> GCPError? {
+        switch (statusCode, code) {
+        case (401, appCheckUnauthorizedCode):
+            return .appVerificationFailed
+        case (429, dailyScanQuotaExceededCode):
+            return .quotaExceeded
+        default:
+            return nil
+        }
     }
 
     var errorDescription: String? {
-        "Daily scan limit reached. Come back tomorrow."
+        switch self {
+        case .appVerificationFailed:
+            return "We couldn't verify this CatVox build. Please relaunch the app and try again."
+        case .quotaExceeded:
+            return "Daily scan limit reached. Come back tomorrow."
+        }
     }
 }
 

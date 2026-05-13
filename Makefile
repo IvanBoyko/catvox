@@ -51,7 +51,8 @@ help:
 		'  functions-integration falls back to terraform/terraform.tfvars app_check_debug_token when no env token is set' \
 		'  IOS_TEST_DESTINATION="platform=iOS Simulator,name=iPhone 16,OS=latest"' \
 		'  IOS_UI_TEST_DESTINATION="platform=iOS Simulator,name=iPhone 16,OS=latest"' \
-		'  DEVICE_ID=... make ios-device-launch'
+		'  DEVICE_ID=... make ios-device-launch' \
+		'  CATVOX_APP_CHECK_DEBUG_TOKEN=... make ios-device-launch'
 
 doctor:
 	@missing=0; \
