@@ -27,6 +27,7 @@ final class GCPService {
         case analysing
         case complete(CatAnalysis)
         case quotaExceeded
+        case appVerificationFailed
         case failed(PipelinePhase, String)
 
         static func == (lhs: UploadState, rhs: UploadState) -> Bool {
@@ -40,6 +41,8 @@ final class GCPService {
             case let (.complete(a),   .complete(b)):
                 return a.id == b.id
             case (.quotaExceeded,    .quotaExceeded):
+                return true
+            case (.appVerificationFailed, .appVerificationFailed):
                 return true
             case let (.failed(aPhase, aMessage), .failed(bPhase, bMessage)):
                 return aPhase == bPhase && aMessage == bMessage
@@ -148,6 +151,9 @@ final class GCPService {
             }
         } catch GCPError.quotaExceeded {
             setUploadState(.quotaExceeded, for: requestID)
+        } catch GCPError.appVerificationFailed {
+            clearStoredAppCheckDebugToken()
+            setUploadState(.appVerificationFailed, for: requestID)
         } catch let failure as PipelinePhaseFailure {
             logger.error("pipeline failed during \(String(describing: failure.phase)): \(failure.underlying.localizedDescription)")
             setUploadState(.failed(failure.phase, failure.localizedDescription), for: requestID)
@@ -231,6 +237,8 @@ final class GCPService {
     ) async throws -> T {
         do {
             return try await operation()
+        } catch GCPError.appVerificationFailed {
+            throw GCPError.appVerificationFailed
         } catch GCPError.quotaExceeded {
             throw GCPError.quotaExceeded
         } catch {
@@ -370,7 +378,11 @@ final class GCPService {
             }
 
             logger.error("App Check token fetch failed: \(error.localizedDescription, privacy: .public)")
-            throw GCPError.appVerificationFailed
+            if let appCheckError = GCPError.fromAppCheckTokenFetchError(error) {
+                throw appCheckError
+            }
+
+            throw error
         }
     }
 
@@ -433,6 +445,12 @@ final class GCPService {
         request.httpBody = try JSONEncoder().encode(payload)
         return request
     }
+
+    private func clearStoredAppCheckDebugToken() {
+        #if DEBUG
+        AppCheckDebugTokenBootstrap.clearStoredToken()
+        #endif
+    }
 }
 
 // MARK: - Error types
@@ -450,6 +468,9 @@ enum GCPError: LocalizedError, Equatable {
     case quotaExceeded
 
     private static let appCheckUnauthorizedCode = "app_check_unauthorized"
+    private static let appCheckCoreErrorDomain = "com.google.app_check_core"
+    private static let appCheckErrorDomain = "com.firebase.appCheck"
+    private static let appCheckServerUnreachableCode = 1
     private static let dailyScanQuotaExceededCode = "daily_scan_quota_exceeded"
 
     static func fromBackendResponse(statusCode: Int, data: Data) -> GCPError? {
@@ -472,10 +493,50 @@ enum GCPError: LocalizedError, Equatable {
         }
     }
 
+    static func fromAppCheckTokenFetchError(_ error: Error) -> GCPError? {
+        if error is URLError {
+            return nil
+        }
+
+        let nsError = error as NSError
+        guard nsError.domain == appCheckErrorDomain ||
+              nsError.domain == appCheckCoreErrorDomain else {
+            return nil
+        }
+
+        guard nsError.code != appCheckServerUnreachableCode else {
+            return nil
+        }
+
+        let errorText = searchableText(for: nsError)
+        guard errorText.contains("exchangedebugtoken") ||
+              errorText.contains("app attestation failed") ||
+              errorText.contains("http status code: 403") ||
+              errorText.contains("permission_denied") else {
+            return nil
+        }
+
+        return .appVerificationFailed
+    }
+
+    private static func searchableText(for error: NSError) -> String {
+        var components = [
+            error.localizedDescription,
+            error.localizedFailureReason,
+            error.userInfo[NSLocalizedFailureReasonErrorKey] as? String,
+        ].compactMap { $0 }
+
+        if let underlying = error.userInfo[NSUnderlyingErrorKey] as? NSError {
+            components.append(searchableText(for: underlying))
+        }
+
+        return components.joined(separator: " ").lowercased()
+    }
+
     var errorDescription: String? {
         switch self {
         case .appVerificationFailed:
-            return "We couldn't verify this CatVox build. Please relaunch the app and try again."
+            return "App verification failed. For Debug builds, reinstall via Xcode or run make ios-device-launch with a fresh registered debug token."
         case .quotaExceeded:
             return "Daily scan limit reached. Come back tomorrow."
         }

@@ -65,7 +65,48 @@ final class GCPServiceBackendErrorTests: XCTestCase {
     func testAppVerificationFailureHasCleanUserFacingMessage() {
         XCTAssertEqual(
             GCPError.appVerificationFailed.localizedDescription,
-            "We couldn't verify this CatVox build. Please relaunch the app and try again."
+            "App verification failed. For Debug builds, reinstall via Xcode or run make ios-device-launch with a fresh registered debug token."
         )
+    }
+
+    func testAppCheckTokenExchange403MapsToVerificationFailure() {
+        let error = NSError(
+            domain: "com.firebase.appCheck",
+            code: 0,
+            userInfo: [
+                NSLocalizedFailureReasonErrorKey: """
+                The server responded with an error:
+                - URL: https://firebaseappcheck.googleapis.com/v1/projects/test/apps/test:exchangeDebugToken
+                - HTTP status code: 403
+                - Response body: {"error":{"status":"PERMISSION_DENIED"}}
+                """,
+            ]
+        )
+
+        XCTAssertEqual(GCPError.fromAppCheckTokenFetchError(error), .appVerificationFailed)
+    }
+
+    func testAppCheckServerUnreachableDoesNotMapToVerificationFailure() {
+        let error = NSError(
+            domain: "com.firebase.appCheck",
+            code: 1,
+            userInfo: [NSLocalizedFailureReasonErrorKey: "API request error."]
+        )
+
+        XCTAssertNil(GCPError.fromAppCheckTokenFetchError(error))
+    }
+
+    func testUrlErrorDoesNotMapToVerificationFailure() {
+        XCTAssertNil(GCPError.fromAppCheckTokenFetchError(URLError(.notConnectedToInternet)))
+    }
+
+    func testGenericAppCheckErrorDoesNotMapToVerificationFailure() {
+        let error = NSError(
+            domain: "com.firebase.appCheck",
+            code: 0,
+            userInfo: [NSLocalizedFailureReasonErrorKey: "Cached token not found."]
+        )
+
+        XCTAssertNil(GCPError.fromAppCheckTokenFetchError(error))
     }
 }

@@ -5,7 +5,11 @@ enum AppCheckDebugTokenBootstrap {
     static let preferredEnvironmentVariable = "AppCheckDebugToken"
     static let firebaseEnvironmentVariable = "FIRAAppCheckDebugToken"
     static let userDefaultsKey = "catvox.appCheckDebugToken"
+    static let minimumTokenLength = 16
 
+    /// Must run before `AppCheckDebugProviderFactory` creates a provider. The
+    /// Firebase debug provider captures the process environment during init,
+    /// and mutating `environ` later is unsafe around concurrent readers.
     static func configure(
         environment: [String: String] = ProcessInfo.processInfo.environment,
         userDefaults: UserDefaults = .standard,
@@ -37,11 +41,18 @@ enum AppCheckDebugTokenBootstrap {
         normalizedDebugToken(userDefaults.string(forKey: userDefaultsKey))
     }
 
+    static func clearStoredToken(in userDefaults: UserDefaults = .standard) {
+        userDefaults.removeObject(forKey: userDefaultsKey)
+    }
+
     static func normalizedDebugToken(_ rawValue: String?) -> String? {
         guard let rawValue else { return nil }
 
         let token = rawValue.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !token.isEmpty else { return nil }
+        guard token.count >= minimumTokenLength,
+              token.rangeOfCharacter(from: .newlines) == nil else {
+            return nil
+        }
 
         let lowercased = token.lowercased()
         guard lowercased != "your-app-check-debug-token",

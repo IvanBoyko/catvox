@@ -12,8 +12,8 @@ and physical-device development can call the App Check-protected backend. Releas
 builds use App Attest only.
 
 On a physical iPhone, a Debug build can be launched once from Xcode or
-`devicectl` with `FIRAAppCheckDebugToken` in the process environment, then later
-be relaunched from the app icon with no launch environment. Firebase App Check
+`devicectl` with `AppCheckDebugToken` in the process environment, then later be
+relaunched from the app icon with no launch environment. Firebase App Check
 tokens have a short TTL, so a later refresh can fall back to a locally generated
 debug token that is not registered in Firebase. That produces a 403 from
 `exchangeDebugToken` before CatVox reaches its signed-upload or analysis
@@ -31,6 +31,9 @@ container for Debug builds only:
   CatVox stores the token in `UserDefaults`.
 - If a later Debug launch has no token environment, CatVox restores the stored
   token into `AppCheckDebugToken` before creating `AppCheckDebugProviderFactory`.
+- If Firebase rejects the restored token during App Check token exchange, CatVox
+  clears the stored token and shows a Debug recovery message instead of exposing
+  Firebase's raw URL and JSON error body.
 - Release builds compile this bootstrap out and continue to use App Attest only.
 - `make ios-device-launch` passes the registered debug token to `devicectl`
   launches without printing it, sourcing the token from the environment or local
@@ -49,8 +52,17 @@ container for Debug builds only:
 
 ### Negative / Trade-offs
 
-- A registered debug token can persist in the local Debug app container until the
-  app is deleted or the token is revoked in Firebase.
+- A registered debug token persists in the local Debug app container until the
+  app is deleted, a new launch token replaces it, or Firebase rejects it during
+  App Check token exchange and CatVox clears it.
+- `UserDefaults` is part of the app container and can be included in iCloud
+  Backup. This is accepted for Debug-only local builds because Firebase's own
+  debug provider also stores local debug state in app defaults, but developers
+  must still treat registered debug tokens as secrets.
+- If a persisted token is later revoked in Firebase, an app-icon relaunch alone
+  cannot repair the environment. CatVox clears the rejected token after the
+  verification failure; the next durable recovery is to reinstall via Xcode or
+  run `make ios-device-launch` with a fresh registered token.
 - Developers must still treat debug tokens as secrets and rotate/revoke them if
   compromised.
 - This does not change production attestation behavior or add a DeviceCheck

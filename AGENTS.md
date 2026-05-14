@@ -119,7 +119,7 @@ FIREBASE_PROJECT=kathelix-catvox-prod make functions-deploy
 DEVICE_ID=<device-udid> make ios-device-launch
 ```
 
-`make functions-integration` needs a Firebase App Check debug token. It preserves an explicitly supplied `CATVOX_APP_CHECK_DEBUG_TOKEN`; otherwise `TF_VAR_app_check_debug_token` is accepted by the integration script. For local developer convenience, the Makefile silently falls back to `app_check_debug_token` in local `terraform/terraform.tfvars` when neither environment variable is set. Never commit debug tokens or shared Xcode schemes containing `FIRAAppCheckDebugToken`.
+`make functions-integration` needs a Firebase App Check debug token. It preserves an explicitly supplied `CATVOX_APP_CHECK_DEBUG_TOKEN`; otherwise `TF_VAR_app_check_debug_token` is accepted by the integration script. For local developer convenience, the Makefile silently falls back to `app_check_debug_token` in local `terraform/terraform.tfvars` when neither environment variable is set. Never commit debug tokens or shared Xcode schemes containing `AppCheckDebugToken` or `FIRAAppCheckDebugToken`.
 
 ---
 
