@@ -151,8 +151,10 @@ final class GCPService {
             }
         } catch GCPError.quotaExceeded {
             setUploadState(.quotaExceeded, for: requestID)
-        } catch GCPError.appVerificationFailed {
+        } catch GCPError.appCheckTokenExchangeFailed {
             clearStoredAppCheckDebugToken()
+            setUploadState(.appVerificationFailed, for: requestID)
+        } catch GCPError.appVerificationFailed {
             setUploadState(.appVerificationFailed, for: requestID)
         } catch let failure as PipelinePhaseFailure {
             logger.error("pipeline failed during \(String(describing: failure.phase)): \(failure.underlying.localizedDescription)")
@@ -237,6 +239,8 @@ final class GCPService {
     ) async throws -> T {
         do {
             return try await operation()
+        } catch GCPError.appCheckTokenExchangeFailed {
+            throw GCPError.appCheckTokenExchangeFailed
         } catch GCPError.appVerificationFailed {
             throw GCPError.appVerificationFailed
         } catch GCPError.quotaExceeded {
@@ -465,6 +469,7 @@ struct BackendErrorResponse: Decodable, Equatable {
 
 enum GCPError: LocalizedError, Equatable {
     case appVerificationFailed
+    case appCheckTokenExchangeFailed
     case quotaExceeded
 
     private static let appCheckUnauthorizedCode = "app_check_unauthorized"
@@ -509,14 +514,19 @@ enum GCPError: LocalizedError, Equatable {
         }
 
         let errorText = searchableText(for: nsError)
+        // Firebase App Check exposes debug token exchange rejection as an App
+        // Check-domain error with localized HTTP text, not a stable public
+        // permission-denied code. Keep this match domain-limited and revisit if
+        // AppCheckCore adds a dedicated token-exchange rejection enum case.
         guard errorText.contains("exchangedebugtoken") ||
               errorText.contains("app attestation failed") ||
               errorText.contains("http status code: 403") ||
+              containsHTTPForbiddenStatus(errorText) ||
               errorText.contains("permission_denied") else {
             return nil
         }
 
-        return .appVerificationFailed
+        return .appCheckTokenExchangeFailed
     }
 
     private static func searchableText(for error: NSError) -> String {
@@ -533,10 +543,18 @@ enum GCPError: LocalizedError, Equatable {
         return components.joined(separator: " ").lowercased()
     }
 
+    private static func containsHTTPForbiddenStatus(_ text: String) -> Bool {
+        text.range(of: #"\b403\b"#, options: .regularExpression) != nil
+    }
+
     var errorDescription: String? {
         switch self {
-        case .appVerificationFailed:
+        case .appVerificationFailed, .appCheckTokenExchangeFailed:
+            #if DEBUG
             return "App verification failed. For Debug builds, reinstall via Xcode or run make ios-device-launch with a fresh registered debug token."
+            #else
+            return "Couldn't verify this app. Please try again later."
+            #endif
         case .quotaExceeded:
             return "Daily scan limit reached. Come back tomorrow."
         }

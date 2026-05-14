@@ -67,9 +67,13 @@ final class GCPServiceBackendErrorTests: XCTestCase {
             GCPError.appVerificationFailed.localizedDescription,
             "App verification failed. For Debug builds, reinstall via Xcode or run make ios-device-launch with a fresh registered debug token."
         )
+        XCTAssertEqual(
+            GCPError.appCheckTokenExchangeFailed.localizedDescription,
+            GCPError.appVerificationFailed.localizedDescription
+        )
     }
 
-    func testAppCheckTokenExchange403MapsToVerificationFailure() {
+    func testAppCheckTokenExchange403MapsToTokenExchangeFailure() {
         let error = NSError(
             domain: "com.firebase.appCheck",
             code: 0,
@@ -83,7 +87,17 @@ final class GCPServiceBackendErrorTests: XCTestCase {
             ]
         )
 
-        XCTAssertEqual(GCPError.fromAppCheckTokenFetchError(error), .appVerificationFailed)
+        XCTAssertEqual(GCPError.fromAppCheckTokenFetchError(error), .appCheckTokenExchangeFailed)
+    }
+
+    func testAppCheckTokenExchangeBare403MapsToTokenExchangeFailure() {
+        let error = NSError(
+            domain: "com.firebase.appCheck",
+            code: 0,
+            userInfo: [NSLocalizedFailureReasonErrorKey: "Token exchange failed with 403."]
+        )
+
+        XCTAssertEqual(GCPError.fromAppCheckTokenFetchError(error), .appCheckTokenExchangeFailed)
     }
 
     func testAppCheckServerUnreachableDoesNotMapToVerificationFailure() {
@@ -98,6 +112,19 @@ final class GCPServiceBackendErrorTests: XCTestCase {
 
     func testUrlErrorDoesNotMapToVerificationFailure() {
         XCTAssertNil(GCPError.fromAppCheckTokenFetchError(URLError(.notConnectedToInternet)))
+    }
+
+    func testNetworkErrorWrappedInAppCheckErrorDoesNotMapToVerificationFailure() {
+        let error = NSError(
+            domain: "com.firebase.appCheck",
+            code: 0,
+            userInfo: [
+                NSLocalizedFailureReasonErrorKey: "Token fetch failed.",
+                NSUnderlyingErrorKey: URLError(.notConnectedToInternet),
+            ]
+        )
+
+        XCTAssertNil(GCPError.fromAppCheckTokenFetchError(error))
     }
 
     func testGenericAppCheckErrorDoesNotMapToVerificationFailure() {

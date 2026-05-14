@@ -539,7 +539,10 @@ struct ResultView: View {
             showRetryAlert = true
             AnalyticsService.capture(
                 .analysisFailed,
-                properties: ["error_message": failureMessage]
+                properties: [
+                    "error_message": failureMessage,
+                    "failure_type": "verification",
+                ]
             )
 
         case .failed(let phase, let message):
