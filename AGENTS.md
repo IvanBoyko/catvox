@@ -119,7 +119,7 @@ FIREBASE_PROJECT=kathelix-catvox-prod make functions-deploy
 DEVICE_ID=<device-udid> make ios-device-launch
 ```
 
-`make functions-integration` needs a Firebase App Check debug token. It preserves an explicitly supplied `CATVOX_APP_CHECK_DEBUG_TOKEN`; otherwise `TF_VAR_app_check_debug_token` is accepted by the integration script. For local developer convenience, the Makefile silently falls back to `app_check_debug_token` in local `terraform/terraform.tfvars` when neither environment variable is set. Never commit debug tokens or shared Xcode schemes containing `FIRAAppCheckDebugToken`.
+`make functions-integration` needs a Firebase App Check debug token. It preserves an explicitly supplied `CATVOX_APP_CHECK_DEBUG_TOKEN`; otherwise `TF_VAR_app_check_debug_token` is accepted by the integration script. For local developer convenience, the Makefile silently falls back to `app_check_debug_token` in local `terraform/terraform.tfvars` when neither environment variable is set. Never commit debug tokens or shared Xcode schemes containing `AppCheckDebugToken` or `FIRAAppCheckDebugToken`.
 
 ---
 
@@ -308,10 +308,12 @@ GCP_PROJECT_ID=kathelix-catvox-prod make bootstrap-wif
 ### Documentation Editing Notes
 
 - When updating repeated Markdown status blocks such as audit findings, patch with heading-specific context or line-number-anchored inspection. Do not rely on replacing the first identical `Status` / `Resolution` block. Always review the focused diff before committing.
+- Keep large review artifacts, reviewer reports, and temporary analysis notes in PR comments or attached PR files unless they are intended to become durable repository documentation. Do not commit ad hoc review files from the repo root just because they were useful during review.
 
 ### GitHub PR Publishing Notes
 
 - Prefer the GitHub connector for creating PRs when available, but if it returns `403 Resource not accessible by integration`, do not retry the same connector path. Fall back to the authenticated `gh` CLI and mention the fallback in the final summary.
+- PR descriptions should capture the original user-visible bug report or feature request, root cause, implementation summary, validation performed, manual test status, and any notable review follow-up. If the user reported an error message or screenshot, preserve the relevant text in the PR body so the review has the original symptom in context.
 - When creating or editing GitHub PR descriptions via `gh pr ...`, prefer plain Markdown with simple shell-safe quoting. Avoid unnecessary escaping of inline code or symbols; if the body is complex, write it to a temporary file and pass it with `--body-file` rather than packing heavily escaped Markdown into one shell argument.
 - When scripting in the default `zsh` shell, avoid reserved or read-only variable names such as `status`. Use names such as `rc` or `exit_code` for command exit codes.
 - When watching a known workflow run, prefer `gh run watch <run-id> --exit-status` or `gh run view <run-id> --json ...` over `gh pr checks --watch`, which can lag or show stale pending states. Use `gh pr checks` at the end for the final PR rollup.
@@ -362,6 +364,14 @@ For user-facing async or stateful flows, add a short async-state safety pass bef
 - repeated `onAppear`, retry, and transition safety
 - ownership of any `Task`, `.task(id:)`, `.onChange`, or callback-driven state updates
 
+For user-facing error handling, classify failures by source before mapping them to UI or recovery behavior:
+- client SDK / platform failure
+- transport or connectivity failure
+- backend contract failure
+- user-action or validation failure
+
+Do not collapse distinct failure sources into one user message unless the recovery is genuinely the same. Debug-only recovery instructions must never be shown in Release.
+
 When a feature expands materially beyond its original scope, update the PR title and description promptly so they match the actual branch contents.
 
 ### Pre-Merge Checklist
@@ -395,6 +405,13 @@ For user-facing async/stateful features, also verify a small manual regression m
 - transitions between temporary and persisted assets or IDs
 - reopening from history / saved state where applicable
 - repeated share/export or other secondary actions where applicable
+
+For Debug-only or local-development behavior changes, also run a Release-leak audit before merge:
+- compile-time gating (`#if DEBUG`) around debug-only types, provider factories, bootstrap calls, and test helpers
+- Release-safe user-facing strings, especially error recovery instructions
+- no committed secrets, debug tokens, generated schemes with debug-token env vars, or token-printing scripts
+- no Release reads of Debug-only `UserDefaults`, environment variables, or local files
+- tests and documentation distinguish client-side App Check/debug-provider failures from backend App Check rejection and network failures where relevant
 
 ### Commit Style
 

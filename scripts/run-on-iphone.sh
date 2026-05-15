@@ -14,6 +14,9 @@
 #
 # Environment overrides:
 #   DEVICE_ID  Target device UDID.
+#   CATVOX_APP_CHECK_DEBUG_TOKEN or TF_VAR_app_check_debug_token
+#              Registered Firebase App Check debug token for Debug builds.
+#              Falls back to terraform/terraform.tfvars app_check_debug_token.
 
 set -euo pipefail
 
@@ -30,6 +33,9 @@ REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 
 cd "${REPO_ROOT}"
 
+# shellcheck source=scripts/lib/app-check-debug-token.sh
+source "${SCRIPT_DIR}/lib/app-check-debug-token.sh"
+
 usage() {
   cat <<EOF
 Usage: ./scripts/run-on-iphone.sh [launch|console]
@@ -42,8 +48,13 @@ Modes:
 
 Environment overrides:
   DEVICE_ID  Target device UDID. Current default: ${DEVICE_ID}
+  CATVOX_APP_CHECK_DEBUG_TOKEN or TF_VAR_app_check_debug_token
+             Registered Firebase App Check debug token for Debug builds.
+             Falls back to terraform/terraform.tfvars app_check_debug_token.
 EOF
 }
+
+app_check_debug_token="$(read_catvox_app_check_debug_token)"
 
 case "${MODE}" in
   launch|console)
@@ -94,6 +105,11 @@ xcrun devicectl device install app \
   "${APP_PATH}"
 
 echo "Launching ${BUNDLE_ID} on device ${DEVICE_ID}..."
+if [[ -n "${app_check_debug_token}" ]]; then
+  export DEVICECTL_CHILD_AppCheckDebugToken="${app_check_debug_token}"
+  echo "Using registered App Check debug token from local environment for this Debug launch."
+fi
+
 if [[ "${MODE}" == "console" ]]; then
   xcrun devicectl device process launch \
     --device "${DEVICE_ID}" \

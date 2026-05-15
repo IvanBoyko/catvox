@@ -46,7 +46,7 @@ final class GCPServiceBackendErrorTests: XCTestCase {
         XCTAssertNil(error)
     }
 
-    func testAppCheckUnauthorizedDoesNotMapToQuotaError() {
+    func testAppCheckUnauthorizedPayloadMapsToVerificationFailure() {
         let payload = """
         {
           "code": "app_check_unauthorized",
@@ -59,6 +59,81 @@ final class GCPServiceBackendErrorTests: XCTestCase {
             data: Data(payload.utf8)
         )
 
-        XCTAssertNil(error)
+        XCTAssertEqual(error, .appVerificationFailed)
+    }
+
+    func testAppVerificationFailureHasCleanUserFacingMessage() {
+        XCTAssertEqual(
+            GCPError.appVerificationFailed.localizedDescription,
+            "App verification failed. For Debug builds, reinstall via Xcode or run make ios-device-launch with a fresh registered debug token."
+        )
+        XCTAssertEqual(
+            GCPError.appCheckTokenExchangeFailed.localizedDescription,
+            GCPError.appVerificationFailed.localizedDescription
+        )
+    }
+
+    func testAppCheckTokenExchange403MapsToTokenExchangeFailure() {
+        let error = NSError(
+            domain: "com.firebase.appCheck",
+            code: 0,
+            userInfo: [
+                NSLocalizedFailureReasonErrorKey: """
+                The server responded with an error:
+                - URL: https://firebaseappcheck.googleapis.com/v1/projects/test/apps/test:exchangeDebugToken
+                - HTTP status code: 403
+                - Response body: {"error":{"status":"PERMISSION_DENIED"}}
+                """,
+            ]
+        )
+
+        XCTAssertEqual(GCPError.fromAppCheckTokenFetchError(error), .appCheckTokenExchangeFailed)
+    }
+
+    func testAppCheckTokenExchangeBare403MapsToTokenExchangeFailure() {
+        let error = NSError(
+            domain: "com.firebase.appCheck",
+            code: 0,
+            userInfo: [NSLocalizedFailureReasonErrorKey: "Token exchange failed with 403."]
+        )
+
+        XCTAssertEqual(GCPError.fromAppCheckTokenFetchError(error), .appCheckTokenExchangeFailed)
+    }
+
+    func testAppCheckServerUnreachableDoesNotMapToVerificationFailure() {
+        let error = NSError(
+            domain: "com.firebase.appCheck",
+            code: 1,
+            userInfo: [NSLocalizedFailureReasonErrorKey: "API request error."]
+        )
+
+        XCTAssertNil(GCPError.fromAppCheckTokenFetchError(error))
+    }
+
+    func testUrlErrorDoesNotMapToVerificationFailure() {
+        XCTAssertNil(GCPError.fromAppCheckTokenFetchError(URLError(.notConnectedToInternet)))
+    }
+
+    func testNetworkErrorWrappedInAppCheckErrorDoesNotMapToVerificationFailure() {
+        let error = NSError(
+            domain: "com.firebase.appCheck",
+            code: 0,
+            userInfo: [
+                NSLocalizedFailureReasonErrorKey: "Token fetch failed.",
+                NSUnderlyingErrorKey: URLError(.notConnectedToInternet),
+            ]
+        )
+
+        XCTAssertNil(GCPError.fromAppCheckTokenFetchError(error))
+    }
+
+    func testGenericAppCheckErrorDoesNotMapToVerificationFailure() {
+        let error = NSError(
+            domain: "com.firebase.appCheck",
+            code: 0,
+            userInfo: [NSLocalizedFailureReasonErrorKey: "Cached token not found."]
+        )
+
+        XCTAssertNil(GCPError.fromAppCheckTokenFetchError(error))
     }
 }

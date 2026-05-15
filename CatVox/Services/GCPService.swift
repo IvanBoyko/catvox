@@ -27,6 +27,7 @@ final class GCPService {
         case analysing
         case complete(CatAnalysis)
         case quotaExceeded
+        case appVerificationFailed
         case failed(PipelinePhase, String)
 
         static func == (lhs: UploadState, rhs: UploadState) -> Bool {
@@ -40,6 +41,8 @@ final class GCPService {
             case let (.complete(a),   .complete(b)):
                 return a.id == b.id
             case (.quotaExceeded,    .quotaExceeded):
+                return true
+            case (.appVerificationFailed, .appVerificationFailed):
                 return true
             case let (.failed(aPhase, aMessage), .failed(bPhase, bMessage)):
                 return aPhase == bPhase && aMessage == bMessage
@@ -148,6 +151,11 @@ final class GCPService {
             }
         } catch GCPError.quotaExceeded {
             setUploadState(.quotaExceeded, for: requestID)
+        } catch GCPError.appCheckTokenExchangeFailed {
+            clearStoredAppCheckDebugToken()
+            setUploadState(.appVerificationFailed, for: requestID)
+        } catch GCPError.appVerificationFailed {
+            setUploadState(.appVerificationFailed, for: requestID)
         } catch let failure as PipelinePhaseFailure {
             logger.error("pipeline failed during \(String(describing: failure.phase)): \(failure.underlying.localizedDescription)")
             setUploadState(.failed(failure.phase, failure.localizedDescription), for: requestID)
@@ -231,6 +239,10 @@ final class GCPService {
     ) async throws -> T {
         do {
             return try await operation()
+        } catch GCPError.appCheckTokenExchangeFailed {
+            throw GCPError.appCheckTokenExchangeFailed
+        } catch GCPError.appVerificationFailed {
+            throw GCPError.appVerificationFailed
         } catch GCPError.quotaExceeded {
             throw GCPError.quotaExceeded
         } catch {
@@ -361,8 +373,21 @@ final class GCPService {
     }
 
     private func fetchAppCheckToken() async throws -> String {
-        let token = try await AppCheck.appCheck().token(forcingRefresh: false)
-        return token.token
+        do {
+            let token = try await AppCheck.appCheck().token(forcingRefresh: false)
+            return token.token
+        } catch {
+            if isCancellation(error) {
+                throw error
+            }
+
+            logger.error("App Check token fetch failed: \(error.localizedDescription, privacy: .public)")
+            if let appCheckError = GCPError.fromAppCheckTokenFetchError(error) {
+                throw appCheckError
+            }
+
+            throw error
+        }
     }
 
     private func data(
@@ -424,6 +449,12 @@ final class GCPService {
         request.httpBody = try JSONEncoder().encode(payload)
         return request
     }
+
+    private func clearStoredAppCheckDebugToken() {
+        #if DEBUG
+        AppCheckDebugTokenBootstrap.clearStoredToken()
+        #endif
+    }
 }
 
 // MARK: - Error types
@@ -437,23 +468,96 @@ struct BackendErrorResponse: Decodable, Equatable {
 }
 
 enum GCPError: LocalizedError, Equatable {
+    case appVerificationFailed
+    case appCheckTokenExchangeFailed
     case quotaExceeded
 
+    private static let appCheckUnauthorizedCode = "app_check_unauthorized"
+    private static let appCheckCoreErrorDomain = "com.google.app_check_core"
+    private static let appCheckErrorDomain = "com.firebase.appCheck"
+    private static let appCheckServerUnreachableCode = 1
     private static let dailyScanQuotaExceededCode = "daily_scan_quota_exceeded"
 
     static func fromBackendResponse(statusCode: Int, data: Data) -> GCPError? {
-        guard statusCode == 429 else { return nil }
-
         guard let response = try? JSONDecoder().decode(BackendErrorResponse.self, from: data),
-              response.code == dailyScanQuotaExceededCode else {
+              let error = fromBackendError(statusCode: statusCode, code: response.code) else {
             return nil
         }
 
-        return .quotaExceeded
+        return error
+    }
+
+    static func fromBackendError(statusCode: Int, code: String) -> GCPError? {
+        switch (statusCode, code) {
+        case (401, appCheckUnauthorizedCode):
+            return .appVerificationFailed
+        case (429, dailyScanQuotaExceededCode):
+            return .quotaExceeded
+        default:
+            return nil
+        }
+    }
+
+    static func fromAppCheckTokenFetchError(_ error: Error) -> GCPError? {
+        if error is URLError {
+            return nil
+        }
+
+        let nsError = error as NSError
+        guard nsError.domain == appCheckErrorDomain ||
+              nsError.domain == appCheckCoreErrorDomain else {
+            return nil
+        }
+
+        guard nsError.code != appCheckServerUnreachableCode else {
+            return nil
+        }
+
+        let errorText = searchableText(for: nsError)
+        // Firebase App Check exposes debug token exchange rejection as an App
+        // Check-domain error with localized HTTP text, not a stable public
+        // permission-denied code. Keep this match domain-limited and revisit if
+        // AppCheckCore adds a dedicated token-exchange rejection enum case.
+        guard errorText.contains("exchangedebugtoken") ||
+              errorText.contains("app attestation failed") ||
+              errorText.contains("http status code: 403") ||
+              containsHTTPForbiddenStatus(errorText) ||
+              errorText.contains("permission_denied") else {
+            return nil
+        }
+
+        return .appCheckTokenExchangeFailed
+    }
+
+    private static func searchableText(for error: NSError) -> String {
+        var components = [
+            error.localizedDescription,
+            error.localizedFailureReason,
+            error.userInfo[NSLocalizedFailureReasonErrorKey] as? String,
+        ].compactMap { $0 }
+
+        if let underlying = error.userInfo[NSUnderlyingErrorKey] as? NSError {
+            components.append(searchableText(for: underlying))
+        }
+
+        return components.joined(separator: " ").lowercased()
+    }
+
+    private static func containsHTTPForbiddenStatus(_ text: String) -> Bool {
+        text.range(of: #"\b403\b"#, options: .regularExpression) != nil
     }
 
     var errorDescription: String? {
-        "Daily scan limit reached. Come back tomorrow."
+        switch self {
+        case .appVerificationFailed, .appCheckTokenExchangeFailed:
+            #if DEBUG
+            return "App verification failed. For Debug builds, reinstall via Xcode or run make ios-device-launch with a fresh registered debug token."
+            #else
+            return "Couldn't verify this app. Please try again later."
+            #endif
+        case .quotaExceeded:
+            return "Daily scan limit reached. Come back tomorrow."
+        }
     }
 }
 

@@ -1,9 +1,9 @@
 # Technical Requirements Document: CatVox AI (MVP)
 
-**Version:** 3.0
+**Version:** 3.1
 **Company:** Kathelix Ltd  
 **Project Lead:** Ivan Boyko
-**Date:** 6 May 2026
+**Date:** 12 May 2026
 **Status:** Infrastructure & Backend Definition
 
 ---
@@ -228,6 +228,7 @@ percentage. See ADR-0010 and ADR-0012.
 
 ### 6.3 Security & Identity
 * **App Verification:** Firebase App Check mandatory for all backend entry points. App Attest is the production provider for Apple platforms; Debug Provider is used for local development. (See ADR-0002.)
+* **Debug App Check Token Persistence:** Debug iPhone builds persist a registered App Check debug token in local app `UserDefaults` after launch with `AppCheckDebugToken` or `FIRAAppCheckDebugToken`. Later Debug launches from the app icon restore that token into the process environment before Firebase App Check initializes, so token refreshes do not fall back to an unregistered generated token. If Firebase rejects the restored token, CatVox clears the stored Debug token and reports an app verification failure instead of surfacing Firebase's raw token-exchange response. This bootstrap is compiled out of Release builds; production App Check remains App Attest-only. `make ios-device-launch` passes the registered debug token from local environment variables or `terraform/terraform.tfvars` without printing it. (See ADR-0016.)
 * **Secrets:** Zero hardcoded identifiers; all retrieved via Secret Manager at runtime.
 * **Service Account: `catvox-backend-sa`** — Runtime identity for Cloud Functions. Holds only the minimal roles required at runtime; never has CI-level access.
     * `roles/aiplatform.user` — invoke Gemini 2.5 Flash via Vertex AI.
@@ -436,7 +437,7 @@ After step 1 the GitHub Actions CI pipeline is fully functional — all subseque
 * [x] **GCP Foundation:** Deploy Terraform plan to provision GCS (with CORS), IAM, Artifact Registry, and Firestore.
 * [x] **Remote Terraform State:** GCS backend configured and local state migrated; state bucket bootstrapped with versioning enabled.
 * [x] **CI/CD Terraform Pipeline:** GitHub Actions workflow live — plan on PR (with PR comment), apply on merge; authenticated via Workload Identity Federation.
-* [x] **App Check Repo Wiring:** App Check is wired into the iOS app and backend entry points. App Attest is the production provider, Debug Provider supports local development and integration tests, and both Cloud Functions verify the `X-Firebase-AppCheck` header using the Firebase Admin SDK before any business logic. `invoker: 'public'` remains intentionally set on `getSignedUploadURL` and `analyseVideo` so anonymous mobile clients can reach the HTTP endpoints at the IAM layer; unauthenticated business access is blocked in-code by App Check validation. (See ADR-0002.)
+* [x] **App Check Repo Wiring:** App Check is wired into the iOS app and backend entry points. App Attest is the production provider, Debug Provider supports local development and integration tests, Debug iPhone builds persist a registered debug token for later app-icon relaunches, and both Cloud Functions verify the `X-Firebase-AppCheck` header using the Firebase Admin SDK before any business logic. `invoker: 'public'` remains intentionally set on `getSignedUploadURL` and `analyseVideo` so anonymous mobile clients can reach the HTTP endpoints at the IAM layer; unauthenticated business access is blocked in-code by App Check validation. (See ADR-0002 and ADR-0016.)
 * [x] **App Check Console & Live Gate:** App Attest is enabled for `com.kathelix.catvox` in Apple Developer, the Firebase iOS app is registered with App Attest, the Debug Provider token is registered and available to CI, `make functions-integration` passes with `CATVOX_APP_CHECK_DEBUG_TOKEN`, unauthenticated curl calls to both HTTP Functions return `401 app_check_unauthorized`, and a Debug iPhone scan completed successfully.
 * [x] **Backend Proxy:** Firebase Cloud Functions (TypeScript) deployed — `getSignedUploadURL` and `analyseVideo` live in `us-central1`; Firestore usage guard, Vertex AI call, CI deploy pipeline via GitHub Actions.
 * [x] **Backend Integration Test Baseline:** TypeScript backend integration suite verifies that both live HTTP Functions reject missing App Check tokens with `401 app_check_unauthorized`, verifies the live Firestore quota reservation race contract against temporary Dev data, and verifies the live Dev backend daily-quota `429` body, `Retry-After`, and structured Cloud Logging event after merge-to-main deploys or local Dev CLI runs. See ADR-0013 and ADR-0015.

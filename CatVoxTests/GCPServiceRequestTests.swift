@@ -65,4 +65,15 @@ final class GCPServiceRequestTests: XCTestCase {
         XCTAssertEqual(GCPService.PipelinePhase.uploading.failureTitle, "Upload Failed")
         XCTAssertEqual(GCPService.PipelinePhase.analysing.failureTitle, "Analysis Failed")
     }
+
+    func testAppVerificationFailedUploadStateIsDistinct() {
+        XCTAssertEqual(
+            GCPService.UploadState.appVerificationFailed,
+            GCPService.UploadState.appVerificationFailed
+        )
+        XCTAssertNotEqual(
+            GCPService.UploadState.appVerificationFailed,
+            GCPService.UploadState.failed(.preparing, GCPError.appVerificationFailed.localizedDescription)
+        )
+    }
 }

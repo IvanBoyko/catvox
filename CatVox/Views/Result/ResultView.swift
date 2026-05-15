@@ -64,6 +64,7 @@ struct ResultView: View {
     @State private var showRetryAlert = false
     @State private var failureTitle = "Processing Failed"
     @State private var failureMessage  = ""
+    @State private var canRetryFailure = true
     @State private var persistenceMessage = ""
     @State private var showPersistenceAlert = false
     @State private var backgroundVideoURL: URL?
@@ -184,9 +185,11 @@ struct ResultView: View {
             shareRenderTask?.cancel()
         }
         .alert(failureTitle, isPresented: $showRetryAlert) {
-            Button("Retry") {
-                AnalyticsService.capture(.analysisRetryTapped)
-                if let url = videoURL { gcpService.retry(videoAt: url) }
+            if canRetryFailure {
+                Button("Retry") {
+                    AnalyticsService.capture(.analysisRetryTapped)
+                    if let url = videoURL { gcpService.retry(videoAt: url) }
+                }
             }
             Button("Cancel", role: .cancel) { dismissResult() }
         } message: {
@@ -529,9 +532,23 @@ struct ResultView: View {
             AnalyticsService.capture(.quotaExceeded)
             AnalyticsService.capture(.quotaCardShown, properties: ["trigger": "server_quota"])
 
+        case .appVerificationFailed:
+            failureTitle = "Verification Failed"
+            failureMessage = GCPError.appVerificationFailed.localizedDescription
+            canRetryFailure = false
+            showRetryAlert = true
+            AnalyticsService.capture(
+                .analysisFailed,
+                properties: [
+                    "error_message": failureMessage,
+                    "failure_type": "verification",
+                ]
+            )
+
         case .failed(let phase, let message):
             failureTitle = phase.failureTitle
             failureMessage = message
+            canRetryFailure = true
             showRetryAlert = true
             AnalyticsService.capture(.analysisFailed, properties: ["error_message": message])
 

@@ -51,7 +51,8 @@ help:
 		'  functions-integration falls back to terraform/terraform.tfvars app_check_debug_token when no env token is set' \
 		'  IOS_TEST_DESTINATION="platform=iOS Simulator,name=iPhone 16,OS=latest"' \
 		'  IOS_UI_TEST_DESTINATION="platform=iOS Simulator,name=iPhone 16,OS=latest"' \
-		'  DEVICE_ID=... make ios-device-launch'
+		'  DEVICE_ID=... make ios-device-launch' \
+		'  CATVOX_APP_CHECK_DEBUG_TOKEN=... make ios-device-launch'
 
 doctor:
 	@missing=0; \
@@ -185,22 +186,7 @@ functions-deploy: functions-build
 	@firebase deploy --only functions --project "$(FIREBASE_PROJECT)"
 
 functions-integration:
-	@app_check_token="$${CATVOX_APP_CHECK_DEBUG_TOKEN:-}"; \
-	if [[ -z "$$app_check_token" && -z "$${TF_VAR_app_check_debug_token:-}" && -f terraform/terraform.tfvars ]]; then \
-		app_check_token="$$(awk -F '=' ' \
-			/^[[:space:]]*app_check_debug_token[[:space:]]*=/ { \
-				value=$$2; \
-				sub(/^[[:space:]]+/, "", value); \
-				sub(/[[:space:]]+#.*/, "", value); \
-				sub(/[[:space:]]+$$/, "", value); \
-				if (value ~ /^".*"$$/) { \
-					sub(/^"/, "", value); \
-					sub(/"$$/, "", value); \
-				} \
-				print value; \
-				exit; \
-			}' terraform/terraform.tfvars)"; \
-	fi; \
+	@app_check_token="$$(source scripts/lib/app-check-debug-token.sh; read_catvox_app_check_debug_token)"; \
 	if [[ -n "$$app_check_token" ]]; then \
 		CATVOX_PROJECT_ID="$(CATVOX_PROJECT_ID)" CATVOX_APP_CHECK_DEBUG_TOKEN="$$app_check_token" npm --prefix functions run test:integration; \
 	else \

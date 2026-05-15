@@ -38,6 +38,7 @@ struct CatVoxApp: App {
 
     private static func configureFirebase() {
         #if DEBUG
+        AppCheckDebugTokenBootstrap.configure()
         let providerFactory = AppCheckDebugProviderFactory()
         #else
         let providerFactory = CatVoxAppCheckProviderFactory()

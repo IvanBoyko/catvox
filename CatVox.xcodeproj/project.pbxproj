@@ -46,9 +46,11 @@
 		B4D5970C08C51D76A7FA3AB4 /* CameraPreviewView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8F5127E72D22F9078142F6EE /* CameraPreviewView.swift */; };
 		B84CBF26D24790B4B6F348CD /* Preview Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = C7BA98BD11A2006135A1026D /* Preview Assets.xcassets */; };
 		C3ADEFA683DE26DFF3392AD6 /* RecordingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 19667502574A1D26D0A51E54 /* RecordingView.swift */; };
+		C553B30A1031A763DD12FA08 /* AppCheckDebugTokenBootstrap.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0200F05F2807B570CB11813E /* AppCheckDebugTokenBootstrap.swift */; };
 		C93725BB3023F1154E1DCB70 /* ScanQuotaStoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AE8291820F5D680D455B4DB9 /* ScanQuotaStoreTests.swift */; };
 		CC4D468FA76148B25B2DFE40 /* Theme.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4C40315F8DBC5B5AD38A13C2 /* Theme.swift */; };
 		D5A1D3AC43BF9708A681A0B7 /* CatVoxLaunchConfiguration.swift in Sources */ = {isa = PBXBuildFile; fileRef = 19AE93315B15E827FC62B553 /* CatVoxLaunchConfiguration.swift */; };
+		E3334583904BB07ED1A0B6E4 /* AppCheckDebugTokenBootstrapTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F45BF9690B262DE9E0CA3A37 /* AppCheckDebugTokenBootstrapTests.swift */; };
 		E38E18F089FE09158754DE37 /* AnalyticsService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 481D6275DC1528B2394E82A1 /* AnalyticsService.swift */; };
 		E66C3E964387260252BC45F3 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = 13B1A8A31D1EAAB998A22160 /* PrivacyInfo.xcprivacy */; };
 		ED83E27532C2FF6FCBB3FF6B /* ImportedVideoService.swift in Sources */ = {isa = PBXBuildFile; fileRef = C2F3ADCCFC50AD8360715D2E /* ImportedVideoService.swift */; };
@@ -77,6 +79,7 @@
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
+		0200F05F2807B570CB11813E /* AppCheckDebugTokenBootstrap.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppCheckDebugTokenBootstrap.swift; sourceTree = "<group>"; };
 		0D8439BECE45A0303556B1C1 /* CatVox.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = CatVox.entitlements; sourceTree = "<group>"; };
 		0F8AF485DF075ADE029435E4 /* GCPService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GCPService.swift; sourceTree = "<group>"; };
 		13B1A8A31D1EAAB998A22160 /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
@@ -128,6 +131,7 @@
 		DE49957B358DEC3A3E7DF00A /* CatVoxUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CatVoxUITests.swift; sourceTree = "<group>"; };
 		E100F9FEEC3B2CF509B41F20 /* CatAnalysis.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CatAnalysis.swift; sourceTree = "<group>"; };
 		F08F33CD1AC4F31C7769CE96 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
+		F45BF9690B262DE9E0CA3A37 /* AppCheckDebugTokenBootstrapTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppCheckDebugTokenBootstrapTests.swift; sourceTree = "<group>"; };
 		FEBC2D72ADC3729A73D65E8D /* CatVoxApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CatVoxApp.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
@@ -230,6 +234,7 @@
 		9E16D7575F6047024CF0F3F6 /* App */ = {
 			isa = PBXGroup;
 			children = (
+				0200F05F2807B570CB11813E /* AppCheckDebugTokenBootstrap.swift */,
 				FEBC2D72ADC3729A73D65E8D /* CatVoxApp.swift */,
 				19AE93315B15E827FC62B553 /* CatVoxLaunchConfiguration.swift */,
 				C97363627F42884D74A0751E /* CatVoxUITestSupport.swift */,
@@ -311,6 +316,7 @@
 		FB5B11DC480CF0958CCC390A /* CatVoxTests */ = {
 			isa = PBXGroup;
 			children = (
+				F45BF9690B262DE9E0CA3A37 /* AppCheckDebugTokenBootstrapTests.swift */,
 				6364ED5AE4CAAE1E2AC30B29 /* CatAnalysisTests.swift */,
 				6313F1146262336F3B4CE566 /* CatPersonaTests.swift */,
 				D8AD2459F0FB2E469B3A8EBF /* ConfidenceTierTests.swift */,
@@ -445,6 +451,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				E3334583904BB07ED1A0B6E4 /* AppCheckDebugTokenBootstrapTests.swift in Sources */,
 				2052FB6C170E9EEC2531E86A /* CatAnalysisTests.swift in Sources */,
 				4E7FE2E01925797AAEE7E495 /* CatPersonaTests.swift in Sources */,
 				3A76BB65F25DB94D7E779AA1 /* ConfidenceTierTests.swift in Sources */,
@@ -463,6 +470,7 @@
 				9413B510B33BA0FEA8A3C1EF /* ActivityView.swift in Sources */,
 				E38E18F089FE09158754DE37 /* AnalyticsService.swift in Sources */,
 				53EBF6283E37AC40C2FBF31C /* AnimatedVideoBackground.swift in Sources */,
+				C553B30A1031A763DD12FA08 /* AppCheckDebugTokenBootstrap.swift in Sources */,
 				B4D5970C08C51D76A7FA3AB4 /* CameraPreviewView.swift in Sources */,
 				46ECBCFF9DD385E7670A980D /* CameraService.swift in Sources */,
 				1861803EF64D9F7FE6C77560 /* CatAnalysis.swift in Sources */,
