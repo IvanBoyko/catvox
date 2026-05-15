@@ -1,3 +1,9 @@
+// URL fields store hostnames only: no scheme, path, or trailing slash.
+// project.yml composes https:// values for the app Info.plist; the Makefile
+// composes https:// values for CLI and integration-test runs.
+// Do not write https://... here: xcconfig treats // as a comment and silently
+// truncates the value to https:.
+
 GCP_PROJECT_ID = kathelix-catvox-prod
 FIREBASE_PROJECT = kathelix-catvox-prod
 CATVOX_PROJECT_ID = kathelix-catvox-prod
