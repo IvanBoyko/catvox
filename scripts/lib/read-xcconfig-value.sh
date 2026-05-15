@@ -13,7 +13,6 @@ awk -F '=' -v key="$key" '
     value = $2
     sub(/^[[:space:]]+/, "", value)
     sub(/[[:space:]]+$/, "", value)
-    gsub(/\/\$\(\)\//, "//", value)
     print value
     exit
   }

@@ -53,10 +53,10 @@ targets:
       properties:
         CFBundleDisplayName: CatVox
         CatVoxEnvironment: $(CATVOX_ENVIRONMENT)
-        CatVoxSignedUploadURLEndpoint: $(CATVOX_SIGNED_UPLOAD_URL_ENDPOINT)
-        CatVoxAnalyseVideoEndpoint: $(CATVOX_ANALYSE_VIDEO_ENDPOINT)
+        CatVoxSignedUploadURLEndpoint: "https://$(CATVOX_SIGNED_UPLOAD_URL_HOST)"
+        CatVoxAnalyseVideoEndpoint: "https://$(CATVOX_ANALYSE_VIDEO_HOST)"
         CatVoxPostHogProjectToken: $(CATVOX_POSTHOG_PROJECT_TOKEN)
-        CatVoxPostHogHost: $(CATVOX_POSTHOG_HOST)
+        CatVoxPostHogHost: "https://$(CATVOX_POSTHOG_HOST_NAME)"
         UILaunchScreen:
           UIColorName: ""
         UISupportedInterfaceOrientations:

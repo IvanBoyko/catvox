@@ -21,15 +21,15 @@
 	<key>CFBundleVersion</key>
 	<string>1</string>
 	<key>CatVoxAnalyseVideoEndpoint</key>
-	<string>$(CATVOX_ANALYSE_VIDEO_ENDPOINT)</string>
+	<string>https://$(CATVOX_ANALYSE_VIDEO_HOST)</string>
 	<key>CatVoxEnvironment</key>
 	<string>$(CATVOX_ENVIRONMENT)</string>
 	<key>CatVoxPostHogHost</key>
-	<string>$(CATVOX_POSTHOG_HOST)</string>
+	<string>https://$(CATVOX_POSTHOG_HOST_NAME)</string>
 	<key>CatVoxPostHogProjectToken</key>
 	<string>$(CATVOX_POSTHOG_PROJECT_TOKEN)</string>
 	<key>CatVoxSignedUploadURLEndpoint</key>
-	<string>$(CATVOX_SIGNED_UPLOAD_URL_ENDPOINT)</string>
+	<string>https://$(CATVOX_SIGNED_UPLOAD_URL_HOST)</string>
 	<key>NSCameraUsageDescription</key>
 	<string>CatVox records 10-second clips to analyse your cat's behaviour.</string>
 	<key>NSMicrophoneUsageDescription</key>

@@ -17,8 +17,10 @@ CATVOX_PROJECT_ID ?= $(or $(call catvox_xcconfig_value,CATVOX_PROJECT_ID),$(GCP_
 CATVOX_ENVIRONMENT ?= $(or $(call catvox_xcconfig_value,CATVOX_ENVIRONMENT),dev)
 CATVOX_FUNCTION_REGION ?= $(or $(call catvox_xcconfig_value,CATVOX_FUNCTION_REGION),us-central1)
 CATVOX_BACKEND_SERVICE_ACCOUNT ?= $(or $(call catvox_xcconfig_value,CATVOX_BACKEND_SERVICE_ACCOUNT),catvox-backend-sa@$(FIREBASE_PROJECT).iam.gserviceaccount.com)
-CATVOX_SIGNED_UPLOAD_URL_ENDPOINT ?= $(or $(call catvox_xcconfig_value,CATVOX_SIGNED_UPLOAD_URL_ENDPOINT),https://getsigneduploadurl-pdkw5uifga-uc.a.run.app)
-CATVOX_ANALYSE_VIDEO_ENDPOINT ?= $(or $(call catvox_xcconfig_value,CATVOX_ANALYSE_VIDEO_ENDPOINT),https://analysevideo-pdkw5uifga-uc.a.run.app)
+CATVOX_SIGNED_UPLOAD_URL_HOST ?= $(or $(call catvox_xcconfig_value,CATVOX_SIGNED_UPLOAD_URL_HOST),getsigneduploadurl-pdkw5uifga-uc.a.run.app)
+CATVOX_ANALYSE_VIDEO_HOST ?= $(or $(call catvox_xcconfig_value,CATVOX_ANALYSE_VIDEO_HOST),analysevideo-pdkw5uifga-uc.a.run.app)
+CATVOX_SIGNED_UPLOAD_URL_ENDPOINT ?= https://$(CATVOX_SIGNED_UPLOAD_URL_HOST)
+CATVOX_ANALYSE_VIDEO_ENDPOINT ?= https://$(CATVOX_ANALYSE_VIDEO_HOST)
 CATVOX_FIREBASE_APP_ID ?= $(or $(call catvox_xcconfig_value,CATVOX_FIREBASE_APP_ID),1:953500951129:ios:1595a4c27cd8f3f7964748)
 CATVOX_FIREBASE_API_KEY ?= $(or $(call catvox_xcconfig_value,CATVOX_FIREBASE_API_KEY),AIzaSyAMKDQ_mIGQWQF4VhU8lytvvGx1TpuoBMI)
 CATVOX_IOS_BUNDLE_ID ?= $(or $(call catvox_xcconfig_value,CATVOX_IOS_BUNDLE_ID),$(call catvox_xcconfig_value,CATVOX_PRODUCT_BUNDLE_IDENTIFIER),com.kathelix.catvox)
@@ -62,7 +64,8 @@ help:
 		'Environment overrides:' \
 		'  CATVOX_ENV_CONFIG=config/environments/dev.xcconfig selects app-facing env defaults' \
 		'  CATVOX_ENVIRONMENT=dev GCP_PROJECT_ID=... FIREBASE_PROJECT=... CATVOX_PROJECT_ID=...' \
-		'  CATVOX_SIGNED_UPLOAD_URL_ENDPOINT=... CATVOX_ANALYSE_VIDEO_ENDPOINT=...' \
+		'  CATVOX_SIGNED_UPLOAD_URL_HOST=... CATVOX_ANALYSE_VIDEO_HOST=...' \
+		'  CATVOX_SIGNED_UPLOAD_URL_ENDPOINT=... CATVOX_ANALYSE_VIDEO_ENDPOINT=... override full URLs' \
 		'  CATVOX_FIREBASE_APP_ID=... CATVOX_FIREBASE_API_KEY=... CATVOX_IOS_BUNDLE_ID=...' \
 		'  CATVOX_INTEGRATION_SAFE_ENVIRONMENTS=dev marks mutable-test environments' \
 		'  CATVOX_APP_CHECK_DEBUG_TOKEN=... make functions-integration' \
