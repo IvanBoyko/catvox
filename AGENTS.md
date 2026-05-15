@@ -114,10 +114,18 @@ make bootstrap-wif
 For environment-specific runs, override variables at invocation time, for example:
 
 ```bash
+CATVOX_ENVIRONMENT=dev make functions-integration
 GCP_PROJECT_ID=kathelix-catvox-prod make terraform-plan
 FIREBASE_PROJECT=kathelix-catvox-prod make functions-deploy
 DEVICE_ID=<device-udid> make ios-device-launch
 ```
+
+Environment-dependent app/backend values are parameterized through generic
+`CATVOX_*` variables such as `CATVOX_ENVIRONMENT`,
+`CATVOX_SIGNED_UPLOAD_URL_ENDPOINT`, `CATVOX_ANALYSE_VIDEO_ENDPOINT`,
+`CATVOX_FIREBASE_APP_ID`, `CATVOX_FIREBASE_API_KEY`, and
+`CATVOX_IOS_BUNDLE_ID`. Treat the environment name as data, not as a hard-coded
+Dev/Prod branch. See ADR-0017.
 
 `make functions-integration` needs a Firebase App Check debug token. It preserves an explicitly supplied `CATVOX_APP_CHECK_DEBUG_TOKEN`; otherwise `TF_VAR_app_check_debug_token` is accepted by the integration script. For local developer convenience, the Makefile silently falls back to `app_check_debug_token` in local `terraform/terraform.tfvars` when neither environment variable is set. Never commit debug tokens or shared Xcode schemes containing `AppCheckDebugToken` or `FIRAAppCheckDebugToken`.
 
@@ -462,6 +470,9 @@ See TRD §8 for the definitive backlog and implementation status. This section i
 
 **Pending:**
 - StoreKit 2: Pro tier (unlimited scans)
+- Actual named-environment provisioning: create separate Dev/Prod cloud,
+  Firebase, App Check, analytics, CI secret, and Terraform-state resources after
+  the parameterization baseline
 
 ---
 

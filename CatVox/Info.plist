@@ -20,6 +20,12 @@
 	<string>1.0</string>
 	<key>CFBundleVersion</key>
 	<string>1</string>
+	<key>CatVoxAnalyseVideoEndpoint</key>
+	<string>$(CATVOX_ANALYSE_VIDEO_ENDPOINT)</string>
+	<key>CatVoxEnvironment</key>
+	<string>$(CATVOX_ENVIRONMENT)</string>
+	<key>CatVoxSignedUploadURLEndpoint</key>
+	<string>$(CATVOX_SIGNED_UPLOAD_URL_ENDPOINT)</string>
 	<key>NSCameraUsageDescription</key>
 	<string>CatVox records 10-second clips to analyse your cat's behaviour.</string>
 	<key>NSMicrophoneUsageDescription</key>

@@ -84,18 +84,16 @@ final class GCPService {
 
     private var currentTask: Task<Void, Never>?
     private var currentRequestID = UUID()
+    private let appConfiguration: CatVoxAppConfiguration
 
     // MARK: - Logging
 
     private let logger = Logger(subsystem: "com.kathelix.catvox", category: "GCPService")
 
-    // MARK: - Backend endpoints
+    // MARK: - Initialisation
 
-    private enum Endpoint {
-        static let signedURL = URL(
-            string: "https://getsigneduploadurl-pdkw5uifga-uc.a.run.app")!
-        static let analyse   = URL(
-            string: "https://analysevideo-pdkw5uifga-uc.a.run.app")!
+    init(appConfiguration: CatVoxAppConfiguration = .current) {
+        self.appConfiguration = appConfiguration
     }
 
     private enum Header {
@@ -259,7 +257,7 @@ final class GCPService {
     private func fetchSignedURL(for videoURL: URL, contentType: String) async throws -> (URL, String) {
         let appCheckToken = try await fetchAppCheckToken()
         let request = try Self.makeSignedURLRequest(
-            endpoint: Endpoint.signedURL,
+            endpoint: appConfiguration.signedUploadURLEndpoint,
             videoURL: videoURL,
             contentType: contentType,
             userId: userId,
@@ -347,7 +345,7 @@ final class GCPService {
     private func triggerAnalysis(gcsUri: String, analysisRequestID: UUID) async throws -> CatAnalysis {
         let appCheckToken = try await fetchAppCheckToken()
         let request = try Self.makeAnalysisRequest(
-            endpoint: Endpoint.analyse,
+            endpoint: appConfiguration.analyseVideoEndpoint,
             gcsUri: gcsUri,
             userId: userId,
             analysisRequestID: analysisRequestID,

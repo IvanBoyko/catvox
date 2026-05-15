@@ -9,8 +9,8 @@ import {
 } from '@google/genai';
 import { readFileSync } from 'fs';
 import { join } from 'path';
+import { vertexLocation } from './config';
 
-const LOCATION = 'us-central1';
 // Gemini 2.5 Flash is a thinking model: thinking tokens are consumed before
 // the visible output is written. maxOutputTokens controls only the non-thinking
 // output budget. When reasoning is more elaborate, a low ceiling causes the
@@ -111,7 +111,7 @@ export async function callGemini(
   const ai = new GoogleGenAI({
     vertexai: true,
     project: projectId,
-    location: LOCATION,
+    location: vertexLocation(),
     apiVersion: 'v1',
   });
 

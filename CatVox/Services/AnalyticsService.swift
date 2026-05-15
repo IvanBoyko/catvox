@@ -41,14 +41,15 @@ enum AnalyticsService {
             logger.notice("PostHog disabled for test/preview runtime")
             return
         }
-        guard let configuration = PostHogConfiguration.current else {
+        let configuration = CatVoxAppConfiguration.current
+        guard let projectToken = configuration.postHogProjectToken else {
             logger.notice("PostHog disabled: missing project token")
             return
         }
 
         let config = PostHogConfig(
-            projectToken: configuration.projectToken,
-            host: configuration.host
+            projectToken: projectToken,
+            host: configuration.postHogHost.absoluteString
         )
         config.captureApplicationLifecycleEvents = false
         config.captureScreenViews = false
@@ -73,7 +74,19 @@ enum AnalyticsService {
 
     static func capture(_ event: Event, properties: [String: Any] = [:]) {
         guard isConfigured else { return }
-        PostHogSDK.shared.capture(event.rawValue, properties: properties)
+        PostHogSDK.shared.capture(
+            event.rawValue,
+            properties: eventProperties(properties)
+        )
+    }
+
+    static func eventProperties(
+        _ properties: [String: Any],
+        appConfiguration: CatVoxAppConfiguration = .current
+    ) -> [String: Any] {
+        var enriched = properties
+        enriched["app_environment"] = appConfiguration.environmentName
+        return enriched
     }
 
     private static var isRuntimeDisabled: Bool {
@@ -82,41 +95,5 @@ enum AnalyticsService {
             environment["CATVOX_DISABLE_ANALYTICS"] == "1" ||
             CatVoxLaunchConfiguration.current.isUITesting ||
             environment["XCODE_RUNNING_FOR_PREVIEWS"] == "1"
-    }
-}
-
-private struct PostHogConfiguration {
-    let projectToken: String
-    let host: String
-
-    static var current: PostHogConfiguration? {
-        guard let projectToken = value(
-            environmentKey: "POSTHOG_PROJECT_TOKEN",
-            infoKey: "PostHogProjectToken"
-        ) else {
-            return nil
-        }
-
-        let host = value(
-            environmentKey: "POSTHOG_HOST",
-            infoKey: "PostHogHost"
-        ) ?? "https://us.i.posthog.com"
-
-        return PostHogConfiguration(projectToken: projectToken, host: host)
-    }
-
-    private static func value(environmentKey: String, infoKey: String) -> String? {
-        if let environmentValue = normalized(ProcessInfo.processInfo.environment[environmentKey]) {
-            return environmentValue
-        }
-
-        return normalized(Bundle.main.object(forInfoDictionaryKey: infoKey) as? String)
-    }
-
-    private static func normalized(_ value: String?) -> String? {
-        guard let value else { return nil }
-        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty, !trimmed.hasPrefix("$(") else { return nil }
-        return trimmed
     }
 }
