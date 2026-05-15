@@ -84,6 +84,7 @@ jobs:
 
       - name: Build and deploy to Firebase
         env:
+          CATVOX_ENVIRONMENT: dev
           FIREBASE_PROJECT: ${{ secrets.GCP_PROJECT_ID }}
         run: make functions-deploy
 
@@ -121,6 +122,8 @@ jobs:
 
       - name: Run integration tests
         env:
+          CATVOX_ENVIRONMENT: dev
           CATVOX_PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
+          CATVOX_INTEGRATION_SAFE_ENVIRONMENTS: dev
           CATVOX_APP_CHECK_DEBUG_TOKEN: ${{ secrets.TF_VAR_app_check_debug_token }}
         run: make functions-integration

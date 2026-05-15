@@ -1,15 +1,15 @@
 import { FieldValue, Firestore, Timestamp } from '@google-cloud/firestore';
 import { spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
+import {
+  argValue,
+  assertMutationGateAllowed,
+  configValue,
+  loadEnvFile,
+  parseList,
+  requiredConfigValue,
+} from './config';
 
-const DEFAULT_PROJECT_ID = 'kathelix-catvox-prod';
-const DEFAULT_SIGNED_URL_ENDPOINT =
-  'https://getsigneduploadurl-pdkw5uifga-uc.a.run.app/';
-const DEFAULT_ANALYSE_ENDPOINT =
-  'https://analysevideo-pdkw5uifga-uc.a.run.app/';
-const DEFAULT_FIREBASE_APP_ID = '1:953500951129:ios:1595a4c27cd8f3f7964748';
-const DEFAULT_FIREBASE_API_KEY = 'AIzaSyAMKDQ_mIGQWQF4VhU8lytvvGx1TpuoBMI';
-const DEFAULT_IOS_BUNDLE_ID = 'com.kathelix.catvox';
 const DAILY_LIMIT = 5;
 const RESERVATION_TTL_MS = 5 * 60 * 1000;
 const LIMIT_EXCEEDED = 'LIMIT_EXCEEDED';
@@ -54,25 +54,42 @@ type ReservationRecord = {
 
 type ActiveReservations = Record<string, ReservationRecord>;
 
-const args = new Set(process.argv.slice(2));
+const rawArgs = process.argv.slice(2);
+const args = new Set(rawArgs);
+loadEnvFile(argValue(rawArgs, '--env-file') || process.env.CATVOX_INTEGRATION_ENV_FILE);
+
+if (args.has('-h') || args.has('--help') || args.has('help')) {
+  usage();
+  process.exit(0);
+}
+
 const confirmed = args.has('--confirm');
 const skipLog = args.has('--skip-log');
+const mutationsAllowed = configValue(process.env, 'CATVOX_INTEGRATION_MUTATIONS_ALLOWED') === '1';
 
-const projectId =
-  process.env.CATVOX_PROJECT_ID ||
-  process.env.GCP_PROJECT_ID ||
-  process.env.GCLOUD_PROJECT ||
-  DEFAULT_PROJECT_ID;
-const signedUrlEndpoint =
-  process.env.CATVOX_SIGNED_URL_ENDPOINT || DEFAULT_SIGNED_URL_ENDPOINT;
-const analyseEndpoint =
-  process.env.CATVOX_ANALYSE_ENDPOINT || DEFAULT_ANALYSE_ENDPOINT;
-const firebaseAppId =
-  process.env.CATVOX_FIREBASE_APP_ID || DEFAULT_FIREBASE_APP_ID;
-const firebaseApiKey =
-  process.env.CATVOX_FIREBASE_API_KEY || DEFAULT_FIREBASE_API_KEY;
-const iosBundleId =
-  process.env.CATVOX_IOS_BUNDLE_ID || DEFAULT_IOS_BUNDLE_ID;
+const environmentName = requiredConfigValue(process.env, 'CATVOX_ENVIRONMENT');
+const integrationSafeEnvironments = parseList(
+  configValue(process.env, 'CATVOX_INTEGRATION_SAFE_ENVIRONMENTS') ?? 'dev'
+);
+const projectId = requiredConfigValue(
+  process.env,
+  'CATVOX_PROJECT_ID',
+  'GCP_PROJECT_ID',
+  'GCLOUD_PROJECT'
+);
+const signedUrlEndpoint = requiredConfigValue(
+  process.env,
+  'CATVOX_SIGNED_UPLOAD_URL_ENDPOINT',
+  'CATVOX_SIGNED_URL_ENDPOINT'
+);
+const analyseEndpoint = requiredConfigValue(
+  process.env,
+  'CATVOX_ANALYSE_VIDEO_ENDPOINT',
+  'CATVOX_ANALYSE_ENDPOINT'
+);
+const firebaseAppId = requiredConfigValue(process.env, 'CATVOX_FIREBASE_APP_ID');
+const firebaseApiKey = requiredConfigValue(process.env, 'CATVOX_FIREBASE_API_KEY');
+const iosBundleId = requiredConfigValue(process.env, 'CATVOX_IOS_BUNDLE_ID');
 const rawAppCheckDebugToken =
   process.env.CATVOX_APP_CHECK_DEBUG_TOKEN ||
   process.env.TF_VAR_app_check_debug_token ||
@@ -87,15 +104,19 @@ Usage:
 Options:
   --confirm   Required. Writes and deletes temporary Firestore usage docs.
   --skip-log  Verify only the HTTP response, not the Cloud Logging entry.
+  --env-file  Optional. Loads KEY=value lines before reading configuration.
 
 Environment:
-  CATVOX_PROJECT_ID             Defaults to ${DEFAULT_PROJECT_ID}
-  CATVOX_SIGNED_URL_ENDPOINT    Defaults to ${DEFAULT_SIGNED_URL_ENDPOINT}
-  CATVOX_ANALYSE_ENDPOINT        Defaults to ${DEFAULT_ANALYSE_ENDPOINT}
-  CATVOX_APP_CHECK_DEBUG_TOKEN  Required. Registered Firebase App Check debug token.
-  CATVOX_FIREBASE_APP_ID        Defaults to ${DEFAULT_FIREBASE_APP_ID}
-  CATVOX_FIREBASE_API_KEY       Defaults to committed iOS Firebase API key.
-  CATVOX_IOS_BUNDLE_ID          Defaults to ${DEFAULT_IOS_BUNDLE_ID}
+  CATVOX_ENVIRONMENT                       Required. Environment name; must be integration-safe.
+  CATVOX_INTEGRATION_SAFE_ENVIRONMENTS     Comma-separated mutation-safe env names. Defaults to dev.
+  CATVOX_INTEGRATION_MUTATIONS_ALLOWED=1  Required for Firestore-mutating tests.
+  CATVOX_PROJECT_ID                        Required. GCP/Firebase project ID.
+  CATVOX_SIGNED_UPLOAD_URL_ENDPOINT        Required. getSignedUploadURL endpoint.
+  CATVOX_ANALYSE_VIDEO_ENDPOINT            Required. analyseVideo endpoint.
+  CATVOX_APP_CHECK_DEBUG_TOKEN             Required. Registered Firebase App Check debug token.
+  CATVOX_FIREBASE_APP_ID                   Required. Firebase iOS app ID.
+  CATVOX_FIREBASE_API_KEY                  Required. Firebase web API key for App Check exchange.
+  CATVOX_IOS_BUNDLE_ID                     Required. Firebase iOS bundle ID.
 `);
 }
 
@@ -602,9 +623,16 @@ async function verifyAtomicReservationRace(
 }
 
 async function main(): Promise<void> {
-  if (!confirmed) {
+  try {
+    assertMutationGateAllowed({
+      confirmed,
+      mutationsAllowed,
+      environmentName,
+      integrationSafeEnvironments,
+    });
+  } catch (error) {
     usage();
-    throw new Error('Refusing to touch backend data without --confirm');
+    throw error;
   }
 
   const testUserId = `quota-contract-test-${Date.now()}`;
@@ -615,6 +643,7 @@ async function main(): Promise<void> {
   const doc = firestore.collection('usage').doc(testUserId);
   const reservationRaceDoc = firestore.collection('usage').doc(reservationRaceUserId);
 
+  console.log('Environment:', environmentName);
   console.log('Project:', projectId);
   console.log('Signed URL endpoint:', signedUrlEndpoint);
   console.log('Analyse endpoint:', analyseEndpoint);

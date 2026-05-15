@@ -1,0 +1,5 @@
+# CatVox Dev remote state backend.
+# Copy to terraform/backend/dev.hcl when provisioning the real Dev environment.
+
+bucket = "catvox-tf-state-kathelix-catvox-prod"
+prefix = "catvox/state"

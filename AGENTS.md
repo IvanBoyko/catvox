@@ -114,10 +114,26 @@ make bootstrap-wif
 For environment-specific runs, override variables at invocation time, for example:
 
 ```bash
+CATVOX_ENVIRONMENT=dev make functions-integration
 GCP_PROJECT_ID=kathelix-catvox-prod make terraform-plan
 FIREBASE_PROJECT=kathelix-catvox-prod make functions-deploy
 DEVICE_ID=<device-udid> make ios-device-launch
 ```
+
+Environment-dependent app/backend values are parameterized through generic
+`CATVOX_*` variables such as `CATVOX_ENVIRONMENT`,
+`CATVOX_SIGNED_UPLOAD_URL_ENDPOINT`, `CATVOX_ANALYSE_VIDEO_ENDPOINT`,
+`CATVOX_FIREBASE_APP_ID`, `CATVOX_FIREBASE_API_KEY`, and
+`CATVOX_IOS_BUNDLE_ID`. App-facing defaults live in
+`config/environments/<environment>.xcconfig`; Xcode reads this file through the
+generated project, and the Makefile reads it through `CATVOX_ENV_CONFIG`
+(default `config/environments/dev.xcconfig`). Mutable integration tests also require
+`CATVOX_INTEGRATION_SAFE_ENVIRONMENTS` to include `CATVOX_ENVIRONMENT`. Treat
+the environment name as data, not as a hard-coded Dev/Prod branch. See ADR-0017.
+In `config/environments/*.xcconfig`, keys ending in `_HOST` or `_HOST_NAME`
+store hostnames only: no `https://` scheme, path, or trailing slash. XcodeGen
+and the Makefile compose full `https://` URLs at consumption boundaries, and the
+xcconfig reader tests should keep this convention covered.
 
 `make functions-integration` needs a Firebase App Check debug token. It preserves an explicitly supplied `CATVOX_APP_CHECK_DEBUG_TOKEN`; otherwise `TF_VAR_app_check_debug_token` is accepted by the integration script. For local developer convenience, the Makefile silently falls back to `app_check_debug_token` in local `terraform/terraform.tfvars` when neither environment variable is set. Never commit debug tokens or shared Xcode schemes containing `AppCheckDebugToken` or `FIRAAppCheckDebugToken`.
 
@@ -314,6 +330,8 @@ GCP_PROJECT_ID=kathelix-catvox-prod make bootstrap-wif
 
 - Prefer the GitHub connector for creating PRs when available, but if it returns `403 Resource not accessible by integration`, do not retry the same connector path. Fall back to the authenticated `gh` CLI and mention the fallback in the final summary.
 - PR descriptions should capture the original user-visible bug report or feature request, root cause, implementation summary, validation performed, manual test status, and any notable review follow-up. If the user reported an error message or screenshot, preserve the relevant text in the PR body so the review has the original symptom in context.
+- When review or implementation is bouncing between Codex, Claude, and a human reviewer, use concise PR comments as the durable handoff log after meaningful review/fix rounds. Keep chat for decisions and status; keep the PR thread readable for the next agent or reviewer.
+- Keep the PR body validation matrix current after each meaningful review response, especially when new tests, manual checks, or known skipped checks are added.
 - When creating or editing GitHub PR descriptions via `gh pr ...`, prefer plain Markdown with simple shell-safe quoting. Avoid unnecessary escaping of inline code or symbols; if the body is complex, write it to a temporary file and pass it with `--body-file` rather than packing heavily escaped Markdown into one shell argument.
 - When scripting in the default `zsh` shell, avoid reserved or read-only variable names such as `status`. Use names such as `rc` or `exit_code` for command exit codes.
 - When watching a known workflow run, prefer `gh run watch <run-id> --exit-status` or `gh run view <run-id> --json ...` over `gh pr checks --watch`, which can lag or show stale pending states. Use `gh pr checks` at the end for the final PR rollup.
@@ -330,6 +348,12 @@ GCP_PROJECT_ID=kathelix-catvox-prod make bootstrap-wif
 - In `actions/github-script`, distinguish GitHub Actions expression context from JavaScript runtime objects. `github` inside the script is the Octokit client, not the workflow context. Inject workflow values explicitly, for example `const actor = '${{ github.actor }}';`.
 - When passing multiline step outputs into `actions/github-script`, prefer `${{ toJSON(steps.<id>.outputs.<name>) }}` so newlines, backticks, and quotes are represented safely as JavaScript string values.
 - Plain `run:` step stdout is not automatically available as `steps.<id>.outputs.stdout`; write needed values to `$GITHUB_OUTPUT`.
+
+### Config / Infrastructure Change Workflow
+
+For infra, environment, secrets, build-setting, or runtime-configuration changes, do a small negative-test pass before review. Check missing config, malformed config, unsafe environment names, Release fail-loud behavior, and production-mutation rejection where relevant. Prefer automated tests for safety properties; manual live checks should supplement them, not be the only proof.
+
+When a safety, security, auth, or environment boundary is introduced or changed, extract the predicate/gate into a pure function with explicit inputs where practical and cover it with focused unit tests. Examples include mutation gates, service-account derivation, allowed-environment checks, Release config validation, and config-file parsing.
 
 ### Product Feature Workflow
 
@@ -431,7 +455,7 @@ If a feature that was originally tracked under one broad backlog item becomes se
 
 - The Firebase Functions runtime is Node.js 22. For local validation, prefer running `functions` commands under Node.js 22 so `make functions-install`, `make functions-build`, and `make functions-test` match CI and do not emit avoidable engine warnings.
 - If Node.js 22 is unavailable locally, it is acceptable to run the build under the installed Node version, but explicitly report any expected `EBADENGINE` warning as an environment mismatch rather than treating it as a workflow failure.
-- Backend integration tests may write temporary Firestore documents and are safe to run against the current Dev backend with `make functions-integration` or `npm --prefix functions run test:integration`. The suite exchanges the registered App Check debug token for a valid App Check token, verifies that both HTTP Functions reject missing App Check tokens with `401 app_check_unauthorized`, verifies the Firestore quota reservation race contract, then verifies the daily-quota contract and structured quota log. Do not run Firestore-mutating integration tests against a future real Prod environment; future Prod should use only a separate, protected, non-invasive smoke-test runbook.
+- Backend integration tests may write temporary Firestore documents and are safe to run against the current Dev backend with `make functions-integration` or `npm --prefix functions run test:integration`. The suite exchanges the registered App Check debug token for a valid App Check token, verifies that both HTTP Functions reject missing App Check tokens with `401 app_check_unauthorized`, verifies the Firestore quota reservation race contract, then verifies the daily-quota contract and structured quota log. Mutating runs require both `CATVOX_INTEGRATION_MUTATIONS_ALLOWED=1` and `CATVOX_ENVIRONMENT` to be listed in `CATVOX_INTEGRATION_SAFE_ENVIRONMENTS`. Do not run Firestore-mutating integration tests against a future real Prod environment; future Prod should use only a separate, protected, non-invasive smoke-test runbook.
 - Integration scripts should not import production helpers merely to reuse Firestore transaction code if doing so initializes Firebase Admin in the test process. Prefer a small, explicit test-harness Firestore probe using `@google-cloud/firestore` so local ADC and GitHub Actions WIF behave consistently.
 
 ### HLD vs TRD
@@ -462,6 +486,9 @@ See TRD §8 for the definitive backlog and implementation status. This section i
 
 **Pending:**
 - StoreKit 2: Pro tier (unlimited scans)
+- Actual named-environment provisioning: create separate Dev/Prod cloud,
+  Firebase, App Check, analytics, CI secret, and Terraform-state resources after
+  the parameterization baseline
 
 ---
 

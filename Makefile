@@ -8,9 +8,25 @@ IOS_BUILD_DESTINATION := generic/platform=iOS Simulator
 IOS_TEST_DESTINATION := platform=iOS Simulator,name=iPhone 16,OS=latest
 IOS_UI_TEST_DESTINATION := $(IOS_TEST_DESTINATION)
 
-GCP_PROJECT_ID ?= kathelix-catvox-prod
-FIREBASE_PROJECT ?= $(GCP_PROJECT_ID)
-CATVOX_PROJECT_ID ?= $(GCP_PROJECT_ID)
+CATVOX_ENV_CONFIG ?= config/environments/dev.xcconfig
+catvox_xcconfig_value = $(strip $(shell scripts/lib/read-xcconfig-value.sh '$(CATVOX_ENV_CONFIG)' '$(1)' 2>/dev/null))
+
+GCP_PROJECT_ID ?= $(or $(call catvox_xcconfig_value,GCP_PROJECT_ID),kathelix-catvox-prod)
+FIREBASE_PROJECT ?= $(or $(call catvox_xcconfig_value,FIREBASE_PROJECT),$(GCP_PROJECT_ID))
+CATVOX_PROJECT_ID ?= $(or $(call catvox_xcconfig_value,CATVOX_PROJECT_ID),$(GCP_PROJECT_ID))
+CATVOX_ENVIRONMENT ?= $(or $(call catvox_xcconfig_value,CATVOX_ENVIRONMENT),dev)
+CATVOX_FUNCTION_REGION ?= $(or $(call catvox_xcconfig_value,CATVOX_FUNCTION_REGION),us-central1)
+CATVOX_BACKEND_SERVICE_ACCOUNT ?= $(or $(call catvox_xcconfig_value,CATVOX_BACKEND_SERVICE_ACCOUNT),catvox-backend-sa@$(FIREBASE_PROJECT).iam.gserviceaccount.com)
+CATVOX_SIGNED_UPLOAD_URL_HOST ?= $(or $(call catvox_xcconfig_value,CATVOX_SIGNED_UPLOAD_URL_HOST),getsigneduploadurl-pdkw5uifga-uc.a.run.app)
+CATVOX_ANALYSE_VIDEO_HOST ?= $(or $(call catvox_xcconfig_value,CATVOX_ANALYSE_VIDEO_HOST),analysevideo-pdkw5uifga-uc.a.run.app)
+CATVOX_SIGNED_UPLOAD_URL_ENDPOINT ?= https://$(CATVOX_SIGNED_UPLOAD_URL_HOST)
+CATVOX_ANALYSE_VIDEO_ENDPOINT ?= https://$(CATVOX_ANALYSE_VIDEO_HOST)
+CATVOX_FIREBASE_APP_ID ?= $(or $(call catvox_xcconfig_value,CATVOX_FIREBASE_APP_ID),1:953500951129:ios:1595a4c27cd8f3f7964748)
+CATVOX_FIREBASE_API_KEY ?= $(or $(call catvox_xcconfig_value,CATVOX_FIREBASE_API_KEY),AIzaSyAMKDQ_mIGQWQF4VhU8lytvvGx1TpuoBMI)
+CATVOX_IOS_BUNDLE_ID ?= $(or $(call catvox_xcconfig_value,CATVOX_IOS_BUNDLE_ID),$(call catvox_xcconfig_value,CATVOX_PRODUCT_BUNDLE_IDENTIFIER),com.kathelix.catvox)
+CATVOX_INTEGRATION_MUTATIONS_ALLOWED ?= 1
+CATVOX_INTEGRATION_SAFE_ENVIRONMENTS ?= $(or $(call catvox_xcconfig_value,CATVOX_INTEGRATION_SAFE_ENVIRONMENTS),dev)
+CATVOX_TFVARS_PATH ?= terraform/terraform.tfvars
 
 .PHONY: help doctor \
 	ios-generate ios-build ios-build-only ios-test ios-test-only ios-ui-test ios-ui-test-only ios-ci ios-device-launch ios-device-console app-deploy \
@@ -46,9 +62,14 @@ help:
 		'  make bootstrap-wif          Run GitHub Actions WIF bootstrap script' \
 		'' \
 		'Environment overrides:' \
-		'  GCP_PROJECT_ID=... FIREBASE_PROJECT=... CATVOX_PROJECT_ID=...' \
+		'  CATVOX_ENV_CONFIG=config/environments/dev.xcconfig selects app-facing env defaults' \
+		'  CATVOX_ENVIRONMENT=dev GCP_PROJECT_ID=... FIREBASE_PROJECT=... CATVOX_PROJECT_ID=...' \
+		'  CATVOX_SIGNED_UPLOAD_URL_HOST=... CATVOX_ANALYSE_VIDEO_HOST=...' \
+		'  CATVOX_SIGNED_UPLOAD_URL_ENDPOINT=... CATVOX_ANALYSE_VIDEO_ENDPOINT=... override full URLs' \
+		'  CATVOX_FIREBASE_APP_ID=... CATVOX_FIREBASE_API_KEY=... CATVOX_IOS_BUNDLE_ID=...' \
+		'  CATVOX_INTEGRATION_SAFE_ENVIRONMENTS=dev marks mutable-test environments' \
 		'  CATVOX_APP_CHECK_DEBUG_TOKEN=... make functions-integration' \
-		'  functions-integration falls back to terraform/terraform.tfvars app_check_debug_token when no env token is set' \
+		'  CATVOX_TFVARS_PATH=... overrides the local tfvars fallback path for App Check debug tokens' \
 		'  IOS_TEST_DESTINATION="platform=iOS Simulator,name=iPhone 16,OS=latest"' \
 		'  IOS_UI_TEST_DESTINATION="platform=iOS Simulator,name=iPhone 16,OS=latest"' \
 		'  DEVICE_ID=... make ios-device-launch' \
@@ -166,10 +187,18 @@ ios-ui-test-only:
 ios-ci: ios-generate ios-build-only ios-test-only
 
 ios-device-launch:
-	@./scripts/run-on-iphone.sh launch
+	@CATVOX_IOS_BUNDLE_ID="$(CATVOX_IOS_BUNDLE_ID)" \
+	 CATVOX_IOS_SCHEME="$(IOS_SCHEME)" \
+	 IOS_CONFIGURATION="$(IOS_CONFIGURATION)" \
+	 CATVOX_TFVARS_PATH="$(CATVOX_TFVARS_PATH)" \
+	 ./scripts/run-on-iphone.sh launch
 
 ios-device-console:
-	@./scripts/run-on-iphone.sh console
+	@CATVOX_IOS_BUNDLE_ID="$(CATVOX_IOS_BUNDLE_ID)" \
+	 CATVOX_IOS_SCHEME="$(IOS_SCHEME)" \
+	 IOS_CONFIGURATION="$(IOS_CONFIGURATION)" \
+	 CATVOX_TFVARS_PATH="$(CATVOX_TFVARS_PATH)" \
+	 ./scripts/run-on-iphone.sh console
 
 app-deploy: ios-device-launch
 
@@ -183,15 +212,27 @@ functions-test:
 	@npm --prefix functions run test:unit
 
 functions-deploy: functions-build
-	@firebase deploy --only functions --project "$(FIREBASE_PROJECT)"
+	@CATVOX_ENVIRONMENT="$(CATVOX_ENVIRONMENT)" \
+	 CATVOX_PROJECT_ID="$(FIREBASE_PROJECT)" \
+	 CATVOX_FUNCTION_REGION="$(CATVOX_FUNCTION_REGION)" \
+	 CATVOX_BACKEND_SERVICE_ACCOUNT="$(CATVOX_BACKEND_SERVICE_ACCOUNT)" \
+	 firebase deploy --only functions --project "$(FIREBASE_PROJECT)"
 
 functions-integration:
-	@app_check_token="$$(source scripts/lib/app-check-debug-token.sh; read_catvox_app_check_debug_token)"; \
+	@app_check_token="$$(CATVOX_TFVARS_PATH="$(CATVOX_TFVARS_PATH)"; export CATVOX_TFVARS_PATH; source scripts/lib/app-check-debug-token.sh; read_catvox_app_check_debug_token)"; \
 	if [[ -n "$$app_check_token" ]]; then \
-		CATVOX_PROJECT_ID="$(CATVOX_PROJECT_ID)" CATVOX_APP_CHECK_DEBUG_TOKEN="$$app_check_token" npm --prefix functions run test:integration; \
-	else \
-		CATVOX_PROJECT_ID="$(CATVOX_PROJECT_ID)" npm --prefix functions run test:integration; \
-	fi
+		export CATVOX_APP_CHECK_DEBUG_TOKEN="$$app_check_token"; \
+	fi; \
+	CATVOX_ENVIRONMENT="$(CATVOX_ENVIRONMENT)" \
+	CATVOX_INTEGRATION_MUTATIONS_ALLOWED="$(CATVOX_INTEGRATION_MUTATIONS_ALLOWED)" \
+	CATVOX_INTEGRATION_SAFE_ENVIRONMENTS="$(CATVOX_INTEGRATION_SAFE_ENVIRONMENTS)" \
+	CATVOX_PROJECT_ID="$(CATVOX_PROJECT_ID)" \
+	CATVOX_SIGNED_UPLOAD_URL_ENDPOINT="$(CATVOX_SIGNED_UPLOAD_URL_ENDPOINT)" \
+	CATVOX_ANALYSE_VIDEO_ENDPOINT="$(CATVOX_ANALYSE_VIDEO_ENDPOINT)" \
+	CATVOX_FIREBASE_APP_ID="$(CATVOX_FIREBASE_APP_ID)" \
+	CATVOX_FIREBASE_API_KEY="$(CATVOX_FIREBASE_API_KEY)" \
+	CATVOX_IOS_BUNDLE_ID="$(CATVOX_IOS_BUNDLE_ID)" \
+	npm --prefix functions run test:integration
 
 functions-ci: functions-install functions-test
 

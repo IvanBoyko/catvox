@@ -7,17 +7,21 @@ import {
   sendDailyQuotaExceededResponse,
 } from './usageGuard';
 import { runWithAppCheck } from './appCheck';
+import {
+  backendServiceAccountOption,
+  functionRegion,
+  requiredProjectId,
+} from './config';
 
-const REGION = 'us-central1';
 const URL_TTL_MS = 15 * 60 * 1000; // 15 minutes — enough for any upload
 
 export const getSignedUploadURL = onRequest(
   {
-    region: REGION,
+    region: functionRegion(),
     // Public at the IAM layer so mobile clients can reach the endpoint.
     // Firebase App Check is enforced before business logic runs.
     invoker: 'public',
-    serviceAccount: 'catvox-backend-sa@kathelix-catvox-prod.iam.gserviceaccount.com',
+    ...backendServiceAccountOption(),
   },
   async (req, res) => {
     await runWithAppCheck(req, res, async () => {
@@ -47,8 +51,7 @@ export const getSignedUploadURL = onRequest(
         throw err;
       }
 
-      const projectId = process.env.GCLOUD_PROJECT;
-      if (!projectId) throw new Error('GCLOUD_PROJECT env var is not set');
+      const projectId = requiredProjectId();
 
       const bucketName = `catvox-raw-videos-${projectId}`;
       const objectName = `${randomUUID()}-${filename}`;

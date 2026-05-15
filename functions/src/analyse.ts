@@ -11,8 +11,12 @@ import {
 } from './usageGuard';
 import { callGemini } from './gemini';
 import { runWithAppCheck } from './appCheck';
+import {
+  backendServiceAccountOption,
+  functionRegion,
+  requiredProjectId,
+} from './config';
 
-const REGION = 'us-central1';
 const MAX_UPLOAD_BYTES = 100 * 1024 * 1024;
 const MAX_VERTEX_RESPONSE_ATTEMPTS = 2;
 
@@ -38,11 +42,11 @@ class InvalidVertexResponseError extends Error {
 
 export const analyseVideo = onRequest(
   {
-    region: REGION,
+    region: functionRegion(),
     // Public at the IAM layer so mobile clients can reach the endpoint.
     // Firebase App Check is enforced before business logic runs.
     invoker: 'public',
-    serviceAccount: 'catvox-backend-sa@kathelix-catvox-prod.iam.gserviceaccount.com',
+    ...backendServiceAccountOption(),
     timeoutSeconds: 120, // Vertex AI multimodal calls can take up to ~30s; headroom for retries.
     memory: '512MiB',
   },
@@ -71,8 +75,7 @@ export const analyseVideo = onRequest(
         return;
       }
 
-      const projectId = process.env.GCLOUD_PROJECT;
-      if (!projectId) throw new Error('GCLOUD_PROJECT env var is not set');
+      const projectId = requiredProjectId();
 
       const objectInfo = parseGcsUri(gcsUri);
       if (!objectInfo) {

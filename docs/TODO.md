@@ -22,9 +22,11 @@ Example of the JSON that we need in Notion:
 ## Infrastructure / Runtime Maintenance
 
 ### Dev / Production Environment Split Before Launch
-Before public launch, split the current live GCP/Firebase environment from the real production environment. Until that split, treat `kathelix-catvox-prod` operationally as the Dev environment despite the current project name. See ADR-0013.
+Before public launch, split the current live GCP/Firebase environment from the real production environment. Until that split, treat `kathelix-catvox-prod` operationally as the Dev environment despite the current project name. Use the generic named-environment configuration model from ADR-0017 so future environments can be added without hard-coding only Dev and Prod.
 
 Subtasks:
+* [x] Decide the environment model: named environments, initially `dev` and `prod`, with environment name treated as configuration data. See ADR-0017.
+* [x] Parameterize the single-environment code path before creating new cloud resources.
 * Decide final environment naming and whether `kathelix-catvox-prod` is kept, renamed by convention only, or replaced during launch cutover.
 * Create separate GCP/Firebase projects for Dev and Prod, with separate Firebase apps, App Check configuration, Firestore databases, GCS buckets, Secret Manager secrets, Artifact Registry repos, and Cloud Functions deployments.
 * Split Terraform state and variables per environment so Dev and Prod can be planned/applied independently.

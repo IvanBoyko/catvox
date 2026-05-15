@@ -1,6 +1,8 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 
+process.env.CATVOX_PROJECT_ID = process.env.CATVOX_PROJECT_ID || 'catvox-unit-test';
+
 const {
   getAnalysisPayload,
   isValidAnalysisRequestId,

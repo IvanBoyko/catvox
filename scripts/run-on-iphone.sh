@@ -14,6 +14,9 @@
 #
 # Environment overrides:
 #   DEVICE_ID  Target device UDID.
+#   CATVOX_IOS_SCHEME
+#   CATVOX_IOS_BUNDLE_ID
+#   IOS_CONFIGURATION
 #   CATVOX_APP_CHECK_DEBUG_TOKEN or TF_VAR_app_check_debug_token
 #              Registered Firebase App Check debug token for Debug builds.
 #              Falls back to terraform/terraform.tfvars app_check_debug_token.
@@ -21,11 +24,12 @@
 set -euo pipefail
 
 DEVICE_ID="${DEVICE_ID:-264DA990-A302-5C43-8D51-91BB11C7A1E4}"
-SCHEME="CatVox"
+SCHEME="${CATVOX_IOS_SCHEME:-CatVox}"
 PROJECT="CatVox.xcodeproj"
-BUNDLE_ID="com.kathelix.catvox"
+CONFIGURATION="${IOS_CONFIGURATION:-Debug}"
+BUNDLE_ID="${CATVOX_IOS_BUNDLE_ID:-com.kathelix.catvox}"
 DERIVED_DATA_PATH=".build/ios-device"
-APP_PATH="${DERIVED_DATA_PATH}/Build/Products/Debug-iphoneos/${SCHEME}.app"
+APP_PATH="${DERIVED_DATA_PATH}/Build/Products/${CONFIGURATION}-iphoneos/${SCHEME}.app"
 MODE="${1:-launch}"
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -48,6 +52,9 @@ Modes:
 
 Environment overrides:
   DEVICE_ID  Target device UDID. Current default: ${DEVICE_ID}
+  CATVOX_IOS_SCHEME     Current default: ${SCHEME}
+  CATVOX_IOS_BUNDLE_ID  Current default: ${BUNDLE_ID}
+  IOS_CONFIGURATION      Current default: ${CONFIGURATION}
   CATVOX_APP_CHECK_DEBUG_TOKEN or TF_VAR_app_check_debug_token
              Registered Firebase App Check debug token for Debug builds.
              Falls back to terraform/terraform.tfvars app_check_debug_token.
@@ -87,7 +94,7 @@ echo "Building ${SCHEME} for device ${DEVICE_ID}..."
 xcodebuild \
   -project "${PROJECT}" \
   -scheme "${SCHEME}" \
-  -configuration Debug \
+  -configuration "${CONFIGURATION}" \
   -destination "id=${DEVICE_ID}" \
   -derivedDataPath "${DERIVED_DATA_PATH}" \
   -allowProvisioningUpdates \

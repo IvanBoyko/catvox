@@ -33,9 +33,12 @@ targets:
         product: FirebaseCore
       - package: Firebase
         product: FirebaseAppCheck
+    configFiles:
+      Debug: config/environments/dev.xcconfig
+      Release: config/environments/dev.xcconfig
     settings:
       base:
-        PRODUCT_BUNDLE_IDENTIFIER: com.kathelix.catvox
+        PRODUCT_BUNDLE_IDENTIFIER: $(CATVOX_PRODUCT_BUNDLE_IDENTIFIER)
         DEVELOPMENT_TEAM: QYT76L5836
         CODE_SIGN_ENTITLEMENTS: CatVox/CatVox.entitlements
         SWIFT_VERSION: "5.0"
@@ -45,14 +48,15 @@ targets:
         ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
         DEVELOPMENT_ASSET_PATHS: '"CatVox/Preview Content"'
         STRING_CATALOG_GENERATE_SYMBOLS: YES
-        CATVOX_POSTHOG_PROJECT_TOKEN: "phc_ktoFY7ywiGeSCdyLT7msVfWtankAWx8QLLrLerBzmMr8"
-        CATVOX_POSTHOG_HOST: "https://us.i.posthog.com"
     info:
       path: CatVox/Info.plist
       properties:
         CFBundleDisplayName: CatVox
-        PostHogProjectToken: $(CATVOX_POSTHOG_PROJECT_TOKEN)
-        PostHogHost: $(CATVOX_POSTHOG_HOST)
+        CatVoxEnvironment: $(CATVOX_ENVIRONMENT)
+        CatVoxSignedUploadURLEndpoint: "https://$(CATVOX_SIGNED_UPLOAD_URL_HOST)"
+        CatVoxAnalyseVideoEndpoint: "https://$(CATVOX_ANALYSE_VIDEO_HOST)"
+        CatVoxPostHogProjectToken: $(CATVOX_POSTHOG_PROJECT_TOKEN)
+        CatVoxPostHogHost: "https://$(CATVOX_POSTHOG_HOST_NAME)"
         UILaunchScreen:
           UIColorName: ""
         UISupportedInterfaceOrientations:

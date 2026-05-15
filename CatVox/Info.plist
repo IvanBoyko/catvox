@@ -20,16 +20,22 @@
 	<string>1.0</string>
 	<key>CFBundleVersion</key>
 	<string>1</string>
+	<key>CatVoxAnalyseVideoEndpoint</key>
+	<string>https://$(CATVOX_ANALYSE_VIDEO_HOST)</string>
+	<key>CatVoxEnvironment</key>
+	<string>$(CATVOX_ENVIRONMENT)</string>
+	<key>CatVoxPostHogHost</key>
+	<string>https://$(CATVOX_POSTHOG_HOST_NAME)</string>
+	<key>CatVoxPostHogProjectToken</key>
+	<string>$(CATVOX_POSTHOG_PROJECT_TOKEN)</string>
+	<key>CatVoxSignedUploadURLEndpoint</key>
+	<string>https://$(CATVOX_SIGNED_UPLOAD_URL_HOST)</string>
 	<key>NSCameraUsageDescription</key>
 	<string>CatVox records 10-second clips to analyse your cat's behaviour.</string>
 	<key>NSMicrophoneUsageDescription</key>
 	<string>CatVox captures audio to analyse your cat's vocalisations.</string>
 	<key>NSPhotoLibraryAddUsageDescription</key>
 	<string>CatVox saves rendered share videos to your Photos library when you ask it to.</string>
-	<key>PostHogHost</key>
-	<string>$(CATVOX_POSTHOG_HOST)</string>
-	<key>PostHogProjectToken</key>
-	<string>$(CATVOX_POSTHOG_PROJECT_TOKEN)</string>
 	<key>UILaunchScreen</key>
 	<dict>
 		<key>UIColorName</key>
