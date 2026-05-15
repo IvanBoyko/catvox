@@ -89,6 +89,7 @@
 		19667502574A1D26D0A51E54 /* RecordingView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecordingView.swift; sourceTree = "<group>"; };
 		19AE93315B15E827FC62B553 /* CatVoxLaunchConfiguration.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CatVoxLaunchConfiguration.swift; sourceTree = "<group>"; };
 		1A557949F28BBD9853A801AE /* GoogleService-Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = "GoogleService-Info.plist"; sourceTree = "<group>"; };
+		2086AF68571F274493E9D93C /* dev.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = dev.xcconfig; sourceTree = "<group>"; };
 		215145685222056D654FFBD5 /* CameraService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CameraService.swift; sourceTree = "<group>"; };
 		337DB0A3CC6E2C83B8244190 /* ExpertInsightsDrawer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExpertInsightsDrawer.swift; sourceTree = "<group>"; };
 		3F0F9D24B635C065A8B16442 /* SavedScan.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SavedScan.swift; sourceTree = "<group>"; };
@@ -183,6 +184,14 @@
 			path = Models;
 			sourceTree = "<group>";
 		};
+		43D4071E7A54C4BE027B7A3C /* config */ = {
+			isa = PBXGroup;
+			children = (
+				678BC9723E55EEFCD29B53EA /* environments */,
+			);
+			path = config;
+			sourceTree = "<group>";
+		};
 		4C9BA6609FEE1ADFF6BA2072 /* Products */ = {
 			isa = PBXGroup;
 			children = (
@@ -191,6 +200,14 @@
 				6ACE993B64A7FED98D546BC0 /* CatVoxUITests.xctest */,
 			);
 			name = Products;
+			sourceTree = "<group>";
+		};
+		678BC9723E55EEFCD29B53EA /* environments */ = {
+			isa = PBXGroup;
+			children = (
+				2086AF68571F274493E9D93C /* dev.xcconfig */,
+			);
+			path = environments;
 			sourceTree = "<group>";
 		};
 		74F08FAA36CAA3571905D207 /* Components */ = {
@@ -316,6 +333,7 @@
 				7999165DC9E8C948CFB7E844 /* CatVox */,
 				FB5B11DC480CF0958CCC390A /* CatVoxTests */,
 				C99F0157F9654EE31686A685 /* CatVoxUITests */,
+				43D4071E7A54C4BE027B7A3C /* config */,
 				4C9BA6609FEE1ADFF6BA2072 /* Products */,
 			);
 			sourceTree = "<group>";
@@ -609,15 +627,10 @@
 		};
 		073CB9C14934C03AC448BA24 /* Debug */ = {
 			isa = XCBuildConfiguration;
+			baseConfigurationReference = 2086AF68571F274493E9D93C /* dev.xcconfig */;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
-				CATVOX_ANALYSE_VIDEO_ENDPOINT = "https://analysevideo-pdkw5uifga-uc.a.run.app";
-				CATVOX_ENVIRONMENT = dev;
-				CATVOX_POSTHOG_HOST = "https://us.i.posthog.com";
-				CATVOX_POSTHOG_PROJECT_TOKEN = phc_ktoFY7ywiGeSCdyLT7msVfWtankAWx8QLLrLerBzmMr8;
-				CATVOX_PRODUCT_BUNDLE_IDENTIFIER = com.kathelix.catvox;
-				CATVOX_SIGNED_UPLOAD_URL_ENDPOINT = "https://getsigneduploadurl-pdkw5uifga-uc.a.run.app";
 				CODE_SIGN_ENTITLEMENTS = CatVox/CatVox.entitlements;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
 				DEVELOPMENT_ASSET_PATHS = "\"CatVox/Preview Content\"";
@@ -697,15 +710,10 @@
 		};
 		4E044AB3B4EFADB5E039CFC9 /* Release */ = {
 			isa = XCBuildConfiguration;
+			baseConfigurationReference = 2086AF68571F274493E9D93C /* dev.xcconfig */;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
-				CATVOX_ANALYSE_VIDEO_ENDPOINT = "https://analysevideo-pdkw5uifga-uc.a.run.app";
-				CATVOX_ENVIRONMENT = dev;
-				CATVOX_POSTHOG_HOST = "https://us.i.posthog.com";
-				CATVOX_POSTHOG_PROJECT_TOKEN = phc_ktoFY7ywiGeSCdyLT7msVfWtankAWx8QLLrLerBzmMr8;
-				CATVOX_PRODUCT_BUNDLE_IDENTIFIER = com.kathelix.catvox;
-				CATVOX_SIGNED_UPLOAD_URL_ENDPOINT = "https://getsigneduploadurl-pdkw5uifga-uc.a.run.app";
 				CODE_SIGN_ENTITLEMENTS = CatVox/CatVox.entitlements;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
 				DEVELOPMENT_ASSET_PATHS = "\"CatVox/Preview Content\"";

@@ -1,0 +1,14 @@
+GCP_PROJECT_ID = kathelix-catvox-prod
+FIREBASE_PROJECT = kathelix-catvox-prod
+CATVOX_PROJECT_ID = kathelix-catvox-prod
+CATVOX_ENVIRONMENT = dev
+CATVOX_FUNCTION_REGION = us-central1
+CATVOX_PRODUCT_BUNDLE_IDENTIFIER = com.kathelix.catvox
+CATVOX_IOS_BUNDLE_ID = com.kathelix.catvox
+CATVOX_SIGNED_UPLOAD_URL_ENDPOINT = https:/$()/getsigneduploadurl-pdkw5uifga-uc.a.run.app
+CATVOX_ANALYSE_VIDEO_ENDPOINT = https:/$()/analysevideo-pdkw5uifga-uc.a.run.app
+CATVOX_FIREBASE_APP_ID = 1:953500951129:ios:1595a4c27cd8f3f7964748
+CATVOX_FIREBASE_API_KEY = AIzaSyAMKDQ_mIGQWQF4VhU8lytvvGx1TpuoBMI
+CATVOX_POSTHOG_PROJECT_TOKEN = phc_ktoFY7ywiGeSCdyLT7msVfWtankAWx8QLLrLerBzmMr8
+CATVOX_POSTHOG_HOST = https:/$()/us.i.posthog.com
+CATVOX_INTEGRATION_SAFE_ENVIRONMENTS = dev

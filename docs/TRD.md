@@ -333,7 +333,7 @@ CatVox uses named environments. Initial names are `dev` and `prod`, but product 
 
 Each environment owns its own GCP/Firebase project, Firebase iOS app, App Check configuration, backend endpoints, PostHog configuration, GitHub secret/variable set, and Terraform state.
 
-Current pre-split defaults continue to point at the existing live-as-Dev backend. Environment-dependent values should be read from build settings, `Info.plist`, environment variables, CI secrets/variables, or explicit backend config files rather than scattered literals in source code.
+Current pre-split defaults continue to point at the existing live-as-Dev backend. App-facing environment values use committed `config/environments/<environment>.xcconfig` files as the source of truth so bare Xcode runs and Makefile-driven automation read the same values. XcodeGen attaches the selected xcconfig to the app target and passes values through build settings into `Info.plist`; the Makefile reads the same file through `CATVOX_ENV_CONFIG` before applying command-line overrides. Infrastructure-only values still belong in explicit Terraform backend/tfvars files.
 
 Initial iOS bundle ID convention:
 * `com.kathelix.catvox.dev` for Dev/internal builds (future split; pre-split Dev still uses the current `com.kathelix.catvox` bundle ID)

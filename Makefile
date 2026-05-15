@@ -8,19 +8,22 @@ IOS_BUILD_DESTINATION := generic/platform=iOS Simulator
 IOS_TEST_DESTINATION := platform=iOS Simulator,name=iPhone 16,OS=latest
 IOS_UI_TEST_DESTINATION := $(IOS_TEST_DESTINATION)
 
-GCP_PROJECT_ID ?= kathelix-catvox-prod
-FIREBASE_PROJECT ?= $(GCP_PROJECT_ID)
-CATVOX_PROJECT_ID ?= $(GCP_PROJECT_ID)
-CATVOX_ENVIRONMENT ?= dev
-CATVOX_FUNCTION_REGION ?= us-central1
-CATVOX_BACKEND_SERVICE_ACCOUNT ?= catvox-backend-sa@$(FIREBASE_PROJECT).iam.gserviceaccount.com
-CATVOX_SIGNED_UPLOAD_URL_ENDPOINT ?= https://getsigneduploadurl-pdkw5uifga-uc.a.run.app
-CATVOX_ANALYSE_VIDEO_ENDPOINT ?= https://analysevideo-pdkw5uifga-uc.a.run.app
-CATVOX_FIREBASE_APP_ID ?= 1:953500951129:ios:1595a4c27cd8f3f7964748
-CATVOX_FIREBASE_API_KEY ?= AIzaSyAMKDQ_mIGQWQF4VhU8lytvvGx1TpuoBMI
-CATVOX_IOS_BUNDLE_ID ?= com.kathelix.catvox
+CATVOX_ENV_CONFIG ?= config/environments/dev.xcconfig
+catvox_xcconfig_value = $(strip $(shell scripts/lib/read-xcconfig-value.sh '$(CATVOX_ENV_CONFIG)' '$(1)' 2>/dev/null))
+
+GCP_PROJECT_ID ?= $(or $(call catvox_xcconfig_value,GCP_PROJECT_ID),kathelix-catvox-prod)
+FIREBASE_PROJECT ?= $(or $(call catvox_xcconfig_value,FIREBASE_PROJECT),$(GCP_PROJECT_ID))
+CATVOX_PROJECT_ID ?= $(or $(call catvox_xcconfig_value,CATVOX_PROJECT_ID),$(GCP_PROJECT_ID))
+CATVOX_ENVIRONMENT ?= $(or $(call catvox_xcconfig_value,CATVOX_ENVIRONMENT),dev)
+CATVOX_FUNCTION_REGION ?= $(or $(call catvox_xcconfig_value,CATVOX_FUNCTION_REGION),us-central1)
+CATVOX_BACKEND_SERVICE_ACCOUNT ?= $(or $(call catvox_xcconfig_value,CATVOX_BACKEND_SERVICE_ACCOUNT),catvox-backend-sa@$(FIREBASE_PROJECT).iam.gserviceaccount.com)
+CATVOX_SIGNED_UPLOAD_URL_ENDPOINT ?= $(or $(call catvox_xcconfig_value,CATVOX_SIGNED_UPLOAD_URL_ENDPOINT),https://getsigneduploadurl-pdkw5uifga-uc.a.run.app)
+CATVOX_ANALYSE_VIDEO_ENDPOINT ?= $(or $(call catvox_xcconfig_value,CATVOX_ANALYSE_VIDEO_ENDPOINT),https://analysevideo-pdkw5uifga-uc.a.run.app)
+CATVOX_FIREBASE_APP_ID ?= $(or $(call catvox_xcconfig_value,CATVOX_FIREBASE_APP_ID),1:953500951129:ios:1595a4c27cd8f3f7964748)
+CATVOX_FIREBASE_API_KEY ?= $(or $(call catvox_xcconfig_value,CATVOX_FIREBASE_API_KEY),AIzaSyAMKDQ_mIGQWQF4VhU8lytvvGx1TpuoBMI)
+CATVOX_IOS_BUNDLE_ID ?= $(or $(call catvox_xcconfig_value,CATVOX_IOS_BUNDLE_ID),$(call catvox_xcconfig_value,CATVOX_PRODUCT_BUNDLE_IDENTIFIER),com.kathelix.catvox)
 CATVOX_INTEGRATION_MUTATIONS_ALLOWED ?= 1
-CATVOX_INTEGRATION_SAFE_ENVIRONMENTS ?= dev
+CATVOX_INTEGRATION_SAFE_ENVIRONMENTS ?= $(or $(call catvox_xcconfig_value,CATVOX_INTEGRATION_SAFE_ENVIRONMENTS),dev)
 CATVOX_TFVARS_PATH ?= terraform/terraform.tfvars
 
 .PHONY: help doctor \
@@ -57,6 +60,7 @@ help:
 		'  make bootstrap-wif          Run GitHub Actions WIF bootstrap script' \
 		'' \
 		'Environment overrides:' \
+		'  CATVOX_ENV_CONFIG=config/environments/dev.xcconfig selects app-facing env defaults' \
 		'  CATVOX_ENVIRONMENT=dev GCP_PROJECT_ID=... FIREBASE_PROJECT=... CATVOX_PROJECT_ID=...' \
 		'  CATVOX_SIGNED_UPLOAD_URL_ENDPOINT=... CATVOX_ANALYSE_VIDEO_ENDPOINT=...' \
 		'  CATVOX_FIREBASE_APP_ID=... CATVOX_FIREBASE_API_KEY=... CATVOX_IOS_BUNDLE_ID=...' \

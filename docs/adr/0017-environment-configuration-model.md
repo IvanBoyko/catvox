@@ -79,6 +79,9 @@ marked integration-safe. Prod receives only protected, non-invasive smoke tests.
 
 - Pre-split work should preserve current behavior while moving values behind
   named configuration keys.
+- App-facing values should use `config/environments/<environment>.xcconfig` as
+  the source of truth so bare Xcode builds and Makefile-driven automation read
+  the same environment defaults.
 - Terraform backend configuration cannot use normal Terraform variables, so
   future state files should use explicit backend config files such as
   `terraform/backend/<environment>.hcl`.
