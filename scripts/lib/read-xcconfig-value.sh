@@ -8,7 +8,7 @@ if [[ -z "$file" || -z "$key" || ! -f "$file" ]]; then
   exit 0
 fi
 
-awk -F '=' -v key="$key" '
+value="$(awk -F '=' -v key="$key" '
   $1 ~ "^[[:space:]]*" key "[[:space:]]*$" {
     value = $2
     sub(/^[[:space:]]+/, "", value)
@@ -16,4 +16,13 @@ awk -F '=' -v key="$key" '
     print value
     exit
   }
-' "$file"
+' "$file")"
+
+if [[ "$key" =~ (_HOST|_HOST_NAME)$ && "$value" == *"://"* ]]; then
+  printf 'error: %s in %s must be a hostname only, got %s\n' "$key" "$file" "$value" >&2
+  exit 2
+fi
+
+if [[ -n "$value" ]]; then
+  printf '%s\n' "$value"
+fi

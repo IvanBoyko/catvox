@@ -1,7 +1,14 @@
 import { FieldValue, Firestore, Timestamp } from '@google-cloud/firestore';
 import { spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { readFileSync } from 'node:fs';
+import {
+  argValue,
+  assertMutationGateAllowed,
+  configValue,
+  loadEnvFile,
+  parseList,
+  requiredConfigValue,
+} from './config';
 
 const DAILY_LIMIT = 5;
 const RESERVATION_TTL_MS = 5 * 60 * 1000;
@@ -58,28 +65,31 @@ if (args.has('-h') || args.has('--help') || args.has('help')) {
 
 const confirmed = args.has('--confirm');
 const skipLog = args.has('--skip-log');
-const mutationsAllowed = configValue('CATVOX_INTEGRATION_MUTATIONS_ALLOWED') === '1';
+const mutationsAllowed = configValue(process.env, 'CATVOX_INTEGRATION_MUTATIONS_ALLOWED') === '1';
 
-const environmentName = requiredConfigValue('CATVOX_ENVIRONMENT');
+const environmentName = requiredConfigValue(process.env, 'CATVOX_ENVIRONMENT');
 const integrationSafeEnvironments = parseList(
-  configValue('CATVOX_INTEGRATION_SAFE_ENVIRONMENTS') ?? 'dev'
+  configValue(process.env, 'CATVOX_INTEGRATION_SAFE_ENVIRONMENTS') ?? 'dev'
 );
 const projectId = requiredConfigValue(
+  process.env,
   'CATVOX_PROJECT_ID',
   'GCP_PROJECT_ID',
   'GCLOUD_PROJECT'
 );
 const signedUrlEndpoint = requiredConfigValue(
+  process.env,
   'CATVOX_SIGNED_UPLOAD_URL_ENDPOINT',
   'CATVOX_SIGNED_URL_ENDPOINT'
 );
 const analyseEndpoint = requiredConfigValue(
+  process.env,
   'CATVOX_ANALYSE_VIDEO_ENDPOINT',
   'CATVOX_ANALYSE_ENDPOINT'
 );
-const firebaseAppId = requiredConfigValue('CATVOX_FIREBASE_APP_ID');
-const firebaseApiKey = requiredConfigValue('CATVOX_FIREBASE_API_KEY');
-const iosBundleId = requiredConfigValue('CATVOX_IOS_BUNDLE_ID');
+const firebaseAppId = requiredConfigValue(process.env, 'CATVOX_FIREBASE_APP_ID');
+const firebaseApiKey = requiredConfigValue(process.env, 'CATVOX_FIREBASE_API_KEY');
+const iosBundleId = requiredConfigValue(process.env, 'CATVOX_IOS_BUNDLE_ID');
 const rawAppCheckDebugToken =
   process.env.CATVOX_APP_CHECK_DEBUG_TOKEN ||
   process.env.TF_VAR_app_check_debug_token ||
@@ -108,97 +118,6 @@ Environment:
   CATVOX_FIREBASE_API_KEY                  Required. Firebase web API key for App Check exchange.
   CATVOX_IOS_BUNDLE_ID                     Required. Firebase iOS bundle ID.
 `);
-}
-
-function configValue(...keys: string[]): string | undefined {
-  for (const key of keys) {
-    const value = normalize(process.env[key]);
-    if (value) {
-      return value;
-    }
-  }
-
-  return undefined;
-}
-
-function requiredConfigValue(primaryKey: string, ...aliasKeys: string[]): string {
-  const value = configValue(primaryKey, ...aliasKeys);
-  if (!value) {
-    throw new Error(
-      `Missing required integration configuration: ${[primaryKey, ...aliasKeys].join(' or ')}`
-    );
-  }
-
-  return value;
-}
-
-function argValue(argv: string[], name: string): string | undefined {
-  const prefix = `${name}=`;
-  for (let index = 0; index < argv.length; index += 1) {
-    const value = argv[index];
-    if (value.startsWith(prefix)) {
-      return value.slice(prefix.length);
-    }
-    if (value === name) {
-      return argv[index + 1];
-    }
-  }
-
-  return undefined;
-}
-
-function loadEnvFile(path: string | undefined): void {
-  const normalizedPath = normalize(path);
-  if (!normalizedPath) {
-    return;
-  }
-
-  for (const line of readFileSync(normalizedPath, 'utf8').split(/\r?\n/)) {
-    const trimmed = line.trim();
-    if (!trimmed || trimmed.startsWith('#')) {
-      continue;
-    }
-
-    const separator = trimmed.indexOf('=');
-    if (separator === -1) {
-      continue;
-    }
-
-    const key = trimmed.slice(0, separator).trim();
-    const value = stripQuotes(trimmed.slice(separator + 1).trim());
-    if (key && process.env[key] === undefined) {
-      process.env[key] = value;
-    }
-  }
-}
-
-function parseList(value: string): Set<string> {
-  return new Set(
-    value
-      .split(',')
-      .map((item) => item.trim())
-      .filter((item) => item.length > 0)
-  );
-}
-
-function normalize(value: string | undefined): string | undefined {
-  if (value === undefined) {
-    return undefined;
-  }
-
-  const trimmed = value.trim();
-  return trimmed.length > 0 ? trimmed : undefined;
-}
-
-function stripQuotes(value: string): string {
-  if (
-    (value.startsWith('"') && value.endsWith('"')) ||
-    (value.startsWith("'") && value.endsWith("'"))
-  ) {
-    return value.slice(1, -1);
-  }
-
-  return value;
 }
 
 function currentUTCQuotaWindow(now = new Date()): UTCQuotaWindow {
@@ -704,19 +623,16 @@ async function verifyAtomicReservationRace(
 }
 
 async function main(): Promise<void> {
-  if (!confirmed || !mutationsAllowed) {
+  try {
+    assertMutationGateAllowed({
+      confirmed,
+      mutationsAllowed,
+      environmentName,
+      integrationSafeEnvironments,
+    });
+  } catch (error) {
     usage();
-    throw new Error(
-      'Refusing to touch backend data without --confirm and CATVOX_INTEGRATION_MUTATIONS_ALLOWED=1'
-    );
-  }
-
-  if (!integrationSafeEnvironments.has(environmentName)) {
-    usage();
-    throw new Error(
-      `Refusing to touch backend data for CATVOX_ENVIRONMENT=${environmentName}. ` +
-      `Add it to CATVOX_INTEGRATION_SAFE_ENVIRONMENTS only for environments that are safe for mutable tests.`
-    );
+    throw error;
   }
 
   const testUserId = `quota-contract-test-${Date.now()}`;
