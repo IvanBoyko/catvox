@@ -1,4 +1,5 @@
 const DEFAULT_FUNCTION_REGION = 'us-central1';
+// Same account name per environment project; distinct projects produce distinct IAM principals.
 const DEFAULT_BACKEND_SERVICE_ACCOUNT_NAME = 'catvox-backend-sa';
 
 type Environment = NodeJS.ProcessEnv;

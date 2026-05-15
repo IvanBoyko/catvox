@@ -38,10 +38,14 @@ test('backendServiceAccount uses explicit override when present', () => {
   );
 });
 
-test('backendServiceAccount derives account from configured project', () => {
+test('backendServiceAccount derives distinct account emails from each project', () => {
   assert.equal(
     backendServiceAccount({ CATVOX_PROJECT_ID: 'catvox-dev' }),
     'catvox-backend-sa@catvox-dev.iam.gserviceaccount.com'
+  );
+  assert.equal(
+    backendServiceAccount({ CATVOX_PROJECT_ID: 'catvox-prod' }),
+    'catvox-backend-sa@catvox-prod.iam.gserviceaccount.com'
   );
 });
 
