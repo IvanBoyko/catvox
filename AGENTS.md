@@ -124,8 +124,9 @@ Environment-dependent app/backend values are parameterized through generic
 `CATVOX_*` variables such as `CATVOX_ENVIRONMENT`,
 `CATVOX_SIGNED_UPLOAD_URL_ENDPOINT`, `CATVOX_ANALYSE_VIDEO_ENDPOINT`,
 `CATVOX_FIREBASE_APP_ID`, `CATVOX_FIREBASE_API_KEY`, and
-`CATVOX_IOS_BUNDLE_ID`. Treat the environment name as data, not as a hard-coded
-Dev/Prod branch. See ADR-0017.
+`CATVOX_IOS_BUNDLE_ID`. Mutable integration tests also require
+`CATVOX_INTEGRATION_SAFE_ENVIRONMENTS` to include `CATVOX_ENVIRONMENT`. Treat
+the environment name as data, not as a hard-coded Dev/Prod branch. See ADR-0017.
 
 `make functions-integration` needs a Firebase App Check debug token. It preserves an explicitly supplied `CATVOX_APP_CHECK_DEBUG_TOKEN`; otherwise `TF_VAR_app_check_debug_token` is accepted by the integration script. For local developer convenience, the Makefile silently falls back to `app_check_debug_token` in local `terraform/terraform.tfvars` when neither environment variable is set. Never commit debug tokens or shared Xcode schemes containing `AppCheckDebugToken` or `FIRAAppCheckDebugToken`.
 
@@ -439,7 +440,7 @@ If a feature that was originally tracked under one broad backlog item becomes se
 
 - The Firebase Functions runtime is Node.js 22. For local validation, prefer running `functions` commands under Node.js 22 so `make functions-install`, `make functions-build`, and `make functions-test` match CI and do not emit avoidable engine warnings.
 - If Node.js 22 is unavailable locally, it is acceptable to run the build under the installed Node version, but explicitly report any expected `EBADENGINE` warning as an environment mismatch rather than treating it as a workflow failure.
-- Backend integration tests may write temporary Firestore documents and are safe to run against the current Dev backend with `make functions-integration` or `npm --prefix functions run test:integration`. The suite exchanges the registered App Check debug token for a valid App Check token, verifies that both HTTP Functions reject missing App Check tokens with `401 app_check_unauthorized`, verifies the Firestore quota reservation race contract, then verifies the daily-quota contract and structured quota log. Do not run Firestore-mutating integration tests against a future real Prod environment; future Prod should use only a separate, protected, non-invasive smoke-test runbook.
+- Backend integration tests may write temporary Firestore documents and are safe to run against the current Dev backend with `make functions-integration` or `npm --prefix functions run test:integration`. The suite exchanges the registered App Check debug token for a valid App Check token, verifies that both HTTP Functions reject missing App Check tokens with `401 app_check_unauthorized`, verifies the Firestore quota reservation race contract, then verifies the daily-quota contract and structured quota log. Mutating runs require both `CATVOX_INTEGRATION_MUTATIONS_ALLOWED=1` and `CATVOX_ENVIRONMENT` to be listed in `CATVOX_INTEGRATION_SAFE_ENVIRONMENTS`. Do not run Firestore-mutating integration tests against a future real Prod environment; future Prod should use only a separate, protected, non-invasive smoke-test runbook.
 - Integration scripts should not import production helpers merely to reuse Firestore transaction code if doing so initializes Firebase Admin in the test process. Prefer a small, explicit test-harness Firestore probe using `@google-cloud/firestore` so local ADC and GitHub Actions WIF behave consistently.
 
 ### HLD vs TRD

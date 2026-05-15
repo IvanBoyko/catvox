@@ -58,9 +58,12 @@ if (args.has('-h') || args.has('--help') || args.has('help')) {
 
 const confirmed = args.has('--confirm');
 const skipLog = args.has('--skip-log');
-const mutationsAllowed = process.env.CATVOX_INTEGRATION_MUTATIONS_ALLOWED === '1';
+const mutationsAllowed = configValue('CATVOX_INTEGRATION_MUTATIONS_ALLOWED') === '1';
 
-const environmentName = configValue('CATVOX_ENVIRONMENT') ?? 'local';
+const environmentName = requiredConfigValue('CATVOX_ENVIRONMENT');
+const integrationSafeEnvironments = parseList(
+  configValue('CATVOX_INTEGRATION_SAFE_ENVIRONMENTS') ?? 'dev'
+);
 const projectId = requiredConfigValue(
   'CATVOX_PROJECT_ID',
   'GCP_PROJECT_ID',
@@ -94,7 +97,8 @@ Options:
   --env-file  Optional. Loads KEY=value lines before reading configuration.
 
 Environment:
-  CATVOX_ENVIRONMENT                       Environment label for logs.
+  CATVOX_ENVIRONMENT                       Required. Environment name; must be integration-safe.
+  CATVOX_INTEGRATION_SAFE_ENVIRONMENTS     Comma-separated mutation-safe env names. Defaults to dev.
   CATVOX_INTEGRATION_MUTATIONS_ALLOWED=1  Required for Firestore-mutating tests.
   CATVOX_PROJECT_ID                        Required. GCP/Firebase project ID.
   CATVOX_SIGNED_UPLOAD_URL_ENDPOINT        Required. getSignedUploadURL endpoint.
@@ -166,6 +170,15 @@ function loadEnvFile(path: string | undefined): void {
       process.env[key] = value;
     }
   }
+}
+
+function parseList(value: string): Set<string> {
+  return new Set(
+    value
+      .split(',')
+      .map((item) => item.trim())
+      .filter((item) => item.length > 0)
+  );
 }
 
 function normalize(value: string | undefined): string | undefined {
@@ -695,6 +708,14 @@ async function main(): Promise<void> {
     usage();
     throw new Error(
       'Refusing to touch backend data without --confirm and CATVOX_INTEGRATION_MUTATIONS_ALLOWED=1'
+    );
+  }
+
+  if (!integrationSafeEnvironments.has(environmentName)) {
+    usage();
+    throw new Error(
+      `Refusing to touch backend data for CATVOX_ENVIRONMENT=${environmentName}. ` +
+      `Add it to CATVOX_INTEGRATION_SAFE_ENVIRONMENTS only for environments that are safe for mutable tests.`
     );
   }
 

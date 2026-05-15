@@ -70,6 +70,8 @@ terraform/*.tfstate.backup
 terraform/terraform.tfvars
 terraform/env/*.tfvars
 !terraform/env/*.tfvars.example
+terraform/backend/*.hcl
+!terraform/backend/*.hcl.example
 .env
 
 # Codex

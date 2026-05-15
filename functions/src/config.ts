@@ -1,5 +1,4 @@
 const DEFAULT_FUNCTION_REGION = 'us-central1';
-// Same account name per environment project; distinct projects produce distinct IAM principals.
 const DEFAULT_BACKEND_SERVICE_ACCOUNT_NAME = 'catvox-backend-sa';
 
 type Environment = NodeJS.ProcessEnv;
@@ -52,7 +51,19 @@ export function backendServiceAccountOption(
   env: Environment = process.env
 ): { serviceAccount?: string } {
   const serviceAccount = backendServiceAccount(env);
-  return serviceAccount ? { serviceAccount } : {};
+  if (serviceAccount) {
+    return { serviceAccount };
+  }
+
+  if (firstValue(env.CATVOX_ALLOW_DEFAULT_SERVICE_ACCOUNT) === '1') {
+    return {};
+  }
+
+  throw new Error(
+    'Backend service account is not configured. Set CATVOX_BACKEND_SERVICE_ACCOUNT, ' +
+    'CATVOX_PROJECT_ID, GCP_PROJECT_ID, or GCLOUD_PROJECT. To intentionally use the ' +
+    'platform default service account, set CATVOX_ALLOW_DEFAULT_SERVICE_ACCOUNT=1.'
+  );
 }
 
 function firstValue(...values: Array<string | undefined>): string | undefined {

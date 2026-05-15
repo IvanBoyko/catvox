@@ -14,6 +14,8 @@ must be passed explicitly during `terraform init` for each environment.
 Example future flow:
 
 ```bash
+cp backend/dev.hcl.example backend/dev.hcl
+cp env/dev.tfvars.example env/dev.tfvars
 terraform init -backend-config=backend/dev.hcl
 terraform plan -var-file=env/dev.tfvars
 ```

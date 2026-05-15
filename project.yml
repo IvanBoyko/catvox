@@ -58,8 +58,8 @@ targets:
         CatVoxEnvironment: $(CATVOX_ENVIRONMENT)
         CatVoxSignedUploadURLEndpoint: $(CATVOX_SIGNED_UPLOAD_URL_ENDPOINT)
         CatVoxAnalyseVideoEndpoint: $(CATVOX_ANALYSE_VIDEO_ENDPOINT)
-        PostHogProjectToken: $(CATVOX_POSTHOG_PROJECT_TOKEN)
-        PostHogHost: $(CATVOX_POSTHOG_HOST)
+        CatVoxPostHogProjectToken: $(CATVOX_POSTHOG_PROJECT_TOKEN)
+        CatVoxPostHogHost: $(CATVOX_POSTHOG_HOST)
         UILaunchScreen:
           UIColorName: ""
         UISupportedInterfaceOrientations:

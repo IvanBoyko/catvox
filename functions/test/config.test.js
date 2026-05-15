@@ -49,8 +49,18 @@ test('backendServiceAccount derives distinct account emails from each project', 
   );
 });
 
-test('backendServiceAccountOption omits serviceAccount when project is unknown', () => {
-  assert.deepEqual(backendServiceAccountOption({}), {});
+test('backendServiceAccountOption throws when service account cannot be derived', () => {
+  assert.throws(
+    () => backendServiceAccountOption({}),
+    /Backend service account is not configured/
+  );
+});
+
+test('backendServiceAccountOption allows default service account by explicit opt-in', () => {
+  assert.deepEqual(
+    backendServiceAccountOption({ CATVOX_ALLOW_DEFAULT_SERVICE_ACCOUNT: '1' }),
+    {}
+  );
 });
 
 test('functionRegion and vertexLocation use generic overrides with defaults', () => {

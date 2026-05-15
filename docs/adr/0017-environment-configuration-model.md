@@ -84,8 +84,15 @@ marked integration-safe. Prod receives only protected, non-invasive smoke tests.
   `terraform/backend/<environment>.hcl`.
 - Future variable files should follow a matching convention such as
   `terraform/env/<environment>.tfvars`.
+- Runtime Cloud Functions use the same service-account name within each
+  environment project. Distinct projects therefore produce distinct IAM
+  principals, for example
+  `catvox-backend-sa@<project-id>.iam.gserviceaccount.com`.
+- Product code should use generic keys such as `CATVOX_ENVIRONMENT` rather than
+  `CATVOX_DEV` or `CATVOX_PROD`.
+
+## Future Work
+
 - Firebase plist selection should follow a convention such as
   `GoogleService-Info-<Environment>.plist`, copied or selected by build
   configuration before app build.
-- Product code should use generic keys such as `CATVOX_ENVIRONMENT` rather than
-  `CATVOX_DEV` or `CATVOX_PROD`.

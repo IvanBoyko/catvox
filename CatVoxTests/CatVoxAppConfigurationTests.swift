@@ -27,8 +27,8 @@ final class CatVoxAppConfigurationTests: XCTestCase {
                 "CatVoxEnvironment": "staging",
                 "CatVoxSignedUploadURLEndpoint": "https://signed.example.com",
                 "CatVoxAnalyseVideoEndpoint": "https://analyse.example.com",
-                "PostHogProjectToken": "posthog-token",
-                "PostHogHost": "https://eu.i.posthog.com",
+                "CatVoxPostHogProjectToken": "posthog-token",
+                "CatVoxPostHogHost": "https://eu.i.posthog.com",
             ],
             environment: [:]
         )
@@ -46,8 +46,8 @@ final class CatVoxAppConfigurationTests: XCTestCase {
                 "CatVoxEnvironment": "prod",
                 "CatVoxSignedUploadURLEndpoint": "https://signed-prod.example.com",
                 "CatVoxAnalyseVideoEndpoint": "https://analyse-prod.example.com",
-                "PostHogProjectToken": "posthog-prod",
-                "PostHogHost": "https://prod.posthog.example.com",
+                "CatVoxPostHogProjectToken": "posthog-prod",
+                "CatVoxPostHogHost": "https://prod.posthog.example.com",
             ],
             environment: [
                 "CATVOX_ENVIRONMENT": "qa",
@@ -76,5 +76,47 @@ final class CatVoxAppConfigurationTests: XCTestCase {
 
         XCTAssertEqual(configuration.environmentName, "dev")
         XCTAssertNil(configuration.postHogProjectToken)
+    }
+
+    func testReleaseStyleRuntimeConfigurationRejectsMissingRequiredValues() {
+        XCTAssertThrowsError(
+            try CatVoxAppConfiguration(
+                infoDictionary: [:],
+                environment: [:],
+                allowDebugDefaults: false
+            )
+        )
+    }
+
+    func testReleaseStyleRuntimeConfigurationRejectsInvalidURLs() {
+        XCTAssertThrowsError(
+            try CatVoxAppConfiguration(
+                infoDictionary: [
+                    "CatVoxEnvironment": "prod",
+                    "CatVoxSignedUploadURLEndpoint": "not-a-url",
+                    "CatVoxAnalyseVideoEndpoint": "https://analyse.example.com",
+                    "CatVoxPostHogHost": "https://us.i.posthog.com",
+                ],
+                environment: [:],
+                allowDebugDefaults: false
+            )
+        )
+    }
+
+    func testLegacyPostHogInfoKeysRemainSupportedDuringTransition() throws {
+        let configuration = try CatVoxAppConfiguration(
+            infoDictionary: [
+                "CatVoxEnvironment": "staging",
+                "CatVoxSignedUploadURLEndpoint": "https://signed.example.com",
+                "CatVoxAnalyseVideoEndpoint": "https://analyse.example.com",
+                "PostHogProjectToken": "legacy-token",
+                "PostHogHost": "https://legacy.posthog.example.com",
+            ],
+            environment: [:],
+            allowDebugDefaults: false
+        )
+
+        XCTAssertEqual(configuration.postHogProjectToken, "legacy-token")
+        XCTAssertEqual(configuration.postHogHost, URL(string: "https://legacy.posthog.example.com")!)
     }
 }
