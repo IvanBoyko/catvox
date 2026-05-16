@@ -56,6 +56,7 @@ jobs:
   deploy:
     name: Deploy
     runs-on: ubuntu-latest
+    environment: dev
     needs: build
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
 
@@ -84,16 +85,17 @@ jobs:
 
       - name: Build and deploy to Firebase
         env:
+          CATVOX_ENV_CONFIG: config/environments/dev.xcconfig
           CATVOX_ENVIRONMENT: dev
           FIREBASE_PROJECT: ${{ secrets.GCP_PROJECT_ID }}
         run: make functions-deploy
 
   # ── Integration: post-deploy ─────────────────────────────────────────────────
-  # Runs only after main deploy. Treats the current live GCP/Firebase project as
-  # the Dev environment until a real production split exists.
+  # Runs only after main deploy against the integration-safe Dev environment.
   integration-after-deploy:
     name: Integration Tests
     runs-on: ubuntu-latest
+    environment: dev
     needs: deploy
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
 
@@ -122,8 +124,9 @@ jobs:
 
       - name: Run integration tests
         env:
+          CATVOX_ENV_CONFIG: config/environments/dev.xcconfig
           CATVOX_ENVIRONMENT: dev
           CATVOX_PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
           CATVOX_INTEGRATION_SAFE_ENVIRONMENTS: dev
-          CATVOX_APP_CHECK_DEBUG_TOKEN: ${{ secrets.TF_VAR_app_check_debug_token }}
+          CATVOX_APP_CHECK_DEBUG_TOKEN: ${{ secrets.TF_VAR_APP_CHECK_DEBUG_TOKEN }}
         run: make functions-integration

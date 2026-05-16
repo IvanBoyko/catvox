@@ -74,8 +74,8 @@ resource "google_service_account_iam_member" "sa_token_creator" {
 # and is outside Terraform scope, but its IAM is tracked here.
 # Bucket name pattern: gcf-v2-sources-{PROJECT_NUMBER}-{REGION}
 #
-# All four grants were first applied manually via gcloud (bootstrap) so that
-# the initial firebase deploy could succeed; tracked here for state consistency.
+# Environment bootstrap creates the source bucket before first apply so
+# Terraform can manage the bucket IAM before the initial Firebase deploy.
 
 data "google_project" "project" {
   project_id = var.project_id
@@ -86,6 +86,7 @@ locals {
 }
 
 resource "google_storage_bucket_iam_member" "compute_sa_sources_object_admin" {
+  count  = var.manage_gcf_sources_bucket_iam ? 1 : 0
   bucket = "gcf-v2-sources-${data.google_project.project.number}-${var.region}"
   role   = "roles/storage.objectAdmin"
   member = local.compute_default_sa
@@ -95,39 +96,70 @@ resource "google_project_iam_member" "compute_sa_artifact_writer" {
   project = var.project_id
   role    = "roles/artifactregistry.writer"
   member  = local.compute_default_sa
+
+  depends_on = [google_project_service.apis]
 }
 
 resource "google_service_account_iam_member" "compute_sa_backend_sa_user" {
   service_account_id = google_service_account.backend_sa.name
   role               = "roles/iam.serviceAccountUser"
   member             = local.compute_default_sa
+
+  depends_on = [google_project_service.apis]
 }
 
 resource "google_project_iam_member" "compute_sa_log_writer" {
   project = var.project_id
   role    = "roles/logging.logWriter"
   member  = local.compute_default_sa
+
+  depends_on = [google_project_service.apis]
 }
 
 # ── CI SA — Terraform / GitHub Actions ───────────────────────────────────────
 # catvox-ci-sa: identity for GitHub Actions Terraform plan/apply runs.
 # Holds broader project-level rights needed for IaC, isolated from runtime.
 #
-# The WIF pool and OIDC provider are created by bootstrap_wif.sh (one-time,
-# outside Terraform scope). On a fresh project, run bootstrap_wif.sh once
-# before the first GitHub Actions run. The bindings below ensure that after a
-# destroy/recreate of this SA its IAM policy is fully restored by Terraform
-# without any manual steps.
-#
-# After the first terraform apply that creates this SA, one manual step
-# is still required before GitHub Actions will succeed:
-#   1. Update GitHub secret GCP_SERVICE_ACCOUNT to:
-#      catvox-ci-sa@<project-id>.iam.gserviceaccount.com
+# Terraform manages the per-environment WIF pool/provider and the binding that
+# lets GitHub Actions from kathelix/catvox impersonate this service account.
+# After first apply, set the corresponding GitHub Environment secrets from
+# Terraform outputs before expecting CI deploys to work.
 
 resource "google_service_account" "ci_sa" {
   account_id   = "catvox-ci-sa"
   display_name = "CatVox Terraform CI"
   description  = "GitHub Actions identity for Terraform plan/apply via WIF (TRD §6.3)."
+}
+
+resource "google_iam_workload_identity_pool" "github_actions" {
+  project = var.project_id
+
+  workload_identity_pool_id = var.wif_pool_id
+  display_name              = "GitHub Actions Pool"
+  description               = "Keyless auth pool for GitHub Actions CI/CD (CatVox ${var.environment_name})."
+
+  depends_on = [google_project_service.apis]
+}
+
+resource "google_iam_workload_identity_pool_provider" "github_actions" {
+  project = var.project_id
+
+  workload_identity_pool_id          = google_iam_workload_identity_pool.github_actions.workload_identity_pool_id
+  workload_identity_pool_provider_id = var.wif_provider_id
+  display_name                       = "GitHub Actions OIDC Provider"
+  description                        = "Trusts GitHub Actions OIDC tokens from ${var.github_repo}."
+  attribute_condition                = "assertion.repository == '${var.github_repo}'"
+
+  attribute_mapping = {
+    "google.subject"             = "assertion.sub"
+    "attribute.actor"            = "assertion.actor"
+    "attribute.repository"       = "assertion.repository"
+    "attribute.repository_owner" = "assertion.repository_owner"
+  }
+
+  oidc {
+    issuer_uri = "https://token.actions.githubusercontent.com"
+  }
 }
 
 # roles/editor — manage GCP resources (APIs, GCS, Artifact Registry, Secret
@@ -165,13 +197,13 @@ resource "google_project_iam_member" "tf_ci_sa_admin" {
 }
 
 # Workload Identity Federation — allow GitHub Actions tokens from
-# kathelix/catvox to impersonate catvox-ci-sa. Previously applied only by
-# bootstrap_wif.sh; tracked here so destroy/recreate of ci_sa restores this
-# binding automatically without needing to re-run the bootstrap script.
+# kathelix/catvox to impersonate catvox-ci-sa.
 resource "google_service_account_iam_member" "ci_sa_wif_binding" {
   service_account_id = google_service_account.ci_sa.name
   role               = "roles/iam.workloadIdentityUser"
   member             = "principalSet://iam.googleapis.com/projects/${data.google_project.project.number}/locations/global/workloadIdentityPools/${var.wif_pool_id}/attribute.repository/${var.github_repo}"
+
+  depends_on = [google_iam_workload_identity_pool_provider.github_actions]
 }
 
 # Terraform state bucket access — catvox-ci-sa must be able to read, write, and
@@ -179,7 +211,7 @@ resource "google_service_account_iam_member" "ci_sa_wif_binding" {
 # before first tf init), but the IAM binding is tracked here so it is restored
 # after a destroy/recreate of ci_sa without any manual gcloud commands.
 resource "google_storage_bucket_iam_member" "ci_sa_state_bucket_admin" {
-  bucket = var.tf_state_bucket
+  bucket = local.tf_state_bucket
   role   = "roles/storage.objectAdmin"
   member = "serviceAccount:${google_service_account.ci_sa.email}"
 }

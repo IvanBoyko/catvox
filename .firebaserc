@@ -1,5 +1,5 @@
 {
   "projects": {
-    "default": "kathelix-catvox-prod"
+    "default": "kathelix-catvox-dev"
   }
 }

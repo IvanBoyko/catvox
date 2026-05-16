@@ -26,10 +26,23 @@ permissions:
   pull-requests: write  # Required to post plan output as a PR comment
 
 env:
-  # Passed to Terraform as var.project_id and var.app_check_debug_token.
+  CATVOX_TERRAFORM_ENV: dev
+  CATVOX_TF_STATE_PREFIX: catvox/state
+  GCP_PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
+  # Passed to Terraform as TF_VAR_* values.
   # TF_VAR_* prefix is picked up automatically — no extra wiring needed.
+  TF_VAR_environment_name: dev
   TF_VAR_project_id: ${{ secrets.GCP_PROJECT_ID }}
-  TF_VAR_app_check_debug_token: ${{ secrets.TF_VAR_app_check_debug_token }}
+  TF_VAR_region: us-central1
+  TF_VAR_firestore_location: nam5
+  TF_VAR_tf_state_bucket: ${{ format('catvox-tf-state-{0}', secrets.GCP_PROJECT_ID) }}
+  TF_VAR_firebase_ios_bundle_id: com.kathelix.catvox.dev
+  TF_VAR_firebase_ios_app_display_name: CatVox Dev iOS
+  TF_VAR_firebase_apple_team_id: QYT76L5836
+  TF_VAR_enable_app_check_debug_token: true
+  TF_VAR_app_check_debug_token: ${{ secrets.TF_VAR_APP_CHECK_DEBUG_TOKEN }}
+  TF_VAR_app_check_debug_token_display_name: CatVox Dev integration token
+  TF_VAR_manage_gcf_sources_bucket_iam: true
   TF_VAR_alert_email: ${{ secrets.TF_VAR_ALERT_EMAIL }}
 
 jobs:
@@ -39,6 +52,7 @@ jobs:
   plan:
     name: Plan
     runs-on: ubuntu-latest
+    environment: dev
     if: github.event_name == 'pull_request'
 
     steps:
@@ -151,6 +165,7 @@ jobs:
   apply:
     name: Apply
     runs-on: ubuntu-latest
+    environment: dev
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
 
     steps:

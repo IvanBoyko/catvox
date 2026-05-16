@@ -19,11 +19,11 @@
 set -euo pipefail
 
 # ── Configuration ─────────────────────────────────────────────────────────────
-# PROJECT_ID must match var.project_id in terraform.tfvars — this is the GCP
-# project where all Terraform-managed resources live. It may differ from the
-# project currently active in gcloud config, so always verify the printed value
-# before confirming. Override via env var if needed:
-#   PROJECT_ID=kathelix-catvox-prod ./bootstrap_remote_state.sh
+# Legacy helper. New environments should use scripts/create-environment.sh via
+# `make environment-create`, which also writes backend/tfvars files.
+# PROJECT_ID must match the selected environment project ID. Override via env
+# var if needed:
+#   PROJECT_ID=kathelix-catvox-dev ./bootstrap_remote_state.sh
 
 PROJECT_ID="${PROJECT_ID:-$(gcloud config get-value project 2>/dev/null)}"
 REGION="us-central1"
@@ -74,10 +74,8 @@ echo ""
 echo "✓ State bucket ready: gs://${STATE_BUCKET}"
 echo ""
 echo "Next steps:"
-echo "  1. In terraform/main.tf, uncomment the backend block and set:"
+echo "  1. Prefer make environment-create for new environments."
+echo "  2. Otherwise create terraform/backend/<environment>.hcl with:"
 echo "       bucket = \"${STATE_BUCKET}\""
 echo "       prefix = \"catvox/state\""
-echo ""
-echo "  2. From the terraform/ directory, migrate your local state to GCS:"
-echo "       cd terraform && terraform init -migrate-state"
 echo ""

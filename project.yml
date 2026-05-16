@@ -36,6 +36,20 @@ targets:
     configFiles:
       Debug: config/environments/dev.xcconfig
       Release: config/environments/dev.xcconfig
+    preBuildScripts:
+      - name: Validate Firebase Environment Config
+        basedOnDependencyAnalysis: false
+        inputFiles:
+          - $(SRCROOT)/scripts/validate-firebase-ios-config.mjs
+          - $(SRCROOT)/CatVox/Resources/Firebase/GoogleService-Info-$(CATVOX_ENVIRONMENT).plist
+        script: |
+          export PATH="/opt/homebrew/bin:/usr/local/bin:$PATH"
+          CATVOX_ENVIRONMENT="${CATVOX_ENVIRONMENT}" \
+          CATVOX_PROJECT_ID="${CATVOX_PROJECT_ID}" \
+          CATVOX_FIREBASE_APP_ID="${CATVOX_FIREBASE_APP_ID}" \
+          CATVOX_FIREBASE_API_KEY="${CATVOX_FIREBASE_API_KEY}" \
+          CATVOX_IOS_BUNDLE_ID="${CATVOX_IOS_BUNDLE_ID}" \
+          node "${SRCROOT}/scripts/validate-firebase-ios-config.mjs"
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: $(CATVOX_PRODUCT_BUNDLE_IDENTIFIER)

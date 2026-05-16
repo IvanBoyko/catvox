@@ -5,7 +5,8 @@
 ###############################################################################
 
 # Email notification channel — the address that receives alert emails.
-# Value comes from var.alert_email (terraform.tfvars, never committed).
+# Value comes from var.alert_email (selected terraform/env/<environment>.tfvars
+# locally, or GitHub Environment secrets in CI; never committed with real data).
 resource "google_monitoring_notification_channel" "error_email" {
   display_name = "CatVox Error Alerts — Email"
   type         = "email"

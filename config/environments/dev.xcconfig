@@ -4,17 +4,17 @@
 // Do not write https://... here: xcconfig treats // as a comment and silently
 // truncates the value to https:.
 
-GCP_PROJECT_ID = kathelix-catvox-prod
-FIREBASE_PROJECT = kathelix-catvox-prod
-CATVOX_PROJECT_ID = kathelix-catvox-prod
+GCP_PROJECT_ID = kathelix-catvox-dev
+FIREBASE_PROJECT = kathelix-catvox-dev
+CATVOX_PROJECT_ID = kathelix-catvox-dev
 CATVOX_ENVIRONMENT = dev
 CATVOX_FUNCTION_REGION = us-central1
-CATVOX_PRODUCT_BUNDLE_IDENTIFIER = com.kathelix.catvox
-CATVOX_IOS_BUNDLE_ID = com.kathelix.catvox
-CATVOX_SIGNED_UPLOAD_URL_HOST = getsigneduploadurl-pdkw5uifga-uc.a.run.app
-CATVOX_ANALYSE_VIDEO_HOST = analysevideo-pdkw5uifga-uc.a.run.app
-CATVOX_FIREBASE_APP_ID = 1:953500951129:ios:1595a4c27cd8f3f7964748
-CATVOX_FIREBASE_API_KEY = AIzaSyAMKDQ_mIGQWQF4VhU8lytvvGx1TpuoBMI
+CATVOX_PRODUCT_BUNDLE_IDENTIFIER = com.kathelix.catvox.dev
+CATVOX_IOS_BUNDLE_ID = com.kathelix.catvox.dev
+CATVOX_SIGNED_UPLOAD_URL_HOST = getsigneduploadurl-o2aj5rh53a-uc.a.run.app
+CATVOX_ANALYSE_VIDEO_HOST = analysevideo-o2aj5rh53a-uc.a.run.app
+CATVOX_FIREBASE_APP_ID = 1:99523926611:ios:9b3848f13783e1c585c4a6
+CATVOX_FIREBASE_API_KEY = AIzaSyC85HcKTzF0GozBD1rj8TqUGjXi2q88s9Q
 CATVOX_POSTHOG_PROJECT_TOKEN = phc_ktoFY7ywiGeSCdyLT7msVfWtankAWx8QLLrLerBzmMr8
 CATVOX_POSTHOG_HOST_NAME = us.i.posthog.com
 CATVOX_INTEGRATION_SAFE_ENVIRONMENTS = dev

@@ -6,9 +6,8 @@
 # Target SA: catvox-ci-sa — the dedicated Terraform CI identity (separate from
 # the runtime SA catvox-backend-sa, which holds only Cloud Functions roles).
 #
-# Run this script ONCE, manually, after bootstrap_remote_state.sh has completed.
-# It configures keyless authentication so GitHub Actions can run terraform
-# plan/apply against GCP without storing any long-lived credentials.
+# Legacy helper. New environments manage WIF with Terraform through
+# scripts/create-environment.sh / `make environment-create`.
 #
 # What this script does:
 #   1. Validates catvox-ci-sa exists (created by terraform apply)
@@ -25,8 +24,8 @@
 #   - Sufficient IAM permissions: IAM Admin + Storage Admin on the project
 #
 # NOTE — two project IDs:
-#   PROJECT_ID   = GCP project where Terraform resources live (terraform.tfvars).
-#                  Must match var.project_id used during terraform apply.
+#   PROJECT_ID   = GCP project where Terraform resources live.
+#                  Must match the selected environment project ID.
 #                  Defaults to gcloud's active project; override if they differ:
 #                    PROJECT_ID=my-project ./bootstrap_wif.sh
 #   STATE_BUCKET = read automatically from the backend "gcs" block in main.tf.
@@ -37,7 +36,7 @@
 #   chmod +x terraform/bootstrap_wif.sh
 #   ./terraform/bootstrap_wif.sh
 #   # or, if your gcloud active project differs from var.project_id:
-#   PROJECT_ID=kathelix-catvox-prod ./terraform/bootstrap_wif.sh
+#   PROJECT_ID=kathelix-catvox-dev ./terraform/bootstrap_wif.sh
 # =============================================================================
 
 set -euo pipefail
@@ -97,7 +96,7 @@ if ! gcloud iam service-accounts describe "${SA_EMAIL}" \
   echo ""
   echo "ERROR: Service account not found: ${SA_EMAIL}"
   echo "       catvox-ci-sa is provisioned by Terraform (iam.tf)."
-  echo "       Ensure PROJECT_ID matches the var.project_id used in terraform.tfvars"
+  echo "       Ensure PROJECT_ID matches the selected environment project ID"
   echo "       (currently: ${PROJECT_ID}), then run 'terraform apply' and retry."
   exit 1
 fi

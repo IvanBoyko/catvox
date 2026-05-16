@@ -1,10 +1,16 @@
 ###############################################################################
 # CatVox AI — Terraform Variables
-# Populate values in terraform.tfvars (never commit that file).
+# Populate values in terraform/env/<environment>.tfvars (never commit it).
 ###############################################################################
 
+variable "environment_name" {
+  description = "CatVox named environment, for example dev, staging, or prod."
+  type        = string
+  default     = "dev"
+}
+
 variable "project_id" {
-  description = "GCP project ID (e.g. kathelix-catvox-prod)."
+  description = "GCP project ID for this CatVox environment."
   type        = string
 }
 
@@ -29,18 +35,62 @@ variable "firestore_location" {
 
 variable "app_check_debug_token" {
   description = <<-EOT
-    Firebase App Check debug token for local development.
+    Firebase App Check debug token for local development and mutable integration tests.
     Mark as sensitive — never commit the value to source control.
-    Generate one in the Firebase Console under App Check → Apps → (overflow menu).
+    Generate a UUID4 locally and store it in the environment tfvars / GitHub secret.
+    Required only when enable_app_check_debug_token is true.
   EOT
   type        = string
+  default     = null
   sensitive   = true
+  nullable    = true
+}
+
+variable "enable_app_check_debug_token" {
+  description = "Whether to register app_check_debug_token for this environment's Firebase iOS app. Dev-like mutable environments opt in; Prod should use false."
+  type        = bool
+  default     = false
+}
+
+variable "app_check_debug_token_display_name" {
+  description = "Display name for the Firebase App Check debug token registered by Terraform."
+  type        = string
+  default     = "CatVox Dev integration token"
+}
+
+variable "app_check_token_ttl" {
+  description = "Firebase App Check App Attest token TTL."
+  type        = string
+  default     = "3600s"
+}
+
+variable "firebase_ios_bundle_id" {
+  description = "Firebase iOS app bundle ID for this environment."
+  type        = string
+}
+
+variable "firebase_ios_app_display_name" {
+  description = "Firebase iOS app display name for this environment."
+  type        = string
+  default     = "CatVox iOS"
+}
+
+variable "firebase_apple_team_id" {
+  description = "Apple Developer Team ID associated with the Firebase iOS app."
+  type        = string
+  default     = "QYT76L5836"
 }
 
 variable "wif_pool_id" {
-  description = "Workload Identity Federation pool ID used by GitHub Actions. Created once by bootstrap_wif.sh."
+  description = "Workload Identity Federation pool ID used by GitHub Actions."
   type        = string
   default     = "github-actions-pool"
+}
+
+variable "wif_provider_id" {
+  description = "Workload Identity Federation provider ID used by GitHub Actions."
+  type        = string
+  default     = "github-actions-provider"
 }
 
 variable "github_repo" {
@@ -50,12 +100,19 @@ variable "github_repo" {
 }
 
 variable "tf_state_bucket" {
-  description = "GCS bucket name for Terraform remote state. Created by bootstrap_remote_state.sh before first terraform init — outside Terraform scope to avoid circular dependency."
+  description = "GCS bucket name for Terraform remote state. Created by bootstrap_remote_state.sh before first terraform init. Defaults to catvox-tf-state-<project_id>."
   type        = string
-  default     = "catvox-tf-state-kathelix-catvox-prod"
+  default     = null
+  nullable    = true
 }
 
 variable "alert_email" {
   description = "Email address to receive Cloud Monitoring alerts when a Cloud Function emits an ERROR-level log entry."
   type        = string
+}
+
+variable "manage_gcf_sources_bucket_iam" {
+  description = "Whether Terraform should manage IAM on the Cloud Functions v2 source bucket. Environment bootstrap creates the bucket before first apply."
+  type        = bool
+  default     = false
 }

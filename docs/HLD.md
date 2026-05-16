@@ -61,7 +61,7 @@ The MVP also supports on-demand creation of a funny shareable result video deriv
 * **On-Demand Export Only:** The app does not auto-render share videos for every completed scan. A derived export is generated only when the user explicitly asks to save or share it.
 * **MVP Share Style Simplicity:** The first share export style keeps the original aspect ratio and overlays the cat thought as the hero element together with lightweight persona, emotion, and CatVox/Kathelix branding. The share overlay should scale proportionally from the actual rendered frame so the visual hierarchy remains consistent across portrait, landscape, square, HD, and 4K clips. Multiple style packs and fixed social-format reframing are deferred.
 * **Regional Strategy:** Standardized on `us-central1` (Iowa) for the lowest AI infrastructure costs and `nam5` for Firestore multi-region durability across the US market.
-* **Environment Configuration:** CatVox uses named environments. The first planned environments are `dev` and `prod`, but code and automation should treat the environment name as configuration data so future environments can be added without source-level branching. Each environment owns separate Firebase/GCP, App Check, backend endpoint, analytics, CI secret, and Terraform-state configuration. See ADR-0017.
+* **Environment Configuration:** CatVox uses named environments. The first environments are `dev` and future `prod`, but code and automation should treat the environment name as configuration data so future environments can be added without source-level branching. Each environment owns separate Firebase/GCP, App Check, backend endpoint, analytics, CI secret, and Terraform-state configuration. See ADR-0017 and ADR-0018.
 * **Security:** Firebase App Check uses App Attest for production iOS app verification and Debug Provider for local development, preventing unauthorized API calls and managing GCP costs.
 * **Backend Pattern:** Firebase Cloud Functions (2nd Gen) act as the backend proxy between the iOS client and privileged GCP services.
 * **Prompt Management:** The AI system prompt is maintained as a versioned markdown document in the repository and treated as part of the deployable backend behavior.
@@ -82,7 +82,7 @@ The MVP also supports on-demand creation of a funny shareable result video deriv
 * The infrastructure model is intended to be reproducible and rebuildable.
 * The project uses three distinct CI/CD pipelines: iOS build validation, infrastructure delivery, and backend function delivery.
 * CI/CD authentication uses keyless GitHub Actions federation.
-* Until public launch, the current live GCP/Firebase project is treated operationally as Dev / integration testing. A separate real production environment must be split out before launch using the named-environment configuration model. See ADR-0013 and ADR-0017.
+* Until public launch, `kathelix-catvox-dev` is the active Dev / integration-testing project. `kathelix-catvox-prod` is preserved for the future real production environment; pre-split Dev leftovers have been cleaned from that preserved project before real Prod provisioning. See ADR-0017 and ADR-0018.
 
 ## 7. MVP Boundaries / Non-goals
 * No direct client-side access to privileged GCP services.

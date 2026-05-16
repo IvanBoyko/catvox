@@ -35,5 +35,36 @@ output "gcp_project_id_secret_id" {
 
 output "app_check_debug_token_secret_id" {
   description = "Secret Manager secret ID for APP_CHECK_DEBUG_TOKEN."
-  value       = google_secret_manager_secret.app_check_debug_token.secret_id
+  value       = try(google_secret_manager_secret.app_check_debug_token[0].secret_id, null)
+}
+
+output "firebase_ios_app_id" {
+  description = "Firebase iOS app ID for this environment."
+  value       = google_firebase_apple_app.ios.app_id
+}
+
+output "firebase_ios_api_key_id" {
+  description = "Firebase API key ID associated with the iOS app."
+  value       = google_firebase_apple_app.ios.api_key_id
+}
+
+output "firebase_ios_plist_base64" {
+  description = "Base64-encoded GoogleService-Info plist for the environment iOS app."
+  value       = data.google_firebase_apple_app_config.ios.config_file_contents
+  sensitive   = true
+}
+
+output "terraform_state_bucket_name" {
+  description = "Terraform remote state bucket for this environment."
+  value       = local.tf_state_bucket
+}
+
+output "github_actions_wif_provider" {
+  description = "Workload Identity Federation provider resource for GitHub Actions."
+  value       = "projects/${data.google_project.project.number}/locations/global/workloadIdentityPools/${var.wif_pool_id}/providers/${var.wif_provider_id}"
+}
+
+output "ci_service_account_email" {
+  description = "GitHub Actions CI service account email."
+  value       = google_service_account.ci_sa.email
 }

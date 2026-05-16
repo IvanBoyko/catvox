@@ -64,6 +64,7 @@ Each ADR should usually contain:
 | 0015 | Reserve Quota Before Vertex Analysis | Accepted |
 | 0016 | Persist App Check Debug Token for Local iPhone Builds | Accepted |
 | 0017 | Environment Configuration Model | Accepted |
+| 0018 | Create Dedicated Dev Environment | Accepted |
 
 ## Workflow
 

@@ -33,6 +33,7 @@
 		4E7FE2E01925797AAEE7E495 /* CatPersonaTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6313F1146262336F3B4CE566 /* CatPersonaTests.swift */; };
 		4F25F5EF0770D910A04EE964 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = B0A06657FF5E304418C27E21 /* Assets.xcassets */; };
 		53EBF6283E37AC40C2FBF31C /* AnimatedVideoBackground.swift in Sources */ = {isa = PBXBuildFile; fileRef = B25B98C7A388BAC230FA34DE /* AnimatedVideoBackground.swift */; };
+		550769A347491A4E84046589 /* GoogleService-Info-dev.plist in Resources */ = {isa = PBXBuildFile; fileRef = 0BAECA2F06CA2B535E21A271 /* GoogleService-Info-dev.plist */; };
 		5F6C5D7BE130E488556FC65A /* ConfidenceTier.swift in Sources */ = {isa = PBXBuildFile; fileRef = D7288FA38F10CB18B8FAAA8D /* ConfidenceTier.swift */; };
 		61C87E117CBDFD72736557E7 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F08F33CD1AC4F31C7769CE96 /* ContentView.swift */; };
 		63FA374A9BCE02441274BF75 /* SavedScanTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C334985AD19C5A97AACCCC01 /* SavedScanTests.swift */; };
@@ -45,7 +46,6 @@
 		9A8570EDE503AA4D6DC3CAA9 /* CatVoxAppConfigurationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 63F77C602005C958E85554F4 /* CatVoxAppConfigurationTests.swift */; };
 		9CD5CA08C5225D84F30B2646 /* CatPersona.swift in Sources */ = {isa = PBXBuildFile; fileRef = 689AC1D0436D57C04DBE7694 /* CatPersona.swift */; };
 		A5C4EECE806C37E8D53F28E0 /* ExpertInsightsDrawer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 337DB0A3CC6E2C83B8244190 /* ExpertInsightsDrawer.swift */; };
-		AC4E819A8254B93AD7FD6FE6 /* GoogleService-Info.plist in Resources */ = {isa = PBXBuildFile; fileRef = 1A557949F28BBD9853A801AE /* GoogleService-Info.plist */; };
 		B4D5970C08C51D76A7FA3AB4 /* CameraPreviewView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8F5127E72D22F9078142F6EE /* CameraPreviewView.swift */; };
 		B84CBF26D24790B4B6F348CD /* Preview Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = C7BA98BD11A2006135A1026D /* Preview Assets.xcassets */; };
 		C3ADEFA683DE26DFF3392AD6 /* RecordingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 19667502574A1D26D0A51E54 /* RecordingView.swift */; };
@@ -83,12 +83,12 @@
 
 /* Begin PBXFileReference section */
 		0200F05F2807B570CB11813E /* AppCheckDebugTokenBootstrap.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppCheckDebugTokenBootstrap.swift; sourceTree = "<group>"; };
+		0BAECA2F06CA2B535E21A271 /* GoogleService-Info-dev.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = "GoogleService-Info-dev.plist"; sourceTree = "<group>"; };
 		0D8439BECE45A0303556B1C1 /* CatVox.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = CatVox.entitlements; sourceTree = "<group>"; };
 		0F8AF485DF075ADE029435E4 /* GCPService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GCPService.swift; sourceTree = "<group>"; };
-		13B1A8A31D1EAAB998A22160 /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
+		13B1A8A31D1EAAB998A22160 /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; lastKnownFileType = text.xml; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
 		19667502574A1D26D0A51E54 /* RecordingView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecordingView.swift; sourceTree = "<group>"; };
 		19AE93315B15E827FC62B553 /* CatVoxLaunchConfiguration.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CatVoxLaunchConfiguration.swift; sourceTree = "<group>"; };
-		1A557949F28BBD9853A801AE /* GoogleService-Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = "GoogleService-Info.plist"; sourceTree = "<group>"; };
 		2086AF68571F274493E9D93C /* dev.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = dev.xcconfig; sourceTree = "<group>"; };
 		215145685222056D654FFBD5 /* CameraService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CameraService.swift; sourceTree = "<group>"; };
 		337DB0A3CC6E2C83B8244190 /* ExpertInsightsDrawer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExpertInsightsDrawer.swift; sourceTree = "<group>"; };
@@ -109,7 +109,7 @@
 		6B2B3D6279B0CBA2AEBDEB41 /* UploadProgressView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UploadProgressView.swift; sourceTree = "<group>"; };
 		6E3DACD7D8D8ABA493AB43D7 /* CatVoxAppConfiguration.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CatVoxAppConfiguration.swift; sourceTree = "<group>"; };
 		7656DF1FA69C366617629924 /* CatVoxTests.xctest */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.cfbundle; path = CatVoxTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
-		7BC4DFCD54831F1AA990A7C3 /* CatVox.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = CatVox.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		7BC4DFCD54831F1AA990A7C3 /* CatVox.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = CatVox.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		7CDA1F15EF954A1E30D11AE3 /* ActivityView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ActivityView.swift; sourceTree = "<group>"; };
 		82B4E92B6085484FE9DDDA8B /* ScanQuotaStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScanQuotaStore.swift; sourceTree = "<group>"; };
 		8F5127E72D22F9078142F6EE /* CameraPreviewView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CameraPreviewView.swift; sourceTree = "<group>"; };
@@ -228,7 +228,6 @@
 			isa = PBXGroup;
 			children = (
 				0D8439BECE45A0303556B1C1 /* CatVox.entitlements */,
-				1A557949F28BBD9853A801AE /* GoogleService-Info.plist */,
 				A8E77CD777F85F8155EEE27D /* Info.plist */,
 				13B1A8A31D1EAAB998A22160 /* PrivacyInfo.xcprivacy */,
 				9E16D7575F6047024CF0F3F6 /* App */,
@@ -286,6 +285,7 @@
 			isa = PBXGroup;
 			children = (
 				B0A06657FF5E304418C27E21 /* Assets.xcassets */,
+				BC9D4472786176372D1BB4D6 /* Firebase */,
 			);
 			path = Resources;
 			sourceTree = "<group>";
@@ -298,6 +298,14 @@
 				D81F4FC3E926629C4422BFA0 /* SavedScanRow.swift */,
 			);
 			path = Home;
+			sourceTree = "<group>";
+		};
+		BC9D4472786176372D1BB4D6 /* Firebase */ = {
+			isa = PBXGroup;
+			children = (
+				0BAECA2F06CA2B535E21A271 /* GoogleService-Info-dev.plist */,
+			);
+			path = Firebase;
 			sourceTree = "<group>";
 		};
 		C56174D5E800CF468E3C6840 /* Views */ = {
@@ -399,6 +407,7 @@
 			isa = PBXNativeTarget;
 			buildConfigurationList = EFD8A9F258F409C1D2C31F34 /* Build configuration list for PBXNativeTarget "CatVox" */;
 			buildPhases = (
+				14F44B336A0785B457FF138F /* Validate Firebase Environment Config */,
 				A0C9A29FFE1C39B4DAF337E5 /* Sources */,
 				19C03496FEB9054410133BF6 /* Resources */,
 				D716E9FE107B3B8F90AAB532 /* Frameworks */,
@@ -428,9 +437,6 @@
 				TargetAttributes = {
 					4DF3DE52DEB7BC6BDD20B322 = {
 						TestTargetID = A7EDDBB8F04B431FAC25DB3C;
-					};
-					A7EDDBB8F04B431FAC25DB3C = {
-						DevelopmentTeam = QYT76L5836;
 					};
 				};
 			};
@@ -465,13 +471,37 @@
 			buildActionMask = 2147483647;
 			files = (
 				4F25F5EF0770D910A04EE964 /* Assets.xcassets in Resources */,
-				AC4E819A8254B93AD7FD6FE6 /* GoogleService-Info.plist in Resources */,
+				550769A347491A4E84046589 /* GoogleService-Info-dev.plist in Resources */,
 				B84CBF26D24790B4B6F348CD /* Preview Assets.xcassets in Resources */,
 				E66C3E964387260252BC45F3 /* PrivacyInfo.xcprivacy in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXResourcesBuildPhase section */
+
+/* Begin PBXShellScriptBuildPhase section */
+		14F44B336A0785B457FF138F /* Validate Firebase Environment Config */ = {
+			isa = PBXShellScriptBuildPhase;
+			alwaysOutOfDate = 1;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+			);
+			inputPaths = (
+				"$(SRCROOT)/scripts/validate-firebase-ios-config.mjs",
+				"$(SRCROOT)/CatVox/Resources/Firebase/GoogleService-Info-$(CATVOX_ENVIRONMENT).plist",
+			);
+			name = "Validate Firebase Environment Config";
+			outputFileListPaths = (
+			);
+			outputPaths = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "export PATH=\"/opt/homebrew/bin:/usr/local/bin:$PATH\"\nCATVOX_ENVIRONMENT=\"${CATVOX_ENVIRONMENT}\" \\\nCATVOX_PROJECT_ID=\"${CATVOX_PROJECT_ID}\" \\\nCATVOX_FIREBASE_APP_ID=\"${CATVOX_FIREBASE_APP_ID}\" \\\nCATVOX_FIREBASE_API_KEY=\"${CATVOX_FIREBASE_API_KEY}\" \\\nCATVOX_IOS_BUNDLE_ID=\"com.kathelix.catvox.dev\" \\\nnode \"${SRCROOT}/scripts/validate-firebase-ios-config.mjs\"\n";
+		};
+/* End PBXShellScriptBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
 		312F9DAED303837443779F98 /* Sources */ = {

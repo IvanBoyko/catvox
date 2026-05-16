@@ -212,14 +212,14 @@ percentage. See ADR-0010 and ADR-0012.
 
 ### 6.1 Infrastructure as Code (Terraform)
 * **Provider:** Google Cloud Platform (GCP).
-* **Current Deployed Project:** Until the real environment split is complete, GCP/Firebase project ID `kathelix-catvox-prod` is treated operationally as the `dev` environment despite its name. Region remains `us-central1`; Firestore location remains `nam5` (US multi-region). See ADR-0013 and ADR-0017.
-* **Terraform State:** Remote state is stored in a GCS bucket (`us-central1`, object versioning enabled) and is never stored locally or committed to source control. The GCS backend enables consistent state access from both local development and CI/CD pipelines. The state bucket is bootstrapped manually (outside of Terraform) to avoid a circular dependency. Future multi-environment state should use explicit backend config files keyed by environment name, for example `terraform/backend/<environment>.hcl`, because Terraform backend blocks cannot use normal input variables.
+* **Current Deployed Project:** Active Dev runs in GCP/Firebase project ID `kathelix-catvox-dev`. Region remains `us-central1`; Firestore location remains `nam5` (US multi-region). The old `kathelix-catvox-prod` project is preserved for the future real Prod slice and must not be deleted; pre-split Dev leftovers were cleaned on 2026-05-16. See ADR-0017, ADR-0018, and `docs/LEGACY_PRESPLIT_CLEANUP_REPORT_2026-05-16.md`.
+* **Terraform State:** Remote state is stored in a per-environment GCS bucket (`us-central1`, object versioning enabled) and is never stored locally or committed to source control. Active Dev uses `gs://catvox-tf-state-kathelix-catvox-dev/catvox/state`. Backend config files use `terraform/backend/<environment>.hcl` because Terraform backend blocks cannot use normal input variables; committed `.example` files document required values.
 * **Resource Scope:**
-    * **Project Services:** Enablement of `aiplatform`, `cloudfunctions`, `cloudbuild`, `run`, `eventarc`, `pubsub`, `firestore`, `storage`, `secretmanager`, `artifactregistry`, `firebase`, `firebaseappcheck`, and `iam`.
+    * **Project Services:** Enablement of `aiplatform`, `cloudfunctions`, `cloudbuild`, `run`, `eventarc`, `pubsub`, `firestore`, `storage`, `secretmanager`, `artifactregistry`, `firebase`, `firebaseextensions`, `firebaseappcheck`, `compute`, `monitoring`, `clouderrorreporting`, and `iam`.
     * **Databases:** Explicit provisioning of a **Firestore instance** in `(default)` mode.
     * **Artifact Registry repository** for Cloud Functions (2nd Gen) build images.
     * **Service Accounts:** `catvox-backend-sa` (Cloud Functions runtime) and `catvox-ci-sa` (Terraform CI / GitHub Actions) — see §6.3 for roles.
-    * **Secrets:** Secret Manager for `GCP_PROJECT_ID` and `APP_CHECK_DEBUG_TOKEN`.
+    * **Secrets:** Secret Manager for `GCP_PROJECT_ID` and Dev-only `APP_CHECK_DEBUG_TOKEN`.
 
 ### 6.2 Compute & API Orchestration
 * **Environment:** Firebase Cloud Functions (2nd Generation).
@@ -228,7 +228,7 @@ percentage. See ADR-0010 and ADR-0012.
 
 ### 6.3 Security & Identity
 * **App Verification:** Firebase App Check mandatory for all backend entry points. App Attest is the production provider for Apple platforms; Debug Provider is used for local development. (See ADR-0002.)
-* **Debug App Check Token Persistence:** Debug iPhone builds persist a registered App Check debug token in local app `UserDefaults` after launch with `AppCheckDebugToken` or `FIRAAppCheckDebugToken`. Later Debug launches from the app icon restore that token into the process environment before Firebase App Check initializes, so token refreshes do not fall back to an unregistered generated token. If Firebase rejects the restored token, CatVox clears the stored Debug token and reports an app verification failure instead of surfacing Firebase's raw token-exchange response. This bootstrap is compiled out of Release builds; production App Check remains App Attest-only. `make ios-device-launch` passes the registered debug token from local environment variables or `terraform/terraform.tfvars` without printing it. (See ADR-0016.)
+* **Debug App Check Token Persistence:** Debug iPhone builds persist a registered App Check debug token in local app `UserDefaults` after launch with `AppCheckDebugToken` or `FIRAAppCheckDebugToken`. Later Debug launches from the app icon restore that token into the process environment before Firebase App Check initializes, so token refreshes do not fall back to an unregistered generated token. If Firebase rejects the restored token, CatVox clears the stored Debug token and reports an app verification failure instead of surfacing Firebase's raw token-exchange response. This bootstrap is compiled out of Release builds; production App Check remains App Attest-only. `make ios-device-launch` passes the registered debug token from local environment variables or the selected ignored `terraform/env/<environment>.tfvars` without printing it. (See ADR-0016.)
 * **Secrets:** Zero hardcoded identifiers; all retrieved via Secret Manager at runtime.
 * **Service Account: `catvox-backend-sa`** — Runtime identity for Cloud Functions. Holds only the minimal roles required at runtime; never has CI-level access.
     * `roles/aiplatform.user` — invoke Gemini 2.5 Flash via Vertex AI.
@@ -331,22 +331,27 @@ percentage. See ADR-0010 and ADR-0012.
 ### 6.7 Named Environment Configuration
 CatVox uses named environments. Initial names are `dev` and `prod`, but product code, scripts, CI, and Terraform conventions must treat the environment name as data so future environments can be added without source-level branching. See ADR-0017.
 
-Each environment owns its own GCP/Firebase project, Firebase iOS app, App Check configuration, backend endpoints, PostHog configuration, GitHub secret/variable set, and Terraform state.
+Each environment owns its own GCP/Firebase project, Firebase iOS app, App Check configuration, backend endpoints, PostHog configuration, GitHub Environment secret/variable set, and Terraform state.
 
-Current pre-split defaults continue to point at the existing live-as-Dev backend. App-facing environment values use committed `config/environments/<environment>.xcconfig` files as the source of truth so bare Xcode runs and Makefile-driven automation read the same values. XcodeGen attaches the selected xcconfig to the app target and passes values through build settings into `Info.plist`; URL values in xcconfig are stored as hostnames and composed into `https://` URLs at the Info.plist and Makefile boundaries. The Makefile reads the same file through `CATVOX_ENV_CONFIG` before applying command-line overrides. Infrastructure-only values still belong in explicit Terraform backend/tfvars files.
+Active Dev defaults point at `kathelix-catvox-dev`. App-facing environment values use committed `config/environments/<environment>.xcconfig` files as the source of truth so bare Xcode runs and Makefile-driven automation read the same values. XcodeGen attaches the selected xcconfig to the app target and passes values through build settings into `Info.plist`; URL values in xcconfig are stored as hostnames and composed into `https://` URLs at the Info.plist and Makefile boundaries. The Makefile reads the same file through `CATVOX_ENV_CONFIG` before applying command-line overrides. Infrastructure-only values and secrets belong in explicit Terraform backend/tfvars files under `terraform/backend/<environment>.hcl` and `terraform/env/<environment>.tfvars`.
 
 Initial iOS bundle ID convention:
-* `com.kathelix.catvox.dev` for Dev/internal builds (future split; pre-split Dev still uses the current `com.kathelix.catvox` bundle ID)
-* `com.kathelix.catvox` for App Store Prod
+* `com.kathelix.catvox.dev` for Dev/internal builds
+* `com.kathelix.catvox` for future App Store Prod
+
+Any environment bundle ID that needs physical-device builds or App Attest must
+exist as an explicit Apple Developer App ID under team `QYT76L5836`, with a
+development provisioning profile for local device proof. Local Xcode account
+configuration is workstation setup, not a per-environment cloud artifact.
 
 Cloud Functions runtime settings:
 * Each environment derives the same runtime service-account name, `catvox-backend-sa`, inside that environment's own GCP project. The resulting IAM principals are therefore distinct per environment, for example `catvox-backend-sa@<project-id>.iam.gserviceaccount.com`.
 * Function region defaults to `us-central1`; `CATVOX_FUNCTION_REGION` overrides the Cloud Functions region, and `CATVOX_VERTEX_LOCATION` can separately override the Vertex AI location when a future environment needs different model locality.
 
-Future Firebase plist convention:
-* `GoogleService-Info-<Environment>.plist`
-* a build configuration or copy script selects the environment-specific plist before build
-* the current committed `CatVox/GoogleService-Info.plist` remains the only plist until the next Firebase app exists
+Firebase plist convention:
+* `CatVox/Resources/Firebase/GoogleService-Info-<environment>.plist`
+* The app loads the plist matching `CATVOX_ENVIRONMENT`.
+* `make ios-validate-env-config` and the app target pre-build script validate that the selected plist matches the selected environment project ID, Firebase app ID, API key, and bundle ID.
 
 Mutable live integration tests may run only against environments explicitly marked integration-safe with `CATVOX_INTEGRATION_SAFE_ENVIRONMENTS`. Production deployments get protected non-invasive smoke tests only.
 
@@ -382,7 +387,7 @@ GitHub Actions may call Makefile targets for the command body, but workflow YAML
     3. Post a structured comment to the PR with fmt/init outcomes and the full plan output (collapsible, truncated at 60k characters if needed).
     4. Fail the job if the plan step fails, surfacing the error in the PR comment.
 * **Apply job (on merge to `main`):** `make terraform-init` → `make terraform-ci-apply` (`terraform apply -auto-approve -no-color`).
-* **Variables:** `TF_VAR_project_id` and `TF_VAR_app_check_debug_token` supplied from GitHub Actions secrets; `region` and `firestore_location` use the defaults defined in `variables.tf`.
+* **Variables:** Environment-scoped GitHub secrets supply `GCP_PROJECT_ID`, `TF_VAR_app_check_debug_token`, and `TF_VAR_alert_email`; the workflow supplies the selected environment name, bundle ID, state bucket, region, Firestore location, App Check flags, and source-bucket IAM switch as `TF_VAR_*` values. Local runs may instead use ignored `terraform/env/<environment>.tfvars` files.
 * **Local apply guard:** Developers must run `make terraform-plan` before review, and local `make terraform-apply` refuses to run unless invoked as `make terraform-apply CONFIRM=apply`. The target still uses Terraform's interactive apply prompt.
 
 ### 7.3 Firebase Cloud Functions Pipeline
@@ -390,65 +395,28 @@ GitHub Actions may call Makefile targets for the command body, but workflow YAML
 * **Authentication:** Same WIF setup as the Terraform pipeline — `catvox-ci-sa` via `GCP_WORKLOAD_IDENTITY_PROVIDER` and `GCP_SERVICE_ACCOUNT` secrets.
 * **Build job (on PR and push):** `make functions-install` → `make functions-test` (TypeScript compile check plus backend unit tests).
 * **Deploy job (on merge to `main`):** Runs after build passes → `make functions-deploy` (`npm --prefix functions run build` plus `firebase deploy --only functions`).
-* **Integration job (after merge-to-main deploy):** Runs `make functions-integration` against the currently deployed integration-safe environment, using the current live GCP/Firebase project as `dev` until a separate production environment exists. Integration tests may write temporary Dev data when required and must clean it up. The current suite exchanges the registered App Check debug token for a valid App Check token, verifies that both HTTP Functions reject missing App Check tokens with `401 app_check_unauthorized`, verifies the Firestore quota reservation race contract with temporary `usage/{userId}` data through a direct `@google-cloud/firestore` probe, verifies the machine-readable daily-quota HTTP `429` response and structured Cloud Logging entry, then deletes temporary documents. See ADR-0013, ADR-0015, and ADR-0017.
+* **Integration job (after merge-to-main deploy):** Runs `make functions-integration` against the currently deployed integration-safe Dev environment in `kathelix-catvox-dev`. Integration tests may write temporary Dev data when required and must clean it up. The current suite exchanges the registered App Check debug token for a valid App Check token, verifies that both HTTP Functions reject missing App Check tokens with `401 app_check_unauthorized`, verifies the Firestore quota reservation race contract with temporary `usage/{userId}` data through a direct `@google-cloud/firestore` probe, verifies the machine-readable daily-quota HTTP `429` response and structured Cloud Logging entry, then deletes temporary documents. See ADR-0015, ADR-0017, and ADR-0018.
 * **Integration auth boundary:** GitHub Actions WIF produces an external-account Application Default Credentials (ADC) file. Direct data-plane probes in `functions/integration/**` should use Google Cloud client libraries such as `@google-cloud/firestore`, which accept that ADC path. Do not initialize Firebase Admin SDK inside the integration test harness unless it has been explicitly verified under GitHub Actions WIF; Admin ADC loading can reject the CI credentials even when the deployed Cloud Functions runtime uses Firebase Admin correctly.
-* **Local Dev integration command:** Developers can run the same backend integration suite against the currently deployed Dev backend with `make functions-integration` or `npm --prefix functions run test:integration`. The Makefile target supplies the current pre-split environment values, sets `CATVOX_INTEGRATION_MUTATIONS_ALLOWED=1`, and passes `CATVOX_INTEGRATION_SAFE_ENVIRONMENTS=dev` for the integration-safe Dev environment. It preserves an explicitly supplied `CATVOX_APP_CHECK_DEBUG_TOKEN`; when no App Check token environment variable is present, it silently falls back to `app_check_debug_token` in local `terraform/terraform.tfvars` if that file/value exists. Direct `npm --prefix functions run test:integration` runs must provide the required `CATVOX_*` environment values or an integration env file.
+* **Local Dev integration command:** Developers can run the same backend integration suite against the currently deployed Dev backend with `make functions-integration` or `npm --prefix functions run test:integration`. The Makefile target supplies selected environment values from `CATVOX_ENV_CONFIG`, sets `CATVOX_INTEGRATION_MUTATIONS_ALLOWED=1`, and passes `CATVOX_INTEGRATION_SAFE_ENVIRONMENTS=dev` for the integration-safe Dev environment. It preserves an explicitly supplied `CATVOX_APP_CHECK_DEBUG_TOKEN`; when no App Check token environment variable is present, it silently falls back to `app_check_debug_token` in the selected ignored `terraform/env/<environment>.tfvars` if that file/value exists. Direct `npm --prefix functions run test:integration` runs must provide the required `CATVOX_*` environment values or an integration env file.
 
-### 7.4 WIF Bootstrap & GitHub Secrets
-The following one-time manual setup is required before the Terraform pipeline can run. Bootstrap operations are exposed through repository-root Makefile targets:
+### 7.4 CI Bootstrap & GitHub Environment Secrets
+One-time repository setup, GitHub Actions availability, GitHub Environment protection, and the WIF trust model are documented in `docs/CI_BOOTSTRAP.md`.
 
-| Target | Purpose |
-|---|---|
-| `make bootstrap-remote-state` | Creates the GCS state bucket with versioning |
-| `make bootstrap-wif` | Creates the WIF pool + OIDC provider, binds the GitHub repo to `catvox-ci-sa`, grants state bucket access |
+Per-environment cloud setup is documented in `docs/CREATE_NEW_ENVIRONMENT.md`. Each environment gets its own GCP project, `catvox-ci-sa`, WIF pool/provider, Terraform state bucket, and GitHub Environment secrets.
 
-**Required GitHub Actions secrets:**
+Active Dev uses the GitHub Environment named `dev` with:
 
 | Secret | Value |
 |---|---|
-| `GCP_PROJECT_ID` | GCP project ID (`var.project_id`) |
-| `GCP_WORKLOAD_IDENTITY_PROVIDER` | Full WIF provider resource name (output of `make bootstrap-wif`) |
-| `GCP_SERVICE_ACCOUNT` | `catvox-ci-sa@<project-id>.iam.gserviceaccount.com` |
-| `TF_VAR_app_check_debug_token` | Firebase App Check debug token |
+| `GCP_PROJECT_ID` | `kathelix-catvox-dev` |
+| `GCP_WORKLOAD_IDENTITY_PROVIDER` | Terraform output `github_actions_wif_provider` |
+| `GCP_SERVICE_ACCOUNT` | Terraform output `ci_service_account_email` |
+| `TF_VAR_ALERT_EMAIL` | Dev alert recipient |
+| `TF_VAR_APP_CHECK_DEBUG_TOKEN` | Dev App Check debug token |
 
-Environment-specific GitHub values should be grouped by deployment environment when the split is implemented. Current repository-level secrets remain the pre-split live-as-Dev values.
+### 7.5 Environment Creation Runbook
 
-### 7.5 From-Scratch Environment Runbook
-
-Use this when deploying to a new GCP project, or after a full `terraform destroy`.
-
-#### Prerequisites (one-time per GCP project)
-1. Create the GCP project and enable billing — manual, unavoidable.
-2. Initialise Firebase on the project:
-   ```bash
-   firebase projects:addfirebase <PROJECT_ID>
-   ```
-3. Run the Makefile bootstrap targets:
-   ```bash
-   GCP_PROJECT_ID=<your-project-id> make bootstrap-remote-state  # creates TF state bucket
-   GCP_PROJECT_ID=<your-project-id> make bootstrap-wif            # creates WIF pool + OIDC provider
-   ```
-4. Add the four GitHub Actions secrets printed by `make bootstrap-wif` (see §7.4).
-
-#### Deploy infrastructure and backend
-```bash
-# 1. Provision all GCP infrastructure
-make terraform-plan
-make terraform-apply CONFIRM=apply
-
-# 2. Deploy Cloud Functions
-make functions-deploy
-```
-
-After step 1 the GitHub Actions CI pipeline is fully functional — all subsequent infrastructure changes go through CI.
-
-#### Known gotchas
-
-| Issue | Cause | Fix |
-|---|---|---|
-| `terraform apply` fails with 409 on Firestore | `(default)` database is soft-deleted after destroy; GCP retains it for a grace period | `terraform import 'google_firestore_database.default' 'projects/<PROJECT_ID>/databases/(default)'` then re-run apply |
-| `terraform destroy` fails on raw videos bucket | Bucket contains objects and `force_destroy = false` | `gcloud storage rm -r "gs://catvox-raw-videos-<PROJECT_ID>/**"` then re-run destroy |
-| WIF pool ID conflict after destroy | WIF pools are soft-deleted for 30 days — same ID cannot be reused | WIF pool/provider are intentionally outside Terraform; `bootstrap_wif.sh` only needs to be re-run on a genuinely new GCP project |
+Use `docs/CREATE_NEW_ENVIRONMENT.md` and `make environment-create` when creating a new GCP/Firebase environment or when reconstructing an environment after a full destroy. The runbook covers project creation, optional billing link, Firebase enablement, Terraform state bootstrap, Functions source bucket bootstrap, Terraform init/plan/apply, Firebase plist export, Functions deploy, GitHub Environment secrets, validation, and legacy pre-split cleanup.
 
 ---
 
@@ -485,6 +453,9 @@ After step 1 the GitHub Actions CI pipeline is fully functional — all subseque
 * [x] **Rendered Output Cleanup:** Store rendered share videos as temporary CatVox-owned artifacts and clean them up with normal cache lifecycle plus scan deletion.
 * [x] **Product Analytics:** Add PostHog product analytics for scan source choice, Photos import validation, recording, analysis, quota pressure, sharing/exporting, history deletion, and upgrade intent.
 * [x] **Environment Parameterization Baseline:** Document the named-environment model and move current single-environment app/backend/test/deploy values behind generic environment configuration keys without creating new cloud resources.
+* [x] **Dedicated Dev Environment:** Provision `kathelix-catvox-dev`, switch active Dev app/runtime/Terraform/GitHub Environment artifacts to it, deploy Functions, validate the Dev Firebase plist selection, and pass Dev backend integration tests. See ADR-0018.
+* [x] **Legacy Pre-Split Cleanup:** After a real Debug device scan passed against `kathelix-catvox-dev`, destroyed Terraform-managed Dev leftovers in preserved `kathelix-catvox-prod`, swept non-Terraform leftovers, and recorded a cleanup report before using that project ID for real Prod. See `docs/LEGACY_PRESPLIT_CLEANUP_REPORT_2026-05-16.md`.
+* [ ] **Real Production Environment:** Reuse preserved `kathelix-catvox-prod` for the protected production slice with App Store bundle ID, protected GitHub Environment, non-invasive smoke checks only, and no Dev debug tokens or mutable integration settings.
 
 ---
 

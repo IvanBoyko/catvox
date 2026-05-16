@@ -1,8 +1,16 @@
 # CatVox Dev Terraform values.
 # Copy to terraform/env/dev.tfvars and fill secret values locally or via CI.
 
-project_id            = "kathelix-catvox-prod"
-region                = "us-central1"
-firestore_location    = "nam5"
-app_check_debug_token = "YOUR-APP-CHECK-DEBUG-TOKEN"
-alert_email           = "you@example.com"
+environment_name                  = "dev"
+project_id                        = "kathelix-catvox-dev"
+region                            = "us-central1"
+firestore_location                = "nam5"
+tf_state_bucket                   = "catvox-tf-state-kathelix-catvox-dev"
+firebase_ios_bundle_id            = "com.kathelix.catvox.dev"
+firebase_ios_app_display_name     = "CatVox Dev iOS"
+firebase_apple_team_id            = "QYT76L5836"
+enable_app_check_debug_token      = true
+app_check_debug_token             = "YOUR-UUID4-APP-CHECK-DEBUG-TOKEN"
+app_check_debug_token_display_name = "CatVox Dev integration token"
+manage_gcf_sources_bucket_iam    = true
+alert_email                       = "you@example.com"
