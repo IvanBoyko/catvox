@@ -1,4 +1,5 @@
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
+import { join } from 'node:path';
 
 type Environment = Record<string, string | undefined>;
 
@@ -8,6 +9,21 @@ export type MutationGate = {
   environmentName: string;
   integrationSafeEnvironments: Set<string>;
 };
+
+const placeholderHelperPath = [
+  join(__dirname, '../../../scripts/lib/config-placeholders.cjs'),
+  join(__dirname, '../../scripts/lib/config-placeholders.cjs'),
+].find((candidate) => existsSync(candidate));
+
+if (!placeholderHelperPath) {
+  throw new Error('Unable to locate scripts/lib/config-placeholders.cjs');
+}
+
+const placeholderHelpers = require(placeholderHelperPath) as {
+  isPlaceholder(value: string): boolean;
+};
+
+export const { isPlaceholder } = placeholderHelpers;
 
 export function configValue(env: Environment, ...keys: string[]): string | undefined {
   for (const key of keys) {
@@ -29,6 +45,12 @@ export function requiredConfigValue(
   if (!value) {
     throw new Error(
       `Missing required integration configuration: ${[primaryKey, ...aliasKeys].join(' or ')}`
+    );
+  }
+
+  if (isPlaceholder(value)) {
+    throw new Error(
+      `Invalid placeholder integration configuration for ${[primaryKey, ...aliasKeys].join(' or ')}`
     );
   }
 

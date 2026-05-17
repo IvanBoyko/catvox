@@ -44,12 +44,22 @@ jobs:
       - name: Generate Xcode project
         run: make ios-generate
 
+      - name: Validate Firebase Environment Config
+        run: |
+          node --version
+          make ios-validate-env-config
+
       # ── Build ────────────────────────────────────────────────────────────
       # Targets the generic simulator slice — no device signing required.
       - name: Build for iOS Simulator
+        timeout-minutes: 15
+        env:
+          CATVOX_SKIP_XCODE_FIREBASE_CONFIG_VALIDATION: '1'
         run: make ios-build-only
 
       - name: Run iOS Unit Tests
+        env:
+          CATVOX_SKIP_XCODE_FIREBASE_CONFIG_VALIDATION: '1'
         run: make ios-test-only
 
   ui-tests:
@@ -78,4 +88,6 @@ jobs:
         run: gem install xcpretty --no-document --quiet
 
       - name: Run iOS UI Tests
+        env:
+          CATVOX_SKIP_XCODE_FIREBASE_CONFIG_VALIDATION: '1'
         run: make ios-ui-test

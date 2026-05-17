@@ -4,10 +4,10 @@ struct CatVoxAppConfiguration: Equatable {
     #if DEBUG
     private static let debugDefaultEnvironmentName = "dev"
     private static let debugDefaultSignedUploadURLEndpoint = URL(
-        string: "https://getsigneduploadurl-pdkw5uifga-uc.a.run.app"
+        string: "https://getsigneduploadurl-o2aj5rh53a-uc.a.run.app"
     )!
     private static let debugDefaultAnalyseVideoEndpoint = URL(
-        string: "https://analysevideo-pdkw5uifga-uc.a.run.app"
+        string: "https://analysevideo-o2aj5rh53a-uc.a.run.app"
     )!
     private static let debugDefaultPostHogHost = URL(string: "https://us.i.posthog.com")!
     #endif

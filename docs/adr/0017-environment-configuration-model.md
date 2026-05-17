@@ -96,6 +96,6 @@ marked integration-safe. Prod receives only protected, non-invasive smoke tests.
 
 ## Future Work
 
-- Firebase plist selection should follow a convention such as
-  `GoogleService-Info-<Environment>.plist`, copied or selected by build
-  configuration before app build.
+- Provision, import, or route PostHog configuration per environment so Dev,
+  staging, and future Prod analytics cannot pollute each other. This is tracked
+  separately in issue #37.

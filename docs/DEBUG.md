@@ -22,7 +22,7 @@ gcloud logging read \
   'resource.type="cloud_run_revision"
    AND resource.labels.service_name=("getSignedUploadURL" OR "analysevideo")
    AND severity>=ERROR' \
-  --project=kathelix-catvox-prod \
+  --project=kathelix-catvox-dev \
   --limit=50 \
   --freshness=1h \
   --format='table(timestamp, resource.labels.service_name, severity, textPayload)'
@@ -49,7 +49,7 @@ gcloud logging read \
   'resource.type="cloud_run_revision"
    AND resource.labels.service_name="analysevideo"
    AND severity=ERROR' \
-  --project=kathelix-catvox-prod \
+  --project=kathelix-catvox-dev \
   --limit=5 \
   --freshness=1h \
   --format=json \
@@ -79,7 +79,7 @@ gcloud logging read \
      jsonPayload.message="Retrying malformed Vertex AI analysis payload"
      OR jsonPayload.message="Vertex AI returned malformed analysis payload"
    )' \
-  --project=kathelix-catvox-prod \
+  --project=kathelix-catvox-dev \
   --limit=50 \
   --freshness=24h \
   --format=json
@@ -108,7 +108,7 @@ gcloud logging read \
    AND resource.labels.service_name=("getSignedUploadURL" OR "analysevideo")
    AND timestamp>="2026-04-21T05:35:00Z"
    AND timestamp<="2026-04-21T05:37:00Z"' \
-  --project=kathelix-catvox-prod \
+  --project=kathelix-catvox-dev \
   --format='table(timestamp, resource.labels.service_name, severity, textPayload)'
 ```
 
@@ -126,7 +126,7 @@ A new Cloud Run instance being spun up adds ~3–5 s of latency. Look for
 gcloud logging read \
   'resource.type="cloud_run_revision"
    AND textPayload:"Starting new instance"' \
-  --project=kathelix-catvox-prod \
+  --project=kathelix-catvox-dev \
   --limit=20 \
   --freshness=6h \
   --format='table(timestamp, resource.labels.service_name, textPayload)'
@@ -140,7 +140,7 @@ If the failure is at the upload stage (iOS PUT to GCS), verify whether the
 object landed:
 
 ```bash
-gcloud storage ls -l gs://catvox-raw-videos-kathelix-catvox-prod/
+gcloud storage ls -l gs://catvox-raw-videos-kathelix-catvox-dev/
 ```
 
 If the object is absent, the signed URL upload itself failed. If it is present,
@@ -158,7 +158,7 @@ with `count: 5`, calls `getSignedUploadURL`, verifies the machine-readable HTTP
 deletes temporary Firestore documents in a `finally` block.
 
 Prefer the Makefile target because it accepts `CATVOX_APP_CHECK_DEBUG_TOKEN`,
-`TF_VAR_app_check_debug_token`, or the local `terraform/terraform.tfvars`
+`TF_VAR_app_check_debug_token`, or the selected local `terraform/env/<environment>.tfvars`
 fallback:
 
 ```bash
@@ -195,7 +195,7 @@ CATVOX_APP_CHECK_DEBUG_TOKEN=<registered-token> make ios-device-launch
 ```
 
 `make ios-device-launch` also accepts `TF_VAR_app_check_debug_token` and falls
-back to local `terraform/terraform.tfvars` when present. It passes the token to
+back to the selected local `terraform/env/<environment>.tfvars` when present. It passes the token to
 `devicectl` without printing it. After that launch, later Debug app-icon
 launches reuse the locally persisted token for Firebase App Check refreshes.
 
@@ -215,6 +215,7 @@ been revoked in Firebase App Check.
 
 | Log message | Root cause | Fix |
 |---|---|---|
+| Xcode Signing & Capabilities shows `Unknown Name (QYT76L5836)`, `No Accounts`, or build fails with `No profiles for 'com.kathelix.catvox.dev' were found` | Xcode has no Apple Developer account that can access the configured team, or the exact environment bundle ID does not have a local development provisioning profile yet | Add the Apple Developer account in Xcode Settings → Accounts, verify team `QYT76L5836`, register the exact bundle ID/App ID if needed, then let automatic signing create the development profile or create one manually |
 | iOS alert says `Verification Failed`, or older Debug build alert includes `firebaseappcheck.googleapis.com`, `exchangeDebugToken`, HTTP `403`, and `App attestation failed` | Debug iPhone build refreshed App Check without a registered debug token in the process environment or local Debug token cache, or Firebase rejected the locally persisted Debug token | Launch once with `CATVOX_APP_CHECK_DEBUG_TOKEN=<fresh-registered-token> make ios-device-launch`, then retry from the app icon. If it still fails, confirm the token is registered and not revoked in Firebase App Check |
 | `Vertex AI returned invalid JSON: { "primary_emotion": ...` (truncated) | `MAX_OUTPUT_TOKENS` too low — thinking model consumed budget before finishing JSON | Raise `MAX_OUTPUT_TOKENS` in `functions/src/gemini.ts` |
 | `Retrying malformed Vertex AI analysis payload` then `Vertex AI returned malformed analysis payload` | First Gemini response was malformed, retry also failed, and the backend converted the request to a controlled `502` instead of crashing | Inspect `issues`, `attempt`, and `rawResponsePreview` in logs; if frequent, revisit prompt / output constraints or `MAX_OUTPUT_TOKENS` |
@@ -241,10 +242,11 @@ A Cloud Monitoring alerting policy fires directly on ERROR-level log entries
 from either Cloud Function, with no manual console steps required.
 
 **This is already implemented in `terraform/monitoring.tf`.** Add your email
-to `terraform.tfvars` and the next `terraform apply` (or CI merge) activates it:
+to the selected ignored `terraform/env/<environment>.tfvars` and the next
+`terraform apply` (or CI merge) activates it:
 
 ```hcl
-# terraform.tfvars
+# terraform/env/dev.tfvars
 alert_email = "you@example.com"
 ```
 

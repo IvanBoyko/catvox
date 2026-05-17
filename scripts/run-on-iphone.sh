@@ -19,7 +19,8 @@
 #   IOS_CONFIGURATION
 #   CATVOX_APP_CHECK_DEBUG_TOKEN or TF_VAR_app_check_debug_token
 #              Registered Firebase App Check debug token for Debug builds.
-#              Falls back to terraform/terraform.tfvars app_check_debug_token.
+#              Falls back to the selected terraform/env/<environment>.tfvars
+#              app_check_debug_token.
 
 set -euo pipefail
 
@@ -27,7 +28,7 @@ DEVICE_ID="${DEVICE_ID:-264DA990-A302-5C43-8D51-91BB11C7A1E4}"
 SCHEME="${CATVOX_IOS_SCHEME:-CatVox}"
 PROJECT="CatVox.xcodeproj"
 CONFIGURATION="${IOS_CONFIGURATION:-Debug}"
-BUNDLE_ID="${CATVOX_IOS_BUNDLE_ID:-com.kathelix.catvox}"
+BUNDLE_ID="${CATVOX_IOS_BUNDLE_ID:-com.kathelix.catvox.dev}"
 DERIVED_DATA_PATH=".build/ios-device"
 APP_PATH="${DERIVED_DATA_PATH}/Build/Products/${CONFIGURATION}-iphoneos/${SCHEME}.app"
 MODE="${1:-launch}"
@@ -57,7 +58,7 @@ Environment overrides:
   IOS_CONFIGURATION      Current default: ${CONFIGURATION}
   CATVOX_APP_CHECK_DEBUG_TOKEN or TF_VAR_app_check_debug_token
              Registered Firebase App Check debug token for Debug builds.
-             Falls back to terraform/terraform.tfvars app_check_debug_token.
+             Falls back to the selected terraform/env/<environment>.tfvars app_check_debug_token.
 EOF
 }
 

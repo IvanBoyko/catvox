@@ -2,7 +2,7 @@ import XCTest
 @testable import CatVox
 
 final class CatVoxAppConfigurationTests: XCTestCase {
-    func testUsesPreSplitDefaultsWhenConfigurationIsMissing() {
+    func testUsesDevDefaultsWhenConfigurationIsMissing() {
         let configuration = CatVoxAppConfiguration(
             infoDictionary: [:],
             environment: [:]
@@ -11,11 +11,11 @@ final class CatVoxAppConfigurationTests: XCTestCase {
         XCTAssertEqual(configuration.environmentName, "dev")
         XCTAssertEqual(
             configuration.signedUploadURLEndpoint,
-            URL(string: "https://getsigneduploadurl-pdkw5uifga-uc.a.run.app")!
+            URL(string: "https://getsigneduploadurl-o2aj5rh53a-uc.a.run.app")!
         )
         XCTAssertEqual(
             configuration.analyseVideoEndpoint,
-            URL(string: "https://analysevideo-pdkw5uifga-uc.a.run.app")!
+            URL(string: "https://analysevideo-o2aj5rh53a-uc.a.run.app")!
         )
         XCTAssertNil(configuration.postHogProjectToken)
         XCTAssertEqual(configuration.postHogHost, URL(string: "https://us.i.posthog.com")!)

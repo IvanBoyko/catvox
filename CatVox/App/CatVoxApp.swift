@@ -45,7 +45,13 @@ struct CatVoxApp: App {
         #endif
 
         AppCheck.setAppCheckProviderFactory(providerFactory)
-        FirebaseApp.configure()
+        let environmentName = CatVoxAppConfiguration.current.environmentName
+        let plistName = "GoogleService-Info-\(environmentName)"
+        guard let plistPath = Bundle.main.path(forResource: plistName, ofType: "plist"),
+              let options = FirebaseOptions(contentsOfFile: plistPath) else {
+            fatalError("Missing Firebase configuration plist: \(plistName).plist")
+        }
+        FirebaseApp.configure(options: options)
     }
 
     private static func prepareApplicationSupportDirectory() {

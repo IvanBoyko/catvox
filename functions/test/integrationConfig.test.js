@@ -8,6 +8,7 @@ const {
   argValue,
   assertMutationGateAllowed,
   configValue,
+  isPlaceholder,
   loadEnvFile,
   normalize,
   parseList,
@@ -150,5 +151,21 @@ test('config value helpers trim values and support aliases', () => {
   assert.throws(
     () => requiredConfigValue(env, 'MISSING', 'ALSO_MISSING'),
     /MISSING or ALSO_MISSING/
+  );
+});
+
+test('placeholder helper rejects generated config placeholder patterns', () => {
+  assert.equal(isPlaceholder('replace-with-dev-firebase-app-id'), true);
+  assert.equal(isPlaceholder('$(CATVOX_FIREBASE_APP_ID)'), true);
+  assert.equal(isPlaceholder('<firebase-app-id>'), true);
+  assert.equal(isPlaceholder('TODO'), true);
+  assert.equal(isPlaceholder('1:99523926611:ios:9b3848f13783e1c585c4a6'), false);
+  assert.equal(isPlaceholder('AIza-real-looking-key'), false);
+});
+
+test('required config value rejects placeholders before downstream network calls', () => {
+  assert.throws(
+    () => requiredConfigValue({ APP_ID: 'replace-with-dev-firebase-app-id' }, 'APP_ID'),
+    /Invalid placeholder integration configuration/
   );
 });

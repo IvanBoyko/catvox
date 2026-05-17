@@ -5,6 +5,7 @@ import {
   argValue,
   assertMutationGateAllowed,
   configValue,
+  isPlaceholder,
   loadEnvFile,
   parseList,
   requiredConfigValue,
@@ -347,6 +348,9 @@ async function exchangeDebugTokenForAppCheckToken(): Promise<string> {
     throw new Error(
       'CATVOX_APP_CHECK_DEBUG_TOKEN is required for App Check-protected integration tests'
     );
+  }
+  if (isPlaceholder(appCheckDebugToken)) {
+    throw new Error('CATVOX_APP_CHECK_DEBUG_TOKEN must not be a placeholder');
   }
 
   const app = `projects/${projectId}/apps/${firebaseAppId}`;
