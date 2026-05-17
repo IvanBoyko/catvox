@@ -32,7 +32,7 @@ Subtasks:
 * [x] Split Terraform state and variables by environment for active Dev (`terraform/backend/dev.hcl.example`, `terraform/env/dev.tfvars.example`).
 * [x] Split GitHub Actions Dev secrets into the GitHub Environment named `dev`; PR and merge-to-main deploys target Dev.
 * [x] Split Dev iOS configuration, including Firebase plist selection/validation, Dev bundle ID, App Check debug token handling, and backend endpoint selection.
-* [x] After a real Debug device scan passes against `kathelix-catvox-dev`, clean Dev leftovers from preserved `kathelix-catvox-prod` and record a cleanup report. See `docs/LEGACY_PRESPLIT_CLEANUP_REPORT_2026-05-16.md`.
+* [x] After a real Debug device scan passes against `kathelix-catvox-dev`, clean Dev leftovers from preserved `kathelix-catvox-prod` and record a cleanup report. See `docs/archive/LEGACY_PRESPLIT_CLEANUP_REPORT_2026-05-16.md`.
 * [ ] Create the future real Prod environment in preserved `kathelix-catvox-prod`, with protected GitHub Environment and explicit release path.
 * Split analytics configuration so Dev/test traffic cannot pollute production PostHog dashboards.
 * Restrict Firestore-mutating integration tests to Dev only; define a separate protected production smoke-test runbook for minimal non-invasive checks after future Prod deployments.

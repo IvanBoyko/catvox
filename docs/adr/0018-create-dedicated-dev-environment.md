@@ -31,7 +31,7 @@ Keep `kathelix-catvox-prod` alive as a preserved project container for the
 future real Prod slice. After the new Dev environment passes deploy,
 integration, and device-scan validation, clean Dev leftovers from the old
 project without deleting the project itself. That cleanup was completed on
-2026-05-16; see `docs/LEGACY_PRESPLIT_CLEANUP_REPORT_2026-05-16.md`.
+2026-05-16; see `docs/archive/LEGACY_PRESPLIT_CLEANUP_REPORT_2026-05-16.md`.
 
 Terraform environment input values stay in `terraform/env/<env>.tfvars` because
 Terraform needs infra-only and sensitive values that do not belong in app

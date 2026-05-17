@@ -182,7 +182,7 @@ For future Prod:
 - Do not run Firestore-mutating integration tests.
 - Use a protected manual smoke-test checklist only.
 - When creating real Prod in preserved `kathelix-catvox-prod`, start from
-  `docs/LEGACY_PRESPLIT_CLEANUP_REPORT_2026-05-16.md`: the Firebase iOS app
+  `docs/archive/LEGACY_PRESPLIT_CLEANUP_REPORT_2026-05-16.md`: the Firebase iOS app
   for `com.kathelix.catvox` and the empty Firestore `(default)` database were
   intentionally preserved, so the Prod slice must either import them into
   Terraform state or deliberately delete/recreate them after confirming the

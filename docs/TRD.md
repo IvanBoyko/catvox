@@ -212,7 +212,7 @@ percentage. See ADR-0010 and ADR-0012.
 
 ### 6.1 Infrastructure as Code (Terraform)
 * **Provider:** Google Cloud Platform (GCP).
-* **Current Deployed Project:** Active Dev runs in GCP/Firebase project ID `kathelix-catvox-dev`. Region remains `us-central1`; Firestore location remains `nam5` (US multi-region). The old `kathelix-catvox-prod` project is preserved for the future real Prod slice and must not be deleted; pre-split Dev leftovers were cleaned on 2026-05-16. See ADR-0017, ADR-0018, and `docs/LEGACY_PRESPLIT_CLEANUP_REPORT_2026-05-16.md`.
+* **Current Deployed Project:** Active Dev runs in GCP/Firebase project ID `kathelix-catvox-dev`. Region remains `us-central1`; Firestore location remains `nam5` (US multi-region). The old `kathelix-catvox-prod` project is preserved for the future real Prod slice and must not be deleted; pre-split Dev leftovers were cleaned on 2026-05-16. See ADR-0017, ADR-0018, and `docs/archive/LEGACY_PRESPLIT_CLEANUP_REPORT_2026-05-16.md`.
 * **Terraform State:** Remote state is stored in a per-environment GCS bucket (`us-central1`, object versioning enabled) and is never stored locally or committed to source control. Active Dev uses `gs://catvox-tf-state-kathelix-catvox-dev/catvox/state`. Backend config files use `terraform/backend/<environment>.hcl` because Terraform backend blocks cannot use normal input variables; committed `.example` files document required values.
 * **Resource Scope:**
     * **Project Services:** Enablement of `aiplatform`, `cloudfunctions`, `cloudbuild`, `run`, `eventarc`, `pubsub`, `firestore`, `storage`, `secretmanager`, `artifactregistry`, `firebase`, `firebaseextensions`, `firebaseappcheck`, `compute`, `monitoring`, `clouderrorreporting`, and `iam`.
@@ -454,7 +454,7 @@ Use `docs/CREATE_NEW_ENVIRONMENT.md` and `make environment-create` when creating
 * [x] **Product Analytics:** Add PostHog product analytics for scan source choice, Photos import validation, recording, analysis, quota pressure, sharing/exporting, history deletion, and upgrade intent.
 * [x] **Environment Parameterization Baseline:** Document the named-environment model and move current single-environment app/backend/test/deploy values behind generic environment configuration keys without creating new cloud resources.
 * [x] **Dedicated Dev Environment:** Provision `kathelix-catvox-dev`, switch active Dev app/runtime/Terraform/GitHub Environment artifacts to it, deploy Functions, validate the Dev Firebase plist selection, and pass Dev backend integration tests. See ADR-0018.
-* [x] **Legacy Pre-Split Cleanup:** After a real Debug device scan passed against `kathelix-catvox-dev`, destroyed Terraform-managed Dev leftovers in preserved `kathelix-catvox-prod`, swept non-Terraform leftovers, and recorded a cleanup report before using that project ID for real Prod. See `docs/LEGACY_PRESPLIT_CLEANUP_REPORT_2026-05-16.md`.
+* [x] **Legacy Pre-Split Cleanup:** After a real Debug device scan passed against `kathelix-catvox-dev`, destroyed Terraform-managed Dev leftovers in preserved `kathelix-catvox-prod`, swept non-Terraform leftovers, and recorded a cleanup report before using that project ID for real Prod. See `docs/archive/LEGACY_PRESPLIT_CLEANUP_REPORT_2026-05-16.md`.
 * [ ] **Real Production Environment:** Reuse preserved `kathelix-catvox-prod` for the protected production slice with App Store bundle ID, protected GitHub Environment, non-invasive smoke checks only, and no Dev debug tokens or mutable integration settings.
 
 ---
