@@ -353,6 +353,8 @@ Use `docs/CREATE_NEW_ENVIRONMENT.md` and `make environment-create` for new envir
 
 For infra, environment, secrets, build-setting, or runtime-configuration changes, do a small negative-test pass before review. Check missing config, malformed config, unsafe environment names, Release fail-loud behavior, and production-mutation rejection where relevant. Prefer automated tests for safety properties; manual live checks should supplement them, not be the only proof.
 
+For shared infrastructure modules, defaults must be production-safe and non-destructive. Dev/test environments should explicitly opt into disposable or destructive behavior, such as Firebase app deletion, debug tokens, mutable tests, or relaxed CI gates.
+
 When a safety, security, auth, or environment boundary is introduced or changed, extract the predicate/gate into a pure function with explicit inputs where practical and cover it with focused unit tests. Examples include mutation gates, service-account derivation, allowed-environment checks, Release config validation, and config-file parsing.
 
 ### Product Feature Workflow
