@@ -34,7 +34,8 @@ Subtasks:
 * [x] Split Dev iOS configuration, including Firebase plist selection/validation, Dev bundle ID, App Check debug token handling, and backend endpoint selection.
 * [x] After a real Debug device scan passes against `kathelix-catvox-dev`, clean Dev leftovers from preserved `kathelix-catvox-prod` and record a cleanup report. See `docs/archive/LEGACY_PRESPLIT_CLEANUP_REPORT_2026-05-16.md`.
 * [ ] Create the future real Prod environment in preserved `kathelix-catvox-prod`, with protected GitHub Environment and explicit release path.
-* Split analytics configuration so Dev/test traffic cannot pollute production PostHog dashboards.
+* When provisioning the Prod WIF binding, tighten beyond the current repo-wide `attribute.repository` principal — scope to `attribute.environment/prod` or `attribute.ref/refs/heads/main` so a misconfigured PR workflow in the same repo cannot impersonate the Prod CI service account. Defense-in-depth refinement deferred from PR #36 (finding F9).
+* Split analytics configuration so Dev/test traffic cannot pollute production PostHog dashboards. Tracked in issue #37.
 * Restrict Firestore-mutating integration tests to Dev only; define a separate protected production smoke-test runbook for minimal non-invasive checks after future Prod deployments.
 * Define launch cutover and rollback steps, including how to handle any pre-launch Firestore usage data, GCS objects, and deployed function revisions.
 
