@@ -86,7 +86,7 @@
 		0BAECA2F06CA2B535E21A271 /* GoogleService-Info-dev.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = "GoogleService-Info-dev.plist"; sourceTree = "<group>"; };
 		0D8439BECE45A0303556B1C1 /* CatVox.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = CatVox.entitlements; sourceTree = "<group>"; };
 		0F8AF485DF075ADE029435E4 /* GCPService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GCPService.swift; sourceTree = "<group>"; };
-		13B1A8A31D1EAAB998A22160 /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; lastKnownFileType = text.xml; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
+		13B1A8A31D1EAAB998A22160 /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
 		19667502574A1D26D0A51E54 /* RecordingView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecordingView.swift; sourceTree = "<group>"; };
 		19AE93315B15E827FC62B553 /* CatVoxLaunchConfiguration.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CatVoxLaunchConfiguration.swift; sourceTree = "<group>"; };
 		2086AF68571F274493E9D93C /* dev.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = dev.xcconfig; sourceTree = "<group>"; };
@@ -109,7 +109,7 @@
 		6B2B3D6279B0CBA2AEBDEB41 /* UploadProgressView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UploadProgressView.swift; sourceTree = "<group>"; };
 		6E3DACD7D8D8ABA493AB43D7 /* CatVoxAppConfiguration.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CatVoxAppConfiguration.swift; sourceTree = "<group>"; };
 		7656DF1FA69C366617629924 /* CatVoxTests.xctest */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.cfbundle; path = CatVoxTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
-		7BC4DFCD54831F1AA990A7C3 /* CatVox.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = CatVox.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		7BC4DFCD54831F1AA990A7C3 /* CatVox.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = CatVox.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		7CDA1F15EF954A1E30D11AE3 /* ActivityView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ActivityView.swift; sourceTree = "<group>"; };
 		82B4E92B6085484FE9DDDA8B /* ScanQuotaStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScanQuotaStore.swift; sourceTree = "<group>"; };
 		8F5127E72D22F9078142F6EE /* CameraPreviewView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CameraPreviewView.swift; sourceTree = "<group>"; };
@@ -438,6 +438,9 @@
 					4DF3DE52DEB7BC6BDD20B322 = {
 						TestTargetID = A7EDDBB8F04B431FAC25DB3C;
 					};
+					A7EDDBB8F04B431FAC25DB3C = {
+						DevelopmentTeam = QYT76L5836;
+					};
 				};
 			};
 			buildConfigurationList = 35CA416E20D77D1A4BC6992A /* Build configuration list for PBXProject "CatVox" */;
@@ -499,7 +502,7 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
-			shellScript = "export PATH=\"/opt/homebrew/bin:/usr/local/bin:$PATH\"\nCATVOX_ENVIRONMENT=\"${CATVOX_ENVIRONMENT}\" \\\nCATVOX_PROJECT_ID=\"${CATVOX_PROJECT_ID}\" \\\nCATVOX_FIREBASE_APP_ID=\"${CATVOX_FIREBASE_APP_ID}\" \\\nCATVOX_FIREBASE_API_KEY=\"${CATVOX_FIREBASE_API_KEY}\" \\\nCATVOX_IOS_BUNDLE_ID=\"com.kathelix.catvox.dev\" \\\nnode \"${SRCROOT}/scripts/validate-firebase-ios-config.mjs\"\n";
+			shellScript = "if [ \"${CATVOX_SKIP_XCODE_FIREBASE_CONFIG_VALIDATION:-0}\" = \"1\" ]; then\n  echo \"Skipping Firebase environment config validation; validation is handled by CI.\"\n  exit 0\nfi\nset -eu\nexport PATH=\"/opt/homebrew/bin:/usr/local/bin:$PATH\"\nnode --version\nCATVOX_ENVIRONMENT=\"${CATVOX_ENVIRONMENT}\" \\\nCATVOX_PROJECT_ID=\"${CATVOX_PROJECT_ID}\" \\\nCATVOX_FIREBASE_APP_ID=\"${CATVOX_FIREBASE_APP_ID}\" \\\nCATVOX_FIREBASE_API_KEY=\"${CATVOX_FIREBASE_API_KEY}\" \\\nCATVOX_IOS_BUNDLE_ID=\"${CATVOX_IOS_BUNDLE_ID}\" \\\nnode \"${SRCROOT}/scripts/validate-firebase-ios-config.mjs\"\n";
 		};
 /* End PBXShellScriptBuildPhase section */
 

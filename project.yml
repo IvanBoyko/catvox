@@ -43,7 +43,13 @@ targets:
           - $(SRCROOT)/scripts/validate-firebase-ios-config.mjs
           - $(SRCROOT)/CatVox/Resources/Firebase/GoogleService-Info-$(CATVOX_ENVIRONMENT).plist
         script: |
+          if [ "${CATVOX_SKIP_XCODE_FIREBASE_CONFIG_VALIDATION:-0}" = "1" ]; then
+            echo "Skipping Firebase environment config validation; validation is handled by CI."
+            exit 0
+          fi
+          set -eu
           export PATH="/opt/homebrew/bin:/usr/local/bin:$PATH"
+          node --version
           CATVOX_ENVIRONMENT="${CATVOX_ENVIRONMENT}" \
           CATVOX_PROJECT_ID="${CATVOX_PROJECT_ID}" \
           CATVOX_FIREBASE_APP_ID="${CATVOX_FIREBASE_APP_ID}" \
