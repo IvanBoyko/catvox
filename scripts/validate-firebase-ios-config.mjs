@@ -2,9 +2,11 @@
 import { readFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import placeholderHelpers from './lib/config-placeholders.cjs';
 
 const scriptDir = dirname(fileURLToPath(import.meta.url));
 const repoRoot = resolve(scriptDir, '..');
+const { isPlaceholder } = placeholderHelpers;
 
 const environmentName = requiredEnv('CATVOX_ENVIRONMENT');
 const projectId = requiredEnv('CATVOX_PROJECT_ID');
@@ -66,18 +68,6 @@ function normalize(value) {
   }
   const trimmed = String(value).trim();
   return trimmed.length > 0 ? trimmed : undefined;
-}
-
-function isPlaceholder(value) {
-  const lower = value.toLowerCase();
-  return (
-    value.includes('$(') ||
-    value.includes('<') ||
-    value.includes('>') ||
-    lower.includes('replace-with') ||
-    lower.includes('placeholder') ||
-    lower === 'todo'
-  );
 }
 
 function decodeXml(value) {

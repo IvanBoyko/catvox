@@ -75,6 +75,17 @@ variable "firebase_ios_app_display_name" {
   default     = "CatVox iOS"
 }
 
+variable "firebase_ios_app_deletion_policy" {
+  description = "Terraform deletion policy for the Firebase iOS app. Use ABANDON for Prod-like environments so destroy/refactor cannot delete the App Store-registered app."
+  type        = string
+  default     = "ABANDON"
+
+  validation {
+    condition     = contains(["ABANDON", "DELETE"], var.firebase_ios_app_deletion_policy)
+    error_message = "firebase_ios_app_deletion_policy must be ABANDON or DELETE."
+  }
+}
+
 variable "firebase_apple_team_id" {
   description = "Apple Developer Team ID associated with the Firebase iOS app."
   type        = string

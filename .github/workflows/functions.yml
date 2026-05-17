@@ -127,6 +127,7 @@ jobs:
           CATVOX_ENV_CONFIG: config/environments/dev.xcconfig
           CATVOX_ENVIRONMENT: dev
           CATVOX_PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
+          # DEV ONLY — Prod smoke checks must not include prod in this mutable-test allowlist.
           CATVOX_INTEGRATION_SAFE_ENVIRONMENTS: dev
           CATVOX_APP_CHECK_DEBUG_TOKEN: ${{ secrets.TF_VAR_APP_CHECK_DEBUG_TOKEN }}
         run: make functions-integration

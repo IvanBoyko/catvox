@@ -22,6 +22,7 @@ BACKEND_CONFIG="${CATVOX_TF_BACKEND_CONFIG:-terraform/backend/${ENVIRONMENT}.hcl
 TFVARS_FILE="${CATVOX_TF_VARS_FILE:-terraform/env/${ENVIRONMENT}.tfvars}"
 IOS_BUNDLE_ID="${CATVOX_IOS_BUNDLE_ID:-com.kathelix.catvox.${ENVIRONMENT}}"
 IOS_APP_DISPLAY_NAME="${FIREBASE_IOS_APP_DISPLAY_NAME:-CatVox ${ENVIRONMENT} iOS}"
+IOS_APP_DELETION_POLICY="${FIREBASE_IOS_APP_DELETION_POLICY:-ABANDON}"
 APPLE_TEAM_ID="${FIREBASE_APPLE_TEAM_ID:-QYT76L5836}"
 RUN_TERRAFORM_APPLY="${RUN_TERRAFORM_APPLY:-0}"
 RUN_FUNCTIONS_DEPLOY="${RUN_FUNCTIONS_DEPLOY:-0}"
@@ -55,6 +56,15 @@ echo "Region      : ${REGION}"
 echo "State bucket: gs://${STATE_BUCKET}/${STATE_PREFIX}"
 echo ""
 
+case "${IOS_APP_DELETION_POLICY}" in
+  ABANDON|DELETE)
+    ;;
+  *)
+    echo "FIREBASE_IOS_APP_DELETION_POLICY must be ABANDON or DELETE." >&2
+    exit 1
+    ;;
+esac
+
 if gcloud projects describe "${PROJECT_ID}" >/dev/null 2>&1; then
   echo "GCP project ${PROJECT_ID} already exists."
 else
@@ -73,7 +83,7 @@ else
   echo "BILLING_ACCOUNT_ID not set; skipping billing link."
 fi
 
-if firebase projects:list --json | grep -q "\"projectId\": \"${PROJECT_ID}\""; then
+if firebase projects:list --json --non-interactive | grep -q "\"projectId\": \"${PROJECT_ID}\""; then
   echo "Firebase is already enabled for ${PROJECT_ID}."
 else
   firebase projects:addfirebase "${PROJECT_ID}" --non-interactive
@@ -147,6 +157,7 @@ firestore_location                = "${FIRESTORE_LOCATION}"
 tf_state_bucket                   = "${STATE_BUCKET}"
 firebase_ios_bundle_id            = "${IOS_BUNDLE_ID}"
 firebase_ios_app_display_name     = "${IOS_APP_DISPLAY_NAME}"
+firebase_ios_app_deletion_policy  = "${IOS_APP_DELETION_POLICY}"
 firebase_apple_team_id            = "${APPLE_TEAM_ID}"
 enable_app_check_debug_token      = ${ENABLE_APP_CHECK_DEBUG_TOKEN}
 ${app_check_line}
@@ -194,6 +205,7 @@ if [[ "${RUN_FUNCTIONS_DEPLOY}" == "1" ]]; then
     --project "${PROJECT_ID}" \
     --location "${REGION}" \
     --days 7 \
+    --non-interactive \
     --force
 
   make functions-deploy \

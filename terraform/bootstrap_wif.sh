@@ -41,6 +41,8 @@
 
 set -euo pipefail
 
+echo "Deprecated helper: use 'make environment-create' for new environments." >&2
+
 # ── Configuration ─────────────────────────────────────────────────────────────
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"

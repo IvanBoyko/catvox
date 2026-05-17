@@ -32,17 +32,19 @@ CATVOX_TF_VARS_FILE ?= terraform/env/$(CATVOX_TERRAFORM_ENV).tfvars
 CATVOX_TF_STATE_BUCKET ?= catvox-tf-state-$(GCP_PROJECT_ID)
 CATVOX_TF_STATE_PREFIX ?= catvox/state
 CATVOX_TF_INIT_FLAGS ?= -reconfigure
+# Backward-compatible alias used by App Check token resolution helpers.
 CATVOX_TFVARS_PATH ?= $(CATVOX_TF_VARS_FILE)
 CATVOX_FIREBASE_PLIST_OUTPUT ?= CatVox/Resources/Firebase/GoogleService-Info-$(CATVOX_ENVIRONMENT).plist
 
 catvox_tf_backend_rel = $(patsubst terraform/%,%,$(CATVOX_TF_BACKEND_CONFIG))
 catvox_tf_vars_rel = $(patsubst terraform/%,%,$(CATVOX_TF_VARS_FILE))
+# Local runs usually use ignored backend HCL files; CI supplies equivalent inline backend flags.
 catvox_tf_backend_args = $(if $(wildcard $(CATVOX_TF_BACKEND_CONFIG)),-backend-config="$(catvox_tf_backend_rel)",-backend-config="bucket=$(CATVOX_TF_STATE_BUCKET)" -backend-config="prefix=$(CATVOX_TF_STATE_PREFIX)")
 catvox_tf_var_file_arg = $(if $(wildcard $(CATVOX_TF_VARS_FILE)),-var-file="$(catvox_tf_vars_rel)",)
 
 .PHONY: help doctor \
 	ios-generate ios-build ios-build-only ios-test ios-test-only ios-ui-test ios-ui-test-only ios-ci ios-device-launch ios-device-console app-deploy \
-	ios-validate-env-config \
+	ios-validate-env-config ios-validate-env-config-drift \
 	functions-install functions-build functions-test functions-deploy functions-integration functions-ci \
 	backend-build backend-deploy backend-integration \
 	terraform-fmt-check terraform-init terraform-validate terraform-plan terraform-ci-plan terraform-apply terraform-ci-apply terraform-output-firebase-plist \
@@ -58,6 +60,7 @@ help:
 		'  make ios-test               Generate project and run iOS unit tests' \
 		'  make ios-ui-test            Generate project and run iOS XCUITests' \
 		'  make ios-validate-env-config Validate selected Firebase plist and xcconfig values' \
+		'  make ios-validate-env-config-drift Compare committed Firebase plist to Terraform output' \
 		'  make ios-ci                 Generate, build, and test like CI' \
 		'  make ios-device-launch      Build, install, and launch on DEVICE_ID or default iPhone' \
 		'  make ios-device-console     Build, install, and launch with devicectl console' \
@@ -130,6 +133,12 @@ ios-validate-env-config:
 	 CATVOX_FIREBASE_API_KEY="$(CATVOX_FIREBASE_API_KEY)" \
 	 CATVOX_IOS_BUNDLE_ID="$(CATVOX_IOS_BUNDLE_ID)" \
 	 node scripts/validate-firebase-ios-config.mjs
+
+ios-validate-env-config-drift:
+	@tmpdir="$$(mktemp -d)"; \
+	trap 'rm -rf "$$tmpdir"' EXIT; \
+	cd terraform && terraform output -raw firebase_ios_plist_base64 | base64 --decode > "$$tmpdir/expected.plist"; \
+	diff -u "$$tmpdir/expected.plist" "$(CURDIR)/$(CATVOX_FIREBASE_PLIST_OUTPUT)"
 
 ios-build: ios-generate ios-build-only
 

@@ -8,6 +8,7 @@ firestore_location                = "nam5"
 tf_state_bucket                   = "catvox-tf-state-kathelix-catvox-dev"
 firebase_ios_bundle_id            = "com.kathelix.catvox.dev"
 firebase_ios_app_display_name     = "CatVox Dev iOS"
+firebase_ios_app_deletion_policy  = "DELETE"
 firebase_apple_team_id            = "QYT76L5836"
 enable_app_check_debug_token      = true
 app_check_debug_token             = "YOUR-UUID4-APP-CHECK-DEBUG-TOKEN"

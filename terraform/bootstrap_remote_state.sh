@@ -18,6 +18,8 @@
 
 set -euo pipefail
 
+echo "Deprecated helper: use 'make environment-create' for new environments." >&2
+
 # ── Configuration ─────────────────────────────────────────────────────────────
 # Legacy helper. New environments should use scripts/create-environment.sh via
 # `make environment-create`, which also writes backend/tfvars files.

@@ -55,5 +55,8 @@ xcconfig files. App/runtime values stay in `config/environments/<env>.xcconfig`.
   GitHub Environments, Xcode build settings, and local ignored tfvars files.
 - Future Prod provisioning must intentionally import/reuse or recreate the
   preserved Firebase iOS app and Firestore database container.
+- PostHog project isolation is deferred to issue #37. The current PostHog
+  project is treated as Dev for this slice and was renamed outside Terraform;
+  future work must split or explicitly route analytics per environment.
 - Until the future Prod slice, Release builds still use the active Dev config;
   App Store readiness remains out of scope for this decision.

@@ -165,7 +165,7 @@ resource "google_firebase_apple_app" "ios" {
   display_name    = var.firebase_ios_app_display_name
   bundle_id       = var.firebase_ios_bundle_id
   team_id         = var.firebase_apple_team_id
-  deletion_policy = "DELETE"
+  deletion_policy = var.firebase_ios_app_deletion_policy
 
   depends_on = [google_firebase_project.default]
 }

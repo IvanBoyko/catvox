@@ -36,6 +36,7 @@ Pick explicit values before running the script:
 | `ORGANIZATION_ID` or `FOLDER_ID` | `1032067916665` | Optional, but usually needed for new projects |
 | `BILLING_ACCOUNT_ID` | billing account ID | Optional; if omitted, link billing manually before deploy |
 | `CATVOX_IOS_BUNDLE_ID` | `com.kathelix.catvox.dev` | Yes |
+| `FIREBASE_IOS_APP_DELETION_POLICY` | `ABANDON` | Optional. Keep default for Prod-like environments; use `DELETE` only for disposable Dev-like environments. |
 | `APP_CHECK_DEBUG_TOKEN` | UUID4 token | Dev only |
 | `ALERT_EMAIL` | alert recipient | Yes for Terraform apply |
 
@@ -50,6 +51,7 @@ PROJECT_DISPLAY_NAME="Kathelix CatVox <Env>" \
 ORGANIZATION_ID=<org-id> \
 BILLING_ACCOUNT_ID=<billing-account-id> \
 CATVOX_IOS_BUNDLE_ID=<bundle-id> \
+FIREBASE_IOS_APP_DELETION_POLICY=ABANDON \
 APP_CHECK_DEBUG_TOKEN=<uuid4-debug-token> \
 ALERT_EMAIL=<alerts@example.com> \
 RUN_TERRAFORM_APPLY=1 \

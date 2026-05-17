@@ -29,6 +29,9 @@ Use GitHub Environments to scope cloud secrets by target environment:
 
 The current workflows target the `dev` GitHub Environment. A future Prod slice
 must add separate protected workflow jobs instead of reusing the Dev deploy path.
+When cloning Dev workflow shape for Prod, remove the App Check debug-token
+secret, keep mutable integration-test allowlists Dev-only, and keep Firebase iOS
+app deletion policy at the Terraform default `ABANDON`.
 
 Required secrets per environment:
 

@@ -123,7 +123,7 @@ process.stdin.on("end", () => {
 });
 ')
   echo "Firebase iOS app still exists and must be removed through Firebase console/API if safe: ${app_id}"
-done < <(firebase apps:list IOS --project "${PROJECT_ID}" --json | node -e '
+done < <(firebase apps:list IOS --project "${PROJECT_ID}" --json --non-interactive | node -e '
 let raw = "";
 process.stdin.on("data", chunk => raw += chunk);
 process.stdin.on("end", () => {
