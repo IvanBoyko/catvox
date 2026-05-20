@@ -12,12 +12,13 @@ Read these documents in order before touching any code or infrastructure:
 |---|---|
 | `docs/HLD.md` | High-level design decisions only — the stable "why". Feed to Gemini/ChatGPT for design ideation. |
 | `docs/TRD.md` | Full technical spec — the authoritative "what". Feed to Codex for implementation. |
+| `docs/MVP_BACKLOG.md` | MVP backlog status — the source of truth for completed and pending MVP implementation items. |
 | `docs/adr/` | Architecture Decision Records — the "why a decision was made". Append-only log. |
 | `docs/systemInstruction.md` | The Gemini AI system prompt (the "Prompt Gate"). Do not modify without updating TRD §4. |
 | `docs/PROMPT.md` | Original project vision and developer mindset. Read it once. |
 | `docs/TODO.md` | Scratchpad for feature ideas and engineering parameters not yet in TRD. |
 
-**The pipeline is:** HLD → TRD → Code. Never let code get ahead of TRD. When you implement something, update TRD §8 backlog to mark it done.
+**The pipeline is:** HLD → TRD → MVP Backlog → Code. Never let code get ahead of TRD. When you implement something, update `docs/MVP_BACKLOG.md` to mark it done.
 
 ### ADR Workflow
 
@@ -409,7 +410,7 @@ Before merging a feature PR, verify all of the following:
 - all PR bot / AI review findings have been reviewed and explicitly resolved, rejected with reasoning, or consciously deferred
 - the branch has been compared against `origin/main`, and any needed rebase / conflict resolution has already been handled
 - related completed items are removed or updated in `docs/TODO.md`
-- implemented backlog items are checked off in `docs/TRD.md` §8
+- implemented backlog items are checked off in `docs/MVP_BACKLOG.md`
 - `docs/HLD.md` still matches the implemented MVP boundary
 - no leftover dev-only UI, preview shortcuts, or debug scaffolding remains in the user-facing flow
 
@@ -449,9 +450,9 @@ TRD v1.8 — add CI/CD section, fix six audit findings
 
 ### TRD Sync Rule
 
-Any time you implement something from TRD §8 backlog, mark it `[x]` in TRD immediately — in the same commit as the implementation. The TRD is the source of truth for implementation status.
+Any time you implement something from `docs/MVP_BACKLOG.md`, mark it `[x]` immediately — in the same commit as the implementation. `docs/MVP_BACKLOG.md` is the source of truth for implementation status.
 
-If a feature that was originally tracked under one broad backlog item becomes several concrete implementation slices, update TRD §8 so the backlog reflects those separate slices explicitly rather than leaving one vague umbrella item.
+If a feature that was originally tracked under one broad backlog item becomes several concrete implementation slices, update `docs/MVP_BACKLOG.md` so the backlog reflects those separate slices explicitly rather than leaving one vague umbrella item.
 
 ### Functions Local Validation
 
@@ -463,7 +464,8 @@ If a feature that was originally tracked under one broad backlog item becomes se
 ### HLD vs TRD
 
 - **docs/HLD.md** — only stable design decisions (the "why"). No implementation status, no concrete values that will change.
-- **docs/TRD.md** — everything concrete: versions, bucket names, roles, backlog status.
+- **docs/TRD.md** — concrete technical requirements: versions, bucket names, roles, and implementation constraints.
+- **docs/MVP_BACKLOG.md** — concrete MVP implementation backlog status.
 - When you want to change a design decision, update HLD first, then TRD, then code.
 - Manual verification is acceptable during MVP, but once core user flows stabilize, add follow-up automated test coverage to TRD §9 if tests are intentionally deferred.
 
@@ -471,7 +473,7 @@ If a feature that was originally tracked under one broad backlog item becomes se
 
 ## 8. Current Implementation Status
 
-See TRD §8 for the definitive backlog and implementation status. This section is only a lightweight orientation snapshot for new contributors, not the source of truth.
+See `docs/MVP_BACKLOG.md` for the definitive backlog and implementation status. This section is only a lightweight orientation snapshot for new contributors, not the source of truth.
 
 **Recently completed:**
 - App icon + accent colors
