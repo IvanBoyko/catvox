@@ -2,24 +2,6 @@
 
 ## Infrastructure / Runtime Maintenance
 
-### Dev / Production Environment Split Before Launch
-Before public launch, keep active development in `kathelix-catvox-dev` and reserve `kathelix-catvox-prod` for the future real production environment. Use the generic named-environment configuration model from ADR-0017 and ADR-0018 so future environments can be added without hard-coding only Dev and Prod.
-
-Subtasks:
-* [x] Decide the environment model: named environments, initially `dev` and `prod`, with environment name treated as configuration data. See ADR-0017.
-* [x] Parameterize the single-environment code path before creating new cloud resources.
-* [x] Decide final environment naming: `kathelix-catvox-dev` is active Dev; `kathelix-catvox-prod` is preserved, not deleted, for future Prod. See ADR-0018.
-* [x] Create the separate Dev GCP/Firebase project with separate Firebase app, App Check configuration, Firestore database, GCS buckets, Secret Manager secrets, Artifact Registry repo, Cloud Functions deployment, and Terraform state.
-* [x] Split Terraform state and variables by environment for active Dev (`terraform/backend/dev.hcl.example`, `terraform/env/dev.tfvars.example`).
-* [x] Split GitHub Actions Dev secrets into the GitHub Environment named `dev`; PR and merge-to-main deploys target Dev.
-* [x] Split Dev iOS configuration, including Firebase plist selection/validation, Dev bundle ID, App Check debug token handling, and backend endpoint selection.
-* [x] After a real Debug device scan passes against `kathelix-catvox-dev`, clean Dev leftovers from preserved `kathelix-catvox-prod` and record a cleanup report. See `docs/archive/LEGACY_PRESPLIT_CLEANUP_REPORT_2026-05-16.md`.
-* [ ] Create the future real Prod environment in preserved `kathelix-catvox-prod`, with protected GitHub Environment and explicit release path.
-* When provisioning the Prod WIF binding, tighten beyond the current repo-wide `attribute.repository` principal — scope to `attribute.environment/prod` or `attribute.ref/refs/heads/main` so a misconfigured PR workflow in the same repo cannot impersonate the Prod CI service account. Defense-in-depth refinement deferred from PR #36 (finding F9).
-* Split analytics configuration so Dev/test traffic cannot pollute production PostHog dashboards. Tracked in issue #37.
-* Restrict Firestore-mutating integration tests to Dev only; define a separate protected production smoke-test runbook for minimal non-invasive checks after future Prod deployments.
-* Define launch cutover and rollback steps, including how to handle any pre-launch Firestore usage data, GCS objects, and deployed function revisions.
-
 ### Firebase Functions Node.js Runtime Review
 Review this around **2026-06-01** before changing the Cloud Functions runtime.
 
