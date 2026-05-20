@@ -427,12 +427,6 @@ The MVP backlog source of truth now lives in `docs/MVP_BACKLOG.md`.
 ---
 
 ## 9. Future Enhancements (Post-MVP)
-* **Native iPad Support:** Add iPad support as a dedicated post-MVP feature, not as a small target-family change. The iPad implementation must explicitly resolve:
-    1. **Orientation Model:** Decide whether iPad is portrait-only for MVP parity with iPhone, or whether CatVox supports a true all-orientation iPad experience.
-    2. **Camera Preview and Recording:** Treat app interface orientation, physical device orientation, AVFoundation preview connection orientation, and movie-output orientation as separate concerns. The iPhone portrait-only behavior does not automatically transfer to iPad.
-    3. **Rotation UX:** If iPad rotation is supported, use a dedicated camera architecture where the camera surface remains visually stable and controls/layout adapt smoothly, closer to the system Camera app than a simple SwiftUI view rotation.
-    4. **Adaptive UI Surfaces:** Verify home, recording, upload/progress, result, history, Photos picker, save-to-Photos, and share-sheet behavior across full-screen iPad, landscape, portrait, and any supported multitasking/windowing modes.
-    **Acceptance rule:** CatVox must not claim native iPad support until the iPad camera preview, recorded output orientation, imported-video display, result layout, modal positioning, save/share actions, and rotation behavior pass a real-device regression matrix.
 * **Localization / Internationalization:** Add a complete language-localized user experience for supported locales as one unified post-MVP feature, not as separate partial releases. This work includes two required sub-scopes that must ship together:
     1. **Frontend Localization:** Localize all user-facing app interface copy using standard iOS system-language localization, including navigation labels, buttons, alerts, validation messages, quota text, permission usage descriptions, persona display labels, and other user-visible UI strings.
     2. **AI Response Localization:** Localize backend-generated result content by sending the user's preferred locale with analysis requests and requiring returned result fields (`primary_emotion`, `analysis`, `cat_thought`, `owner_tip`) in that language. Persist result-language metadata with saved scans so historical results remain internally consistent.
