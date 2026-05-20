@@ -78,6 +78,7 @@ catvox/
 ├── .github/workflows/
 │   ├── build.yml                  # Path-filtered iOS build check on push/PR
 │   ├── functions.yml              # Functions build/deploy/integration workflow
+│   ├── markdownlint.yml           # Markdown lint for docs/ and README changes
 │   └── terraform.yml              # Terraform plan (PR) + apply (merge to main)
 ├── .codex/environments/
 │   └── environment.toml           # Codex app run actions; call Makefile targets
@@ -287,6 +288,7 @@ GitHub Actions WIF produces an external-account Application Default Credentials 
 | `build.yml` | Push/PR touching iOS-relevant app, project, config, script, Makefile, or workflow files | XcodeGen → build generic iOS Simulator slice → run unit tests on a concrete simulator |
 | `functions.yml` (build) | Push/PR touching `functions/**`, `firebase.json`, `docs/systemInstruction.md`, `Makefile`, or workflow | TypeScript compile check + backend unit tests |
 | `functions.yml` (deploy + integration) | Merge to `main` touching Functions inputs | Firebase Functions deploy, then backend integration tests against the current Dev backend |
+| `markdownlint.yml` | Push/PR touching `docs/**`, top-level `README.md`, `.markdownlint.jsonc`, or workflow | markdownlint quality check for repository docs |
 | `terraform.yml` (plan) | PR touching `terraform/**`, `Makefile`, or workflow | fmt-check → init → validate → plan → PR comment |
 | `terraform.yml` (apply) | Merge to `main` touching `terraform/**`, `Makefile`, or workflow | init → apply -auto-approve |
 

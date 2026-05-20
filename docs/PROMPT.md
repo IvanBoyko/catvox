@@ -1,7 +1,7 @@
 # Project Vision: CatVox AI
 
 ## 1. The Big Picture
-We are building a premium iPhone/iPad application for cat owners under the **Kathelix Ltd** brand. The goal is to use high-end AI to "translate" cat behavior into humorous, persona-driven monologues while providing legitimate feline behavioral insights. 
+We are building a premium iPhone/iPad application for cat owners under the **Kathelix Ltd** brand. The goal is to use high-end AI to "translate" cat behavior into humorous, persona-driven monologues while providing legitimate feline behavioral insights.
 
 This isn't just a toy - it's a portfolio showcase of Kathelix’s ability to build resilient, AI-driven cloud architectures. The app must feel polished, professional, and technologically superior.
 
