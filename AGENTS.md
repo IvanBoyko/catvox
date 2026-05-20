@@ -76,7 +76,7 @@ catvox/
 │   ├── bootstrap_remote_state.sh  # Legacy helper; environment-create handles state bootstrap
 │   └── bootstrap_wif.sh           # Legacy helper; WIF is now Terraform-managed per environment
 ├── .github/workflows/
-│   ├── build.yml                  # iOS build check on every push/PR
+│   ├── build.yml                  # Path-filtered iOS build check on push/PR
 │   ├── functions.yml              # Functions build/deploy/integration workflow
 │   └── terraform.yml              # Terraform plan (PR) + apply (merge to main)
 ├── .codex/environments/
@@ -284,7 +284,7 @@ GitHub Actions WIF produces an external-account Application Default Credentials 
 
 | Workflow | Trigger | What it does |
 |---|---|---|
-| `build.yml` | Every push/PR to `main` | XcodeGen → build generic iOS Simulator slice → run unit tests on a concrete simulator |
+| `build.yml` | Push/PR touching iOS-relevant app, project, config, script, Makefile, or workflow files | XcodeGen → build generic iOS Simulator slice → run unit tests on a concrete simulator |
 | `functions.yml` (build) | Push/PR touching `functions/**`, `firebase.json`, `docs/systemInstruction.md`, `Makefile`, or workflow | TypeScript compile check + backend unit tests |
 | `functions.yml` (deploy + integration) | Merge to `main` touching Functions inputs | Firebase Functions deploy, then backend integration tests against the current Dev backend |
 | `terraform.yml` (plan) | PR touching `terraform/**`, `Makefile`, or workflow | fmt-check → init → validate → plan → PR comment |

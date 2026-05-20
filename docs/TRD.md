@@ -365,14 +365,14 @@ CatVox uses the repository-root `Makefile` as a thin facade for common developer
 GitHub Actions may call Makefile targets for the command body, but workflow YAML remains responsible for CI-only concerns such as checkout, toolchain installation, dependency caching, Workload Identity Federation authentication, path/event triggers, and PR comments. See ADR-0014.
 
 ### 7.1 iOS Build Pipeline
-* **Trigger:** Every push and pull request targeting `main`.
+* **Trigger:** Pushes and pull requests targeting `main` when iOS-relevant source, project, config, scripts, Makefile, or workflow files change. Manual `workflow_dispatch` runs always execute the iOS build path.
 * **Runner:** macOS 15 (Xcode 16, iOS 17+ SDK).
 * **Steps:** Checkout → install XcodeGen / `xcpretty` → `make ios-generate` → `make ios-build-only` for the generic iOS Simulator slice (`CODE_SIGNING_ALLOWED=NO`) → `make ios-test-only` on a concrete simulator device (`platform=iOS Simulator,name=iPhone 16,OS=latest`). Xcode cannot run tests on `generic/platform=iOS Simulator`.
-* **Purpose:** Catches build breaks, XcodeGen drift, and unit-test regressions on every change. No device signing or provisioning profiles required.
+* **Purpose:** Catches build breaks, XcodeGen drift, and unit-test regressions on iOS-relevant changes without spending macOS CI time on docs-only edits. No device signing or provisioning profiles required.
 
 ### 7.1.1 iOS UI Test Pipeline
 * **Local command:** `make ios-ui-test` regenerates the Xcode project and runs the dedicated `CatVoxUITests` XCUITest scheme on a concrete iPhone simulator destination (`IOS_UI_TEST_DESTINATION`, defaulting to `platform=iOS Simulator,name=iPhone 16,OS=latest`).
-* **CI trigger:** The Build workflow runs UI tests as a separate job on push to `main` and on manual `workflow_dispatch`, after the normal build/unit-test job passes. Pull requests keep running the cheaper build and unit-test path unless UI coverage is manually requested after merge.
+* **CI trigger:** The Build workflow runs UI tests as a separate job on iOS-relevant pushes to `main` and on manual `workflow_dispatch`, after the normal build/unit-test job passes. Pull requests keep running the cheaper build and unit-test path unless UI coverage is manually requested after merge.
 * **Launch mode:** UI tests launch the app with `-uiTesting` and `-mockBackend`; individual scenarios may also use `-seedHistory` or `-forceQuotaExceeded`.
 * **State model:** `-uiTesting` disables analytics, resets test-local quota/user/history state, and uses an in-memory SwiftData store. `-seedHistory` inserts deterministic local saved-scan data and app-owned placeholder files so history replay opens Result without upload or analysis. `-forceQuotaExceeded` renders the quota/upgrade UI from local state without backend calls.
 * **Coverage boundary:** The baseline suite covers Home launch smoke, source-choice visibility/dismissal, seeded history replay, and mocked quota exceeded UI. It intentionally does not use real camera, Photos picker content, Firebase App Check, GCS, Gemini/Vertex AI, user accounts, network calls, snapshots, Appium, Maestro, BrowserStack, or Firebase Test Lab.
