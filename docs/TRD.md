@@ -427,7 +427,6 @@ The MVP backlog source of truth now lives in `docs/MVP_BACKLOG.md`.
 ---
 
 ## 9. Future Enhancements (Post-MVP)
-* **Gemini Model Upgrade:** The backend currently uses `gemini-2.5-flash` (the latest GA Gemini Flash model on Vertex AI as of TRD v2.0). Upgrade to Gemini 3.x Flash once it reaches GA on Vertex AI.
 * **Native iPad Support:** Add iPad support as a dedicated post-MVP feature, not as a small target-family change. The iPad implementation must explicitly resolve:
     1. **Orientation Model:** Decide whether iPad is portrait-only for MVP parity with iPhone, or whether CatVox supports a true all-orientation iPad experience.
     2. **Camera Preview and Recording:** Treat app interface orientation, physical device orientation, AVFoundation preview connection orientation, and movie-output orientation as separate concerns. The iPhone portrait-only behavior does not automatically transfer to iPad.
