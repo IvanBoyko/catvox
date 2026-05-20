@@ -3,8 +3,28 @@ name: Build
 on:
   push:
     branches: [main]
+    paths:
+      - 'CatVox/**'
+      - 'CatVoxTests/**'
+      - 'CatVoxUITests/**'
+      - 'CatVox.xcodeproj/**'
+      - 'config/environments/**'
+      - 'scripts/**'
+      - 'Makefile'
+      - 'project.yml'
+      - '.github/workflows/build.yml'
   pull_request:
     branches: [main]
+    paths:
+      - 'CatVox/**'
+      - 'CatVoxTests/**'
+      - 'CatVoxUITests/**'
+      - 'CatVox.xcodeproj/**'
+      - 'config/environments/**'
+      - 'scripts/**'
+      - 'Makefile'
+      - 'project.yml'
+      - '.github/workflows/build.yml'
   workflow_dispatch:
 
 # Cancel any in-progress run for the same branch so each push doesn't queue
@@ -14,67 +34,9 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  ios-changes:
-    name: Detect iOS-relevant changes
-    runs-on: ubuntu-latest
-    outputs:
-      should_run: ${{ steps.filter.outputs.should_run }}
-
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v6
-        with:
-          fetch-depth: 0
-
-      - name: Check changed paths
-        id: filter
-        shell: bash
-        run: |
-          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
-            echo "should_run=true" >> "$GITHUB_OUTPUT"
-            echo "Manual run requested; iOS build will run."
-            exit 0
-          fi
-
-          if [[ "${{ github.event_name }}" == "pull_request" ]]; then
-            base="${{ github.event.pull_request.base.sha }}"
-            head="${{ github.event.pull_request.head.sha }}"
-          else
-            base="${{ github.event.before }}"
-            head="${{ github.sha }}"
-          fi
-
-          if [[ "$base" == "0000000000000000000000000000000000000000" ]]; then
-            git diff-tree --no-commit-id --name-only -r "$head" > changed-files.txt
-          else
-            git diff --name-only "$base" "$head" > changed-files.txt
-          fi
-
-          echo "Changed files:"
-          cat changed-files.txt
-
-          should_run=false
-          while IFS= read -r path; do
-            case "$path" in
-              CatVox/*|CatVoxTests/*|CatVoxUITests/*|CatVox.xcodeproj/*|config/environments/*|scripts/*|Makefile|project.yml|.github/workflows/build.yml)
-                should_run=true
-                break
-                ;;
-            esac
-          done < changed-files.txt
-
-          echo "should_run=$should_run" >> "$GITHUB_OUTPUT"
-          if [[ "$should_run" == "true" ]]; then
-            echo "iOS-relevant changes detected; macOS build jobs will run."
-          else
-            echo "No iOS-relevant changes detected; macOS build jobs will be skipped."
-          fi
-
   build:
     name: Build — iOS Simulator
     runs-on: macos-15          # Ships with Xcode 16.x; iOS 17+ SDK included
-    needs: ios-changes
-    if: needs.ios-changes.outputs.should_run == 'true'
 
     steps:
       - name: Checkout
@@ -123,8 +85,8 @@ jobs:
   ui-tests:
     name: UI Tests — iOS Simulator
     runs-on: macos-15
-    needs: [ios-changes, build]
-    if: needs.ios-changes.outputs.should_run == 'true' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
+    needs: build
+    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
 
     steps:
       - name: Checkout
