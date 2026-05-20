@@ -1,24 +1,5 @@
 # TODO
 
-## Early user testing
-
-### Connect Gemini output to Notion
-
-Rework prompt in `docs/USER_TEST_GEMINI_REVIEW_PROMPT.md` so that Gemini returns JSON.
-Then we can use the JSON response in automated way to ingest into Notion API.
-Example of the JSON that we need in Notion:
-
-```json
-{
-  "language": "Russian",
-  "understood_product": "Partial",
-  "delight": 4,
-  "friction": ["Language barrier", "Scan limit"],
-  "would_use_again": "Likely yes",
-  "would_share": "Likely yes"
-}
-```
-
 ## Infrastructure / Runtime Maintenance
 
 ### Dev / Production Environment Split Before Launch
