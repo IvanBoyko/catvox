@@ -22,7 +22,15 @@ Each environment owns these artifacts:
 | Apple Developer App ID | Apple Developer team | Conditional. Required only when the environment introduces a new iOS bundle ID that will be installed on physical devices or use App Attest. |
 | App Check | Terraform | Dev may have a Debug Provider token. Prod must not have mutable integration debug tokens and should use protected smoke checks only. |
 | Backend URLs | `config/environments/<env>.xcconfig` | Set after Functions deploy from the deployed Gen 2 Function URLs. |
-| PostHog config | `config/environments/<env>.xcconfig` | App-visible token/host only. Use separate projects or explicit event environment routing before real Prod. |
+| PostHog config | `config/environments/<env>.xcconfig` | App-visible project token and ingestion hostname only. Each real environment uses its own PostHog project. |
+
+PostHog environment isolation is project-based. Dev uses the `CatVox Dev`
+PostHog project, and real production analytics require a dedicated
+`CatVox Prod` PostHog project before App Store production traffic is enabled.
+Keep PostHog personal/API credentials out of app config: future automation may
+use `POSTHOG_API_KEY`, `POSTHOG_ORGANIZATION_ID`, `POSTHOG_HOST`, and
+`POSTHOG_PROJECT_ID`, but those belong in local/CI operational secret handling,
+not in `config/environments/*.xcconfig`.
 
 ## Inputs
 

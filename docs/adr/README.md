@@ -65,6 +65,7 @@ Each ADR should usually contain:
 | 0016 | Persist App Check Debug Token for Local iPhone Builds | Accepted |
 | 0017 | Environment Configuration Model | Accepted |
 | 0018 | Create Dedicated Dev Environment | Accepted |
+| 0019 | Use Separate PostHog Projects per Environment | Accepted |
 
 ## Workflow
 
