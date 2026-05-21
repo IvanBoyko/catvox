@@ -433,10 +433,6 @@ The MVP backlog source of truth now lives in `docs/MVP_BACKLOG.md`.
 ---
 
 ## 9. Future Enhancements (Post-MVP)
-* **PostHog Analytics:**
-    1. **Dashboard-as-Code:** Move PostHog dashboard and insight definitions into Terraform after MVP so analytics configuration is reproducible and reviewed in git. Prefer a separate Terraform root such as `terraform/posthog/` with its own state prefix and `POSTHOG_API_KEY` CI secret, rather than mixing PostHog credentials into the GCP infrastructure root. Initial scope should import the existing analytics dashboard and wizard-created insights, correct share-event semantics (`share_sheet_opened` for sheet presentation, `scan_shared` for completed share actions), and manage the core MVP dashboard tiles for scan conversion, Photos validation failures, share/export conversion, save-to-Photos conversion, and quota pressure.
-    2. **Analytics Environment Separation:** Separate development and production analytics traffic, either by using distinct Debug/Release PostHog projects or by attaching an `app_environment` property to every event so test traffic can be excluded from production dashboards.
-    3. **Collect in-app feedback**: from users, automatic sending of errors, special "Feedback" dialog
 * **Picker Eligibility UX:** Consider richer pre-selection eligibility hints or a more advanced gallery experience only if later product testing shows clear value over the simpler MVP rejection flow.
 * **Signed URL Issuance Rate-Limit:** Add a dedicated anti-abuse rate-limit for signed upload URL requests if App Check plus upload-gate quota enforcement prove insufficient.
 * **Analysis Request Idempotency:** Design idempotent `analyseVideo` semantics before adding automatic client retries for analysis POST failures. The design should prevent duplicate Vertex AI calls, quota increments, or user-visible duplicate scans when the backend finishes after the client loses the connection.
