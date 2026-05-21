@@ -348,6 +348,8 @@ Use `docs/CREATE_NEW_ENVIRONMENT.md` and `make environment-create` for new envir
 
 ### GitHub Actions Workflow Notes
 
+- Prefer standard GitHub Actions mechanisms such as `paths`, `permissions`, `concurrency`, and job `if:` conditions when they directly fit the request. Do not replace a simple requested workflow change with custom detector scripts or aggregating jobs unless the repo has a concrete constraint that requires it, or the user confirms the extra complexity.
+- Before optimizing workflow behavior for branch protection or required checks, inspect the actual repository protection state. If branch protection is absent, document the future trade-off instead of designing around a protection rule that does not exist.
 - In `actions/github-script`, distinguish GitHub Actions expression context from JavaScript runtime objects. `github` inside the script is the Octokit client, not the workflow context. Inject workflow values explicitly, for example `const actor = '${{ github.actor }}';`.
 - When passing multiline step outputs into `actions/github-script`, prefer `${{ toJSON(steps.<id>.outputs.<name>) }}` so newlines, backticks, and quotes are represented safely as JavaScript string values.
 - Plain `run:` step stdout is not automatically available as `steps.<id>.outputs.stdout`; write needed values to `$GITHUB_OUTPUT`.
