@@ -354,6 +354,20 @@ Use `docs/CREATE_NEW_ENVIRONMENT.md` and `make environment-create` for new envir
 - When passing multiline step outputs into `actions/github-script`, prefer `${{ toJSON(steps.<id>.outputs.<name>) }}` so newlines, backticks, and quotes are represented safely as JavaScript string values.
 - Plain `run:` step stdout is not automatically available as `steps.<id>.outputs.stdout`; write needed values to `$GITHUB_OUTPUT`.
 
+### Verifying SDK and Tool Behavior
+
+For any third-party SDK, library, or CLI tool, read the pinned source or installed package rather than relying on memory or public docs:
+
+- iOS SwiftPM: `.build/ios-device/SourcePackages/checkouts/<sdk>/...`
+- npm packages: `node_modules/<pkg>/lib/` (or wherever the package exposes its implementation)
+- Other pinned dependencies: locate the installed copy in the dependency manager's cache
+
+Public docs may lag or describe a different version; the pinned source is what the linked binary or tool actually executes. Do not assert SDK env-var names, error domains, caching behavior, thread-safety, rule names, CLI flags, action inputs, or version-specific capabilities without verifying first.
+
+This applies to both implementation work ("does this SDK accept that option?") and review work ("is this config entry meaningful?"). For review findings, verify against the installed package, lockfile, or local command output before posting — not from memory or general knowledge.
+
+**Negative claims need a higher verification bar.** Asserting that a feature, rule, or API *does not exist* in a third-party library is higher-stakes than asserting it does, because the recommendation that follows a negative claim is usually "remove this." If the rule that was disabled silently turns out to be real, removing it changes behavior. Before posting a "this doesn't exist, delete it" finding, verify the absence empirically — enumerate from the installed package, run the tool with the rule or flag explicitly enabled, grep the source — and record the verification step alongside the finding. This applies equally to Claude, Codex, and human reviewers.
+
 ### Config / Infrastructure Change Workflow
 
 For infra, environment, secrets, build-setting, or runtime-configuration changes, do a small negative-test pass before review. Check missing config, malformed config, unsafe environment names, Release fail-loud behavior, and production-mutation rejection where relevant. Prefer automated tests for safety properties; manual live checks should supplement them, not be the only proof.
