@@ -44,7 +44,7 @@ catvox_tf_var_file_arg = $(if $(wildcard $(CATVOX_TF_VARS_FILE)),-var-file="$(ca
 
 .PHONY: help doctor \
 	ios-generate ios-build ios-build-only ios-test ios-test-only ios-ui-test ios-ui-test-only ios-ci ios-device-launch ios-device-console app-deploy \
-	ios-validate-env-config ios-validate-env-config-drift \
+	ios-validate-env-config ios-validate-env-config-drift ios-analytics-guard \
 	functions-install functions-build functions-test functions-deploy functions-integration functions-ci \
 	backend-build backend-deploy backend-integration \
 	terraform-fmt-check terraform-init terraform-validate terraform-plan terraform-ci-plan terraform-apply terraform-ci-apply terraform-output-firebase-plist \
@@ -61,6 +61,7 @@ help:
 		'  make ios-ui-test            Generate project and run iOS XCUITests' \
 		'  make ios-validate-env-config Validate selected Firebase plist and xcconfig values' \
 		'  make ios-validate-env-config-drift Compare committed Firebase plist to Terraform output' \
+		'  make ios-analytics-guard    Verify PostHog SDK usage stays behind AnalyticsService' \
 		'  make ios-ci                 Generate, build, and test like CI' \
 		'  make ios-device-launch      Build, install, and launch on DEVICE_ID or default iPhone' \
 		'  make ios-device-console     Build, install, and launch with devicectl console' \
@@ -139,6 +140,9 @@ ios-validate-env-config-drift:
 	trap 'rm -rf "$$tmpdir"' EXIT; \
 	cd terraform && terraform output -raw firebase_ios_plist_base64 | base64 --decode > "$$tmpdir/expected.plist"; \
 	diff -u "$$tmpdir/expected.plist" "$(CURDIR)/$(CATVOX_FIREBASE_PLIST_OUTPUT)"
+
+ios-analytics-guard:
+	@scripts/guard-analytics-capture-boundary.sh
 
 ios-build: ios-generate ios-build-only
 
@@ -221,7 +225,7 @@ ios-ui-test-only:
 			CODE_SIGNING_ALLOWED=NO; \
 	fi
 
-ios-ci: ios-generate ios-build-only ios-test-only
+ios-ci: ios-generate ios-analytics-guard ios-build-only ios-test-only
 
 ios-device-launch:
 	@CATVOX_IOS_BUNDLE_ID="$(CATVOX_IOS_BUNDLE_ID)" \
