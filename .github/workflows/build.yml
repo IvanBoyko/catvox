@@ -3,8 +3,28 @@ name: Build
 on:
   push:
     branches: [main]
+    paths:
+      - 'CatVox/**'
+      - 'CatVoxTests/**'
+      - 'CatVoxUITests/**'
+      - 'CatVox.xcodeproj/**'
+      - 'config/environments/**'
+      - 'scripts/**'
+      - 'Makefile'
+      - 'project.yml'
+      - '.github/workflows/build.yml'
   pull_request:
     branches: [main]
+    paths:
+      - 'CatVox/**'
+      - 'CatVoxTests/**'
+      - 'CatVoxUITests/**'
+      - 'CatVox.xcodeproj/**'
+      - 'config/environments/**'
+      - 'scripts/**'
+      - 'Makefile'
+      - 'project.yml'
+      - '.github/workflows/build.yml'
   workflow_dispatch:
 
 # Cancel any in-progress run for the same branch so each push doesn't queue

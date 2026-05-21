@@ -28,13 +28,9 @@ When recommending test additions, include an explicit "not worth adding" list. T
 
 For iOS App Check, Firebase, or async/state-related findings, follow the failure-source classification and Release-leak audit already documented in `AGENTS.md`.
 
-## Verifying SDK behavior
+## Verifying SDK and tool behavior
 
-For questions about third-party SDK runtime behavior (Firebase, Apple frameworks, etc.), read the pinned source instead of recalling from memory or public docs:
-
-- iOS SwiftPM: `.build/ios-device/SourcePackages/checkouts/<sdk>/...`
-
-That source is what the linked binary actually does — public docs may lag or describe a different version. Do not assert SDK env-var names, error domains, caching, or thread-safety without verifying against the pinned source first.
+See `AGENTS.md` § Verifying SDK and Tool Behavior — the rules apply to Claude exactly as written. Verify library behavior against the pinned source before asserting; treat negative claims ("this rule doesn't exist," "this flag isn't supported") as needing empirical verification before they become "remove this" recommendations.
 
 ## Posting review content to GitHub
 

@@ -364,15 +364,21 @@ CatVox uses the repository-root `Makefile` as a thin facade for common developer
 
 GitHub Actions may call Makefile targets for the command body, but workflow YAML remains responsible for CI-only concerns such as checkout, toolchain installation, dependency caching, Workload Identity Federation authentication, path/event triggers, and PR comments. See ADR-0014.
 
+### 7.0.1 Markdown Documentation Pipeline
+* **Trigger:** Pushes and pull requests targeting `main` when files under `docs/`, the top-level `README.md`, `.markdownlint.jsonc`, or the workflow file itself change. Manual `workflow_dispatch` runs are also supported.
+* **Runner:** Ubuntu latest.
+* **Steps:** Checkout → markdownlint over `README.md` and `docs/**/*.md` using the repository `.markdownlint.jsonc` config.
+* **Purpose:** Provides a cheap documentation-quality check for docs-heavy changes without waking the macOS iOS build workflow.
+
 ### 7.1 iOS Build Pipeline
-* **Trigger:** Every push and pull request targeting `main`.
+* **Trigger:** Pushes and pull requests targeting `main` when iOS-relevant source, project, config, scripts, Makefile, or workflow files change. Manual `workflow_dispatch` runs always execute the iOS build path.
 * **Runner:** macOS 15 (Xcode 16, iOS 17+ SDK).
 * **Steps:** Checkout → install XcodeGen / `xcpretty` → `make ios-generate` → `make ios-build-only` for the generic iOS Simulator slice (`CODE_SIGNING_ALLOWED=NO`) → `make ios-test-only` on a concrete simulator device (`platform=iOS Simulator,name=iPhone 16,OS=latest`). Xcode cannot run tests on `generic/platform=iOS Simulator`.
-* **Purpose:** Catches build breaks, XcodeGen drift, and unit-test regressions on every change. No device signing or provisioning profiles required.
+* **Purpose:** Catches build breaks, XcodeGen drift, and unit-test regressions on iOS-relevant changes without spending macOS CI time on docs-only edits. No device signing or provisioning profiles required.
 
 ### 7.1.1 iOS UI Test Pipeline
 * **Local command:** `make ios-ui-test` regenerates the Xcode project and runs the dedicated `CatVoxUITests` XCUITest scheme on a concrete iPhone simulator destination (`IOS_UI_TEST_DESTINATION`, defaulting to `platform=iOS Simulator,name=iPhone 16,OS=latest`).
-* **CI trigger:** The Build workflow runs UI tests as a separate job on push to `main` and on manual `workflow_dispatch`, after the normal build/unit-test job passes. Pull requests keep running the cheaper build and unit-test path unless UI coverage is manually requested after merge.
+* **CI trigger:** The Build workflow runs UI tests as a separate job on iOS-relevant pushes to `main` and on manual `workflow_dispatch`, after the normal build/unit-test job passes. Pull requests keep running the cheaper build and unit-test path unless UI coverage is manually requested after merge.
 * **Launch mode:** UI tests launch the app with `-uiTesting` and `-mockBackend`; individual scenarios may also use `-seedHistory` or `-forceQuotaExceeded`.
 * **State model:** `-uiTesting` disables analytics, resets test-local quota/user/history state, and uses an in-memory SwiftData store. `-seedHistory` inserts deterministic local saved-scan data and app-owned placeholder files so history replay opens Result without upload or analysis. `-forceQuotaExceeded` renders the quota/upgrade UI from local state without backend calls.
 * **Coverage boundary:** The baseline suite covers Home launch smoke, source-choice visibility/dismissal, seeded history replay, and mocked quota exceeded UI. It intentionally does not use real camera, Photos picker content, Firebase App Check, GCS, Gemini/Vertex AI, user accounts, network calls, snapshots, Appium, Maestro, BrowserStack, or Firebase Test Lab.
@@ -422,70 +428,10 @@ Use `docs/CREATE_NEW_ENVIRONMENT.md` and `make environment-create` when creating
 
 ## 8. Implementation Backlog (MVP)
 
-* [x] **Asset Integration:** App Icon & Accent Colors implemented.
-* [x] **UI Logic:** Confidence Score color-coding implemented.
-* [x] **Source Unit Test Baseline:** iOS unit-test target covers backend JSON decoding, persona labels, confidence-tier thresholds, local quota state, saved scan reconstruction, and Photos-import validation messaging; CI runs the iOS test suite.
-* [x] **Native UI Test Baseline:** Add a separate XCUITest target and `make ios-ui-test` entrypoint covering Home smoke, source-choice dismissal, seeded history replay, and mocked quota exceeded UI with deterministic launch arguments and no real camera, Photos, backend, or network dependency.
-* [x] **GCP Foundation:** Deploy Terraform plan to provision GCS (with CORS), IAM, Artifact Registry, and Firestore.
-* [x] **Remote Terraform State:** GCS backend configured and local state migrated; state bucket bootstrapped with versioning enabled.
-* [x] **CI/CD Terraform Pipeline:** GitHub Actions workflow live — plan on PR (with PR comment), apply on merge; authenticated via Workload Identity Federation.
-* [x] **App Check Repo Wiring:** App Check is wired into the iOS app and backend entry points. App Attest is the production provider, Debug Provider supports local development and integration tests, Debug iPhone builds persist a registered debug token for later app-icon relaunches, and both Cloud Functions verify the `X-Firebase-AppCheck` header using the Firebase Admin SDK before any business logic. `invoker: 'public'` remains intentionally set on `getSignedUploadURL` and `analyseVideo` so anonymous mobile clients can reach the HTTP endpoints at the IAM layer; unauthenticated business access is blocked in-code by App Check validation. (See ADR-0002 and ADR-0016.)
-* [x] **App Check Console & Live Gate:** App Attest is enabled for `com.kathelix.catvox` in Apple Developer, the Firebase iOS app is registered with App Attest, the Debug Provider token is registered and available to CI, `make functions-integration` passes with `CATVOX_APP_CHECK_DEBUG_TOKEN`, unauthenticated curl calls to both HTTP Functions return `401 app_check_unauthorized`, and a Debug iPhone scan completed successfully.
-* [x] **Backend Proxy:** Firebase Cloud Functions (TypeScript) deployed — `getSignedUploadURL` and `analyseVideo` live in `us-central1`; Firestore usage guard, Vertex AI call, CI deploy pipeline via GitHub Actions.
-* [x] **Backend Integration Test Baseline:** TypeScript backend integration suite verifies that both live HTTP Functions reject missing App Check tokens with `401 app_check_unauthorized`, verifies the live Firestore quota reservation race contract against temporary Dev data, and verifies the live Dev backend daily-quota `429` body, `Retry-After`, and structured Cloud Logging event after merge-to-main deploys or local Dev CLI runs. See ADR-0013 and ADR-0015.
-* [x] **Video Recording:** Local capture implemented — HEVC codec enforced, resolution hard-capped at 1080p.
-* [x] **Video Upload:** Swift upload of the recorded HEVC file to GCS via signed URL; real pipeline live (`mockMode = false`).
-* [x] **AI Connection:** Cloud Function calls Vertex AI Gemini 2.5 Flash via the Google Gen AI SDK and `fileData` GCS URI.
-* [x] **Quota Exceeded UI:** Dedicated glassmorphic card shown when the daily scan limit is reached (HTTP 429); includes stub "Upgrade to Pro" CTA (shows "Coming soon" alert) and "Maybe Later" dismiss. StoreKit 2 wiring deferred to the Monetization backlog item.
-* [x] **Atomic Quota Reservations:** `analyseVideo` reserves quota in Firestore before invoking Vertex AI, converts the reservation into a consumed unit only after a valid result payload, and counts active reservations during quota checks. See ADR-0015.
-* [x] **Photos Import:** Add support for selecting an existing video from Photos through the unified scan flow, with local validation for duration, size, and unsupported formats before upload.
-* [x] **Early Stop Recording:** Allow users to stop in-app recording after a 2.0-second minimum threshold using the main capture control.
-* [x] **Post-Capture Review:** Add `Retake` and `Use This Clip` actions after recording ends; only `Use This Clip` continues to upload and analysis.
-* [x] **Backend File Size Validation:** Add backend validation for file size <= 100 MB in the analysis path before Vertex AI is invoked.
-* [x] **Scan History Persistence:** Set up SwiftData-backed local storage for successful scans, including saved AI result metadata, thumbnail reference, and CatVox-owned original clip reference.
-* [x] **Scan History UI:** Add the frontend history list to the Home experience, showing prior scans with thumbnail, mood/persona cue, and short `cat_thought` preview.
-* [x] **Saved Result Reopen:** Allow users to reopen a saved scan from local history without re-upload or re-analysis.
-* [x] **Scan Deletion:** Add confirmed deletion of saved scans, removing the history record and CatVox-owned local assets without touching the original Photos asset.
-* [x] **Fitted Result Clip Presentation:** Preserve the full original frame on upload, completed result, and reopened history screens, using ambient treatment around unused space instead of crop-to-fill.
-* [ ] **Monetization:** Implement StoreKit 2 for "Pro" tier (Unlimited scans).
-* [x] **Share Rendering Pipeline:** Add an on-device AVFoundation-based export pipeline that renders a derived share video from the preserved local clip with CatVox overlays.
-* [x] **Share Actions:** Add Result-screen actions to save the rendered share video to Photos or open it in the system share sheet.
-* [x] **Rendered Output Cleanup:** Store rendered share videos as temporary CatVox-owned artifacts and clean them up with normal cache lifecycle plus scan deletion.
-* [x] **Product Analytics:** Add PostHog product analytics for scan source choice, Photos import validation, recording, analysis, quota pressure, sharing/exporting, history deletion, and upgrade intent.
-* [x] **Environment Parameterization Baseline:** Document the named-environment model and move current single-environment app/backend/test/deploy values behind generic environment configuration keys without creating new cloud resources.
-* [x] **Dedicated Dev Environment:** Provision `kathelix-catvox-dev`, switch active Dev app/runtime/Terraform/GitHub Environment artifacts to it, deploy Functions, validate the Dev Firebase plist selection, and pass Dev backend integration tests. See ADR-0018.
-* [x] **Legacy Pre-Split Cleanup:** After a real Debug device scan passed against `kathelix-catvox-dev`, destroyed Terraform-managed Dev leftovers in preserved `kathelix-catvox-prod`, swept non-Terraform leftovers, and recorded a cleanup report before using that project ID for real Prod. See `docs/archive/LEGACY_PRESPLIT_CLEANUP_REPORT_2026-05-16.md`.
-* [ ] **Real Production Environment:** Reuse preserved `kathelix-catvox-prod` for the protected production slice with App Store bundle ID, protected GitHub Environment, non-invasive smoke checks only, and no Dev debug tokens or mutable integration settings.
+The MVP backlog source of truth now lives in `docs/MVP_BACKLOG.md`.
 
 ---
 
 ## 9. Future Enhancements (Post-MVP)
-* **Gemini Model Upgrade:** The backend currently uses `gemini-2.5-flash` (the latest GA Gemini Flash model on Vertex AI as of TRD v2.0). Upgrade to Gemini 3.x Flash once it reaches GA on Vertex AI.
-* **Native iPad Support:** Add iPad support as a dedicated post-MVP feature, not as a small target-family change. The iPad implementation must explicitly resolve:
-    1. **Orientation Model:** Decide whether iPad is portrait-only for MVP parity with iPhone, or whether CatVox supports a true all-orientation iPad experience.
-    2. **Camera Preview and Recording:** Treat app interface orientation, physical device orientation, AVFoundation preview connection orientation, and movie-output orientation as separate concerns. The iPhone portrait-only behavior does not automatically transfer to iPad.
-    3. **Rotation UX:** If iPad rotation is supported, use a dedicated camera architecture where the camera surface remains visually stable and controls/layout adapt smoothly, closer to the system Camera app than a simple SwiftUI view rotation.
-    4. **Adaptive UI Surfaces:** Verify home, recording, upload/progress, result, history, Photos picker, save-to-Photos, and share-sheet behavior across full-screen iPad, landscape, portrait, and any supported multitasking/windowing modes.
-    **Acceptance rule:** CatVox must not claim native iPad support until the iPad camera preview, recorded output orientation, imported-video display, result layout, modal positioning, save/share actions, and rotation behavior pass a real-device regression matrix.
-* **Localization / Internationalization:** Add a complete language-localized user experience for supported locales as one unified post-MVP feature, not as separate partial releases. This work includes two required sub-scopes that must ship together:
-    1. **Frontend Localization:** Localize all user-facing app interface copy using standard iOS system-language localization, including navigation labels, buttons, alerts, validation messages, quota text, permission usage descriptions, persona display labels, and other user-visible UI strings.
-    2. **AI Response Localization:** Localize backend-generated result content by sending the user's preferred locale with analysis requests and requiring returned result fields (`primary_emotion`, `analysis`, `cat_thought`, `owner_tip`) in that language. Persist result-language metadata with saved scans so historical results remain internally consistent.
-    **Acceptance rule:** CatVox must not ship a mixed-language experience where app chrome appears in one language while AI-generated result content appears in another.
-* **IAM Security Review:** `catvox-ci-sa` currently holds `roles/editor`, `roles/resourcemanager.projectIamAdmin`, `roles/iam.serviceAccountAdmin`, and `roles/secretmanager.secretAccessor` — broad rights required for Terraform to manage IAM bindings via CI. Consider splitting Terraform into an admin layer (IAM, SAs — applied manually or via a privileged gated workflow) and an infra layer (GCS, Firestore, Artifact Registry — applied by CI with `roles/editor` only), removing the need for `projectIamAdmin` and `serviceAccountAdmin` on the routine CI identity.
-* **PostHog Analytics:**
-    1. **Dashboard-as-Code:** Move PostHog dashboard and insight definitions into Terraform after MVP so analytics configuration is reproducible and reviewed in git. Prefer a separate Terraform root such as `terraform/posthog/` with its own state prefix and `POSTHOG_API_KEY` CI secret, rather than mixing PostHog credentials into the GCP infrastructure root. Initial scope should import the existing analytics dashboard and wizard-created insights, correct share-event semantics (`share_sheet_opened` for sheet presentation, `scan_shared` for completed share actions), and manage the core MVP dashboard tiles for scan conversion, Photos validation failures, share/export conversion, save-to-Photos conversion, and quota pressure.
-    2. **Analytics Environment Separation:** Separate development and production analytics traffic, either by using distinct Debug/Release PostHog projects or by attaching an `app_environment` property to every event so test traffic can be excluded from production dashboards.
-    3. **Collect in-app feedback**: from users, automatic sending of errors, special "Feedback" dialog
-* **Picker Eligibility UX:** Consider richer pre-selection eligibility hints or a more advanced gallery experience only if later product testing shows clear value over the simpler MVP rejection flow.
-* **Signed URL Issuance Rate-Limit:** Add a dedicated anti-abuse rate-limit for signed upload URL requests if App Check plus upload-gate quota enforcement prove insufficient.
-* **Analysis Request Idempotency:** Design idempotent `analyseVideo` semantics before adding automatic client retries for analysis POST failures. The design should prevent duplicate Vertex AI calls, quota increments, or user-visible duplicate scans when the backend finishes after the client loses the connection.
-* **Backend Analysis Timing Telemetry:** Add structured timing logs around `analyseVideo` phases, including App Check pass, quota pre-check, GCS metadata lookup, Gemini request start/end, response validation, quota increment, and final response status, so slow device-observed analysis runs can be attributed without relying on Xcode networking logs.
-* **Backend Duration Validation:** Add backend validation for uploaded video duration <= 10 seconds before Vertex AI is invoked, rather than relying only on client-side duration checks.
-* **4K Import Strategy Review:** Re-evaluate cost and UX trade-offs of accepting 4K gallery videos, and decide later whether to keep raw upload, cap imported resolution, or introduce client-side normalization.
-* **Failure Reporting UX Review:** Review likely user-visible failure points across the app and design one simple, consistent way for users to report failures without adding bespoke report flows to individual screens. Example failure points should include failure to open a saved video on the Result screen, including the case where the Result screen uses the original local clip as its looping background. The future design should also decide what diagnostic context to capture internally for such failures.
-* **Haptic Completion:** Tactile feedback on successful AI interpretation.
-* **Multi-Cat Profiles:** Specific tracking for different pets.
-* **Health Monitoring:** Advanced analysis for subtle pain or distress markers.
-* **Social Feed:** A community "Wall of Meows" to see global cat interpretations.
-* **Advanced Mood Analytics:** Week-over-week trends for cat behavior.
-* **4K Video (Pro Tier):** Unlock 4K capture for Pro subscribers; free tier remains capped at 1080p.
+
+Future-feature ideas now live in the CatVox Notion Ideas table.
