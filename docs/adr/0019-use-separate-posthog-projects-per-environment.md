@@ -147,6 +147,9 @@ and keep Terraform/dashboard management simpler.
   quota pressure.
 - Add analytics event taxonomy checks and guardrails so every event continues
   to include `app_environment`.
+- Before later-stage external TestFlight betas or release candidates, decide and
+  document whether that traffic stays in Dev analytics, uses a dedicated
+  pre-production PostHog project, or follows Prod analytics semantics.
 - Evaluate PostHog feature flags, experiments, surveys, and error tracking only
   through later TRD/ADR updates.
 - Decide privacy-safe in-app feedback and error intake in a separate follow-up.
