@@ -3,7 +3,12 @@ import os
 import PostHog
 
 enum AnalyticsService {
-    enum Event: String {
+    struct CapturePayload {
+        let eventName: String
+        let properties: [String: Any]
+    }
+
+    enum Event: String, CaseIterable {
         case analysisCompleted = "analysis_completed"
         case analysisFailed = "analysis_failed"
         case analysisRetryTapped = "analysis_retry_tapped"
@@ -74,9 +79,21 @@ enum AnalyticsService {
 
     static func capture(_ event: Event, properties: [String: Any] = [:]) {
         guard isConfigured else { return }
+        let payload = capturePayload(for: event, properties: properties)
         PostHogSDK.shared.capture(
-            event.rawValue,
-            properties: eventProperties(properties)
+            payload.eventName,
+            properties: payload.properties
+        )
+    }
+
+    static func capturePayload(
+        for event: Event,
+        properties: [String: Any] = [:],
+        appConfiguration: CatVoxAppConfiguration = .current
+    ) -> CapturePayload {
+        CapturePayload(
+            eventName: event.rawValue,
+            properties: eventProperties(properties, appConfiguration: appConfiguration)
         )
     }
 
