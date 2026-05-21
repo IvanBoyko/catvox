@@ -433,5 +433,4 @@ The MVP backlog source of truth now lives in `docs/MVP_BACKLOG.md`.
 ---
 
 ## 9. Future Enhancements (Post-MVP)
-* **Advanced Mood Analytics:** Week-over-week trends for cat behavior.
 * **4K Video (Pro Tier):** Unlock 4K capture for Pro subscribers; free tier remains capped at 1080p.
