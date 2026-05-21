@@ -433,7 +433,6 @@ The MVP backlog source of truth now lives in `docs/MVP_BACKLOG.md`.
 ---
 
 ## 9. Future Enhancements (Post-MVP)
-* **Analysis Request Idempotency:** Design idempotent `analyseVideo` semantics before adding automatic client retries for analysis POST failures. The design should prevent duplicate Vertex AI calls, quota increments, or user-visible duplicate scans when the backend finishes after the client loses the connection.
 * **Backend Analysis Timing Telemetry:** Add structured timing logs around `analyseVideo` phases, including App Check pass, quota pre-check, GCS metadata lookup, Gemini request start/end, response validation, quota increment, and final response status, so slow device-observed analysis runs can be attributed without relying on Xcode networking logs.
 * **Backend Duration Validation:** Add backend validation for uploaded video duration <= 10 seconds before Vertex AI is invoked, rather than relying only on client-side duration checks.
 * **4K Import Strategy Review:** Re-evaluate cost and UX trade-offs of accepting 4K gallery videos, and decide later whether to keep raw upload, cap imported resolution, or introduce client-side normalization.
