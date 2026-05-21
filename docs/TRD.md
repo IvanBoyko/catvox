@@ -433,7 +433,6 @@ The MVP backlog source of truth now lives in `docs/MVP_BACKLOG.md`.
 ---
 
 ## 9. Future Enhancements (Post-MVP)
-* **Multi-Cat Profiles:** Specific tracking for different pets.
 * **Health Monitoring:** Advanced analysis for subtle pain or distress markers.
 * **Social Feed:** A community "Wall of Meows" to see global cat interpretations.
 * **Advanced Mood Analytics:** Week-over-week trends for cat behavior.
