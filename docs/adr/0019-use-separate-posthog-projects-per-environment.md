@@ -50,7 +50,9 @@ Initial projects:
 
 PostHog project display names follow `CatVox <Environment>`. These are PostHog
 display strings, not GCP/Firebase project IDs such as `kathelix-catvox-dev` or
-`kathelix-catvox-prod`.
+`kathelix-catvox-prod`. The mapping also does not need to be one-to-one: future
+test or staging GCP/Firebase projects may intentionally share the Dev analytics
+project unless a later decision creates a separate analytics isolation tier.
 
 The existing `CatVox Dev` project remains the Dev analytics project. A dedicated
 `CatVox Prod` project is required before real production analytics are enabled.
