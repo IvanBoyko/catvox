@@ -433,7 +433,6 @@ The MVP backlog source of truth now lives in `docs/MVP_BACKLOG.md`.
 ---
 
 ## 9. Future Enhancements (Post-MVP)
-* **Backend Analysis Timing Telemetry:** Add structured timing logs around `analyseVideo` phases, including App Check pass, quota pre-check, GCS metadata lookup, Gemini request start/end, response validation, quota increment, and final response status, so slow device-observed analysis runs can be attributed without relying on Xcode networking logs.
 * **Backend Duration Validation:** Add backend validation for uploaded video duration <= 10 seconds before Vertex AI is invoked, rather than relying only on client-side duration checks.
 * **4K Import Strategy Review:** Re-evaluate cost and UX trade-offs of accepting 4K gallery videos, and decide later whether to keep raw upload, cap imported resolution, or introduce client-side normalization.
 * **Failure Reporting UX Review:** Review likely user-visible failure points across the app and design one simple, consistent way for users to report failures without adding bespoke report flows to individual screens. Example failure points should include failure to open a saved video on the Result screen, including the case where the Result screen uses the original local clip as its looping background. The future design should also decide what diagnostic context to capture internally for such failures.
