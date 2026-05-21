@@ -3,7 +3,7 @@
 - Status: Accepted
 - Date: 2026-05-15
 - Owners: Kathelix / CatVox
-- Related docs: `docs/HLD.md`, `docs/TRD.md`, `docs/TODO.md`, `project.yml`, `Makefile`, `.github/workflows/`
+- Related docs: `docs/HLD.md`, `docs/TRD.md`, `docs/TODO.md` (historical; retired), `project.yml`, `Makefile`, `.github/workflows/`
 
 ## Context
 

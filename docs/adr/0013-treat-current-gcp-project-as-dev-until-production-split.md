@@ -3,7 +3,7 @@
 - Status: Accepted
 - Date: 2026-05-01
 - Owners: Kathelix / CatVox
-- Related docs: `docs/HLD.md`, `docs/TRD.md`, `docs/TODO.md`, `.github/workflows/functions.yml`, `functions/integration/verifyQuotaContract.ts`
+- Related docs: `docs/HLD.md`, `docs/TRD.md`, `docs/TODO.md` (historical; retired), `.github/workflows/functions.yml`, `functions/integration/verifyQuotaContract.ts`
 
 ## Context
 
@@ -103,4 +103,4 @@ non-invasive, and documented in a separate runbook.
 - CI entry points:
   - post-deploy job in `.github/workflows/functions.yml`
 - Local Dev command: `npm --prefix functions run test:integration`
-- Future environment split is tracked in `docs/TODO.md`.
+- Future environment split was formerly tracked in `docs/TODO.md`; current follow-up is the Real Production Environment item in `docs/MVP_BACKLOG.md` and issue #38.

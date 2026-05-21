@@ -28,6 +28,8 @@ When an ADR is accepted:
 - check whether TRD needs updating (implementation requirements)
 - reference the ADR from TRD where relevant (`See ADR-NNNN.`)
 
+ADRs are historical records, so preserve their original decision context. If an ADR contains an active navigation pointer to a retired or moved file, amend that pointer in place with the current destination while keeping the historical context clear.
+
 ---
 
 ## 2. Project Identity
@@ -47,7 +49,7 @@ When an ADR is accepted:
 
 ## 3. Repository Structure
 
-```
+```text
 catvox/
 ├── CatVox/                        # iOS Swift app (XcodeGen source)
 │   ├── App/                       # @main entry point
@@ -443,7 +445,7 @@ For Debug-only or local-development behavior changes, also run a Release-leak au
 ### Commit Style
 
 Short, imperative subject line. No period. Examples from this repo's history:
-```
+```text
 Add GoogleService-Info.plist, persist scheme via project.yml
 TRD v1.8 — add CI/CD section, fix six audit findings
 ```
@@ -467,7 +469,7 @@ If a feature that was originally tracked under one broad backlog item becomes se
 - **docs/TRD.md** — concrete technical requirements: versions, bucket names, roles, and implementation constraints.
 - **docs/MVP_BACKLOG.md** — concrete MVP implementation backlog status.
 - When you want to change a design decision, update HLD first, then TRD, then code.
-- Manual verification is acceptable during MVP, but once core user flows stabilize, add follow-up automated test coverage to TRD §9 if tests are intentionally deferred.
+- Manual verification is acceptable during MVP, but once core user flows stabilize, open or update a GitHub Issue for intentionally deferred automated test coverage and link it from the relevant backlog or requirements doc when needed.
 
 ---
 
