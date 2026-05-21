@@ -433,7 +433,6 @@ The MVP backlog source of truth now lives in `docs/MVP_BACKLOG.md`.
 ---
 
 ## 9. Future Enhancements (Post-MVP)
-* **Picker Eligibility UX:** Consider richer pre-selection eligibility hints or a more advanced gallery experience only if later product testing shows clear value over the simpler MVP rejection flow.
 * **Signed URL Issuance Rate-Limit:** Add a dedicated anti-abuse rate-limit for signed upload URL requests if App Check plus upload-gate quota enforcement prove insufficient.
 * **Analysis Request Idempotency:** Design idempotent `analyseVideo` semantics before adding automatic client retries for analysis POST failures. The design should prevent duplicate Vertex AI calls, quota increments, or user-visible duplicate scans when the backend finishes after the client loses the connection.
 * **Backend Analysis Timing Telemetry:** Add structured timing logs around `analyseVideo` phases, including App Check pass, quota pre-check, GCS metadata lookup, Gemini request start/end, response validation, quota increment, and final response status, so slow device-observed analysis runs can be attributed without relying on Xcode networking logs.
