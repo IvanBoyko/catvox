@@ -4,7 +4,7 @@ import SwiftUI
 /// Mirrors the visual style of UploadProgressView.
 ///
 /// Actions:
-///   "Upgrade to Pro"  — stub; shows a "Coming soon" alert (StoreKit 2 wiring in TRD §8).
+///   "Upgrade to Pro"  — stub; shows a "Coming soon" alert (StoreKit 2 wiring tracked in issue #53).
 ///   "Maybe Later"     — calls onDismiss to close the Result screen.
 struct QuotaExceededView: View {
 

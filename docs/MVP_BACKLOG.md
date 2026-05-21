@@ -29,7 +29,7 @@ This file is the source of truth for CatVox MVP backlog status.
 * [x] **Saved Result Reopen:** Allow users to reopen a saved scan from local history without re-upload or re-analysis.
 * [x] **Scan Deletion:** Add confirmed deletion of saved scans, removing the history record and CatVox-owned local assets without touching the original Photos asset.
 * [x] **Fitted Result Clip Presentation:** Preserve the full original frame on upload, completed result, and reopened history screens, using ambient treatment around unused space instead of crop-to-fill.
-* [ ] **Monetization:** Implement StoreKit 2 for "Pro" tier (Unlimited scans).
+* [ ] **Monetization:** Implement StoreKit 2 for "Pro" tier (Unlimited scans). See issue #53.
 * [x] **Share Rendering Pipeline:** Add an on-device AVFoundation-based export pipeline that renders a derived share video from the preserved local clip with CatVox overlays.
 * [x] **Share Actions:** Add Result-screen actions to save the rendered share video to Photos or open it in the system share sheet.
 * [x] **Rendered Output Cleanup:** Store rendered share videos as temporary CatVox-owned artifacts and clean them up with normal cache lifecycle plus scan deletion.
