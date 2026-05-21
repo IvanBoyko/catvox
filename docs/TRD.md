@@ -433,7 +433,6 @@ The MVP backlog source of truth now lives in `docs/MVP_BACKLOG.md`.
 ---
 
 ## 9. Future Enhancements (Post-MVP)
-* **Haptic Completion:** Tactile feedback on successful AI interpretation.
 * **Multi-Cat Profiles:** Specific tracking for different pets.
 * **Health Monitoring:** Advanced analysis for subtle pain or distress markers.
 * **Social Feed:** A community "Wall of Meows" to see global cat interpretations.
