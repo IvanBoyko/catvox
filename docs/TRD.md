@@ -433,4 +433,5 @@ The MVP backlog source of truth now lives in `docs/MVP_BACKLOG.md`.
 ---
 
 ## 9. Future Enhancements (Post-MVP)
-* **4K Video (Pro Tier):** Unlock 4K capture for Pro subscribers; free tier remains capped at 1080p.
+
+Future-feature ideas now live in the CatVox Notion Ideas table.
