@@ -24,14 +24,19 @@ stack:
 - separate GitHub Environment secrets
 - separate Terraform state per environment
 
-Analytics should follow the same operational model before real production
-traffic exists. The key choice is whether to keep one PostHog project and rely
-on an `app_environment` event property, or to use separate PostHog projects for
-Dev and Prod.
+Analytics should follow the same operational model before significant public
+production traffic exists. The key choice is whether to keep one PostHog
+project and rely on an `app_environment` event property, or to use separate
+PostHog projects for Dev and Prod.
 
 The current PostHog pricing page was checked on 2026-05-21. It states that the
 Free plan has one project, while Pay-as-you-go keeps the monthly free volume and
 allows more projects. See <https://posthog.com/pricing>.
+
+At CatVox scale, expected PostHog costs remain negligible because the
+Pay-as-you-go plan preserves generous free monthly quotas while unlocking
+multiple projects. The architectural clarity and analytics isolation benefits
+outweigh the expected near-zero operational cost increase.
 
 ## Decision
 
@@ -61,6 +66,13 @@ captured product event. This property is defense-in-depth metadata for filtering
 debugging, and future environments such as `local`, `staging`, or `testflight`.
 It is not the primary isolation boundary between Dev and Prod analytics.
 
+Event taxonomy must remain environment-agnostic. Event names such as
+`analysis_completed`, `scan_shared`, and `quota_exceeded` are shared across
+environments and must not include environment suffixes such as `_dev`, `_prod`,
+or `_testflight`. Environment separation must happen through separate PostHog
+projects as the primary isolation mechanism and `app_environment` as
+supplementary metadata, not through different event names.
+
 App-facing configuration remains limited to public ingestion configuration such
 as `CATVOX_POSTHOG_PROJECT_TOKEN` and `CATVOX_POSTHOG_HOST_NAME`. Operational
 PostHog API credentials such as `POSTHOG_API_KEY`, `POSTHOG_ORGANIZATION_ID`,
@@ -84,6 +96,9 @@ be mixed into the GCP infrastructure root.
   ADR-0017 and the dedicated Dev environment from ADR-0018.
 - Future PostHog feature flags, experiments, surveys, and error intake can be
   introduced without crossing Dev and Prod user populations.
+- Separate projects reduce operational and analytical cognitive overhead because
+  dashboards, funnels, retention queries, and feature-flag analysis no longer
+  require permanent environment-filtering discipline.
 
 ### Negative / Trade-offs
 
