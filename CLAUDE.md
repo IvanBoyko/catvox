@@ -12,7 +12,9 @@ This file adds Claude-specific lessons that complement `AGENTS.md`.
 
 Open every review with a one-sentence "is this PR right-sized for the bug it claims to fix?" check. Catching scope creep before drilling into findings saves review rounds, and the answer informs the depth of the rest of the review.
 
-Use severity gating (High / Medium / Low / Observations) with explicit "block on" vs "nice to have" labels. Numbering every nit at Low severity inflates the punch list — cluster sub-low items under a single "Nits" heading rather than giving each its own ID.
+Use severity gating (High / Medium / Low / Observations) with explicit "block on" vs "nice to have" labels. Numbering every nit at Low severity inflates the punch list — cluster sub-low items under a single "Nits" heading rather than giving each its own ID. If a Low or Observation item needs hedging in the chat preview ("borderline", "arguably", "could go either way"), drop it instead of clustering — the clustering rule applies to nits you'd post unconditionally; hedged items add review noise without adding signal.
+
+When two docs, config files, or build settings name what looks like the same thing differently, trace each name to what it actually points to in code/config before drafting a "pick one" finding. In layered build systems (xcconfig keys, build-setting passthrough, Info.plist values, runtime env-var overrides), the same conceptual value often has multiple correct names at different layers — for example, an xcconfig key like `*_HOST_NAME` that stores hostname only, alongside a runtime env-var override like `*_HOST` that expects a full URL. The first move on a naming disagreement is reconstruction, not arbitration.
 
 When the developer's revision improves on your suggestion (for example, splitting one error case into two semantically distinct cases rather than the tagged-source variant you proposed), call it out explicitly in the next round. Credit the thinking, not just the diff.
 

@@ -27,6 +27,7 @@ When an ADR is accepted:
 - check whether HLD needs updating (high-level direction)
 - check whether TRD needs updating (implementation requirements)
 - reference the ADR from TRD where relevant (`See ADR-NNNN.`)
+- if the ADR creates an operational precondition, ordering rule, or environment-creation constraint, check whether runbooks such as `docs/CREATE_NEW_ENVIRONMENT.md` need the same rule
 
 ADRs are historical records, so preserve their original decision context. If an ADR contains an active navigation pointer to a retired or moved file, amend that pointer in place with the current destination while keeping the historical context clear.
 
@@ -332,6 +333,7 @@ Use `docs/CREATE_NEW_ENVIRONMENT.md` and `make environment-create` for new envir
 
 - Prefer the GitHub connector for creating PRs when available, but if it returns `403 Resource not accessible by integration`, do not retry the same connector path. Fall back to the authenticated `gh` CLI and mention the fallback in the final summary.
 - PR descriptions should capture the original user-visible bug report or feature request, root cause, implementation summary, validation performed, manual test status, and any notable review follow-up. If the user reported an error message or screenshot, preserve the relevant text in the PR body so the review has the original symptom in context.
+- When a PR is one slice of a larger issue or epic, reference the parent issue in the PR body with non-closing language such as `Part of #NN` or `Refs #NN`. Use closing keywords such as `Closes #NN` only on the final PR that actually completes the issue. When available, also associate the PR with the issue in GitHub's Development metadata so the relationship is visible from both sides.
 - When review or implementation is bouncing between Codex, Claude, and a human reviewer, use concise PR comments as the durable handoff log after meaningful review/fix rounds. Keep chat for decisions and status; keep the PR thread readable for the next agent or reviewer.
 - Every PR comment or PR description Codex posts must start with a short italic attribution line on its own at the very top, before any heading or other content: `_Posted by Codex_`. This makes Codex's comments distinguishable from Ivan's direct comments and Claude Code's comments — all three post under the same GitHub account, and the attribution is the only way a future reader can tell them apart. Keep the line role-agnostic; Codex may act as implementer, reviewer, debugger, or planner depending on the task.
 - Keep the PR body validation matrix current after each meaningful review response, especially when new tests, manual checks, or known skipped checks are added.
@@ -426,6 +428,7 @@ Before merging a feature PR, verify all of the following:
 - the PR description matches the final implementation
 - acceptance criteria / test checklist is current
 - all PR bot / AI review findings have been reviewed and explicitly resolved, rejected with reasoning, or consciously deferred
+- GitHub inline review threads for addressed findings are resolved, or left open with an explicit note explaining why they remain open
 - the branch has been compared against `origin/main`, and any needed rebase / conflict resolution has already been handled
 - related completed items are removed from Markdown scratchpads or updated in their external tracker
 - implemented backlog items are checked off in `docs/MVP_BACKLOG.md`

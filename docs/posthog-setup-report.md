@@ -9,7 +9,12 @@ Analytics identify the user with CatVox's existing anonymous per-install UUID
 from `UserIdentityStore`, matching the identifier used for quota enforcement.
 If the PostHog project token is missing, analytics are disabled without
 crashing the app. Analytics are also disabled during XCTest and SwiftUI previews
-to keep automated verification out of production dashboards.
+to keep automated verification out of analytics dashboards.
+
+The current PostHog project is `CatVox Dev`. Per ADR-0019, real production
+analytics must use a separate `CatVox Prod` project. The `app_environment`
+property remains required on every event as defense-in-depth metadata, but
+separate projects are the primary Dev/Prod isolation boundary.
 
 CatVox uses explicit product events only. PostHog automatic lifecycle capture,
 screen-view capture, element autocapture, rage-click capture, surveys, session
@@ -47,7 +52,7 @@ are disabled in `AnalyticsService`.
 | `scan_deleted` | User confirms deletion of a saved scan. | `persona_type` |
 | `upgrade_to_pro_tapped` | User taps the quota-card Pro CTA. | - |
 
-## Dashboard Links From Wizard
+## Dev Dashboard Links From Wizard
 
 - **Dashboard - Analytics basics**: https://us.posthog.com/project/402530/dashboard/1524032
 - **Scan conversion funnel**: https://us.posthog.com/project/402530/insights/HpsroXVQ
@@ -59,6 +64,11 @@ are disabled in `AnalyticsService`.
 These dashboard definitions may need to be refreshed because `scan_shared` now
 means a completed share action, while `share_sheet_opened` tracks sheet
 presentation.
+
+These links are Dev-only references for the current `CatVox Dev` project. Later
+issue #37 slices should import and normalize these definitions through a
+separate `terraform/posthog/` root, then reproduce the managed MVP dashboard
+shape for `CatVox Prod` without sharing Dev project state or credentials.
 
 ## Dashboard Refresh Notes
 
