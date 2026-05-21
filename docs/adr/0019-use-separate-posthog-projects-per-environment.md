@@ -48,6 +48,10 @@ Initial projects:
   pre-production validation if routed to Dev, and mutable analytics testing
 - `CatVox Prod` for real App Store production analytics
 
+PostHog project display names follow `CatVox <Environment>`. These are PostHog
+display strings, not GCP/Firebase project IDs such as `kathelix-catvox-dev` or
+`kathelix-catvox-prod`.
+
 The existing `CatVox Dev` project remains the Dev analytics project. A dedicated
 `CatVox Prod` project is required before real production analytics are enabled.
 
@@ -73,11 +77,14 @@ or `_testflight`. Environment separation must happen through separate PostHog
 projects as the primary isolation mechanism and `app_environment` as
 supplementary metadata, not through different event names.
 
-App-facing configuration remains limited to public ingestion configuration such
-as `CATVOX_POSTHOG_PROJECT_TOKEN` and `CATVOX_POSTHOG_HOST_NAME`. Operational
+App-facing configuration remains limited to public ingestion configuration. In
+committed xcconfig files, `CATVOX_POSTHOG_PROJECT_TOKEN` stores the public
+project token and `CATVOX_POSTHOG_HOST_NAME` stores a hostname only; XcodeGen
+composes the full `https://` URL into `Info.plist`, and
+`CATVOX_POSTHOG_HOST` is reserved for runtime full-URL overrides. Operational
 PostHog API credentials such as `POSTHOG_API_KEY`, `POSTHOG_ORGANIZATION_ID`,
-`POSTHOG_HOST`, and `POSTHOG_PROJECT_ID` are CI/local automation inputs for
-future PostHog Terraform work and must not be committed to app config.
+`POSTHOG_HOST`, and `POSTHOG_PROJECT_ID` are CatVox automation variable names
+for future PostHog Terraform work and must not be committed to app config.
 
 PostHog infrastructure-as-code work will live in a dedicated Terraform root such
 as `terraform/posthog/`, with its own state prefix and CI workflow. It must not
