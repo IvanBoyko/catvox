@@ -64,8 +64,14 @@ final class AnalyticsServiceTests: XCTestCase {
             "scan_deleted",
             "upgrade_to_pro_tapped",
         ]
+        let missingEventNames = requiredEventNames.subtracting(eventNames).sorted()
 
-        XCTAssertTrue(requiredEventNames.isSubset(of: eventNames))
+        XCTAssertTrue(
+            missingEventNames.isEmpty,
+            "Missing required analytics events: \(missingEventNames.joined(separator: ", "))"
+        )
+
+        // Pin enum-case identity to the corrected issue #37 share semantics.
         XCTAssertEqual(AnalyticsService.Event.shareSheetOpened.rawValue, "share_sheet_opened")
         XCTAssertEqual(AnalyticsService.Event.scanShared.rawValue, "scan_shared")
     }
