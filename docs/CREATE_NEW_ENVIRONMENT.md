@@ -187,13 +187,19 @@ CATVOX_ENV_CONFIG=config/environments/<env>.xcconfig make ios-validate-env-confi
 For Dev-like mutable environments:
 
 ```bash
+export CATVOX_ENVIRONMENT=<env>
+export CATVOX_ENV_CONFIG="config/environments/${CATVOX_ENVIRONMENT}.xcconfig"
+
 make functions-test
-CATVOX_TERRAFORM_ENV=<env> make terraform-plan
-CATVOX_ENV_CONFIG=config/environments/<env>.xcconfig CATVOX_TERRAFORM_ENV=<env> make posthog-terraform-plan
-CATVOX_ENV_CONFIG=config/environments/<env>.xcconfig make ios-generate
-CATVOX_ENV_CONFIG=config/environments/<env>.xcconfig make ios-test
-CATVOX_ENV_CONFIG=config/environments/<env>.xcconfig make functions-integration
+make terraform-plan
+make posthog-terraform-plan
+make ios-generate
+make ios-test
+make functions-integration
 ```
+
+Set `CATVOX_TERRAFORM_ENV` only when the Terraform backend/tfvars basename
+intentionally differs from `CATVOX_ENVIRONMENT`.
 
 Also run a real Debug device scan before retiring or cleaning any previous Dev
 backend.

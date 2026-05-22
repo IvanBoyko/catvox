@@ -28,7 +28,8 @@ permissions:
   pull-requests: write  # Required to post plan output as a PR comment
 
 env:
-  CATVOX_TERRAFORM_ENV: dev
+  CATVOX_ENVIRONMENT: dev
+  CATVOX_ENV_CONFIG: config/environments/dev.xcconfig
   CATVOX_POSTHOG_TF_STATE_PREFIX: posthog/state
   GCP_PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
   # State bucket for the PostHog root reuses the per-environment GCS bucket.
@@ -38,9 +39,8 @@ env:
   POSTHOG_API_KEY: ${{ secrets.POSTHOG_API_KEY }}
   POSTHOG_ORGANIZATION_ID: ${{ secrets.POSTHOG_ORGANIZATION_ID }}
 
-  # The PostHog project ID and provider API host come from
-  # config/environments/dev.xcconfig via the Makefile so app config remains the
-  # source of truth.
+  # The PostHog project ID and provider API host come from the selected
+  # CATVOX_ENV_CONFIG via the Makefile so app config remains the source of truth.
 
 jobs:
   # ── Plan ────────────────────────────────────────────────────────────────────

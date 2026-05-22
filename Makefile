@@ -115,7 +115,7 @@ help:
 		'  CATVOX_FIREBASE_APP_ID=... CATVOX_FIREBASE_API_KEY=... CATVOX_IOS_BUNDLE_ID=...' \
 		'  CATVOX_INTEGRATION_SAFE_ENVIRONMENTS=dev marks mutable-test environments' \
 		'  CATVOX_APP_CHECK_DEBUG_TOKEN=... make functions-integration' \
-		'  CATVOX_TERRAFORM_ENV=dev selects terraform/backend and terraform/env files' \
+		'  CATVOX_TERRAFORM_ENV=dev overrides terraform/backend and terraform/env names when different from CATVOX_ENVIRONMENT' \
 		'  CATVOX_TF_BACKEND_CONFIG=terraform/backend/dev.hcl overrides Terraform backend config' \
 		'  CATVOX_TF_VARS_FILE=terraform/env/dev.tfvars overrides Terraform var file' \
 		'  CATVOX_TFVARS_PATH=... overrides the local tfvars fallback path for App Check debug tokens' \
