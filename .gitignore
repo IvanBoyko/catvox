@@ -62,7 +62,8 @@ fastlane/screenshots/**/*.png
 fastlane/test_output
 .aider*
 
-# Terraform
+# Terraform — GCP root. The PostHog root carries its own .gitignore at
+# terraform/posthog/.gitignore so each root owns its local-files rules.
 terraform/.terraform/
 terraform/.terraform.lock.hcl
 terraform/*.tfstate
@@ -72,16 +73,6 @@ terraform/env/*.tfvars
 !terraform/env/*.tfvars.example
 terraform/backend/*.hcl
 !terraform/backend/*.hcl.example
-# PostHog Terraform root (terraform/posthog/). Per ADR-0020 it does not have
-# an env/<env>.tfvars directory; values come from config/environments/<env>.xcconfig
-# and the per-environment GitHub Environment. The provider lock file
-# (.terraform.lock.hcl) is committed for this root — see PR #56 for the
-# rationale and TODO follow-up for the GCP root.
-terraform/posthog/.terraform/
-terraform/posthog/*.tfstate
-terraform/posthog/*.tfstate.backup
-terraform/posthog/backend/*.hcl
-!terraform/posthog/backend/*.hcl.example
 .env
 
 # Codex

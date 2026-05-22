@@ -1,15 +1,14 @@
 # Terraform Environment Conventions
 
-CatVox has two Terraform roots, each with its own state, lifecycle, and CI
-workflow:
+CatVox's Terraform layout has three kinds of directories under `terraform/`:
 
-- `terraform/` — GCP/Firebase foundation (see `terraform/README.md` you are
-  reading; state prefix `catvox/state`, workflow `.github/workflows/terraform.yml`).
-- `terraform/posthog/` — PostHog analytics (state prefix `posthog/state`,
-  workflow `.github/workflows/posthog-terraform.yml`; see
-  `terraform/posthog/README.md` and ADR-0020).
+| Path | Kind | Purpose |
+|---|---|---|
+| `terraform/` | Terraform root (GCP/Firebase foundation) | `.tf` files for GCP/Firebase infrastructure. State prefix `catvox/state`. CI workflow `.github/workflows/terraform.yml`. |
+| `terraform/posthog/` | Terraform root (PostHog analytics) | `.tf` files for PostHog projects/dashboards/insights. State prefix `posthog/state`. CI workflow `.github/workflows/posthog-terraform.yml`. See `terraform/posthog/README.md` and ADR-0020. |
+| `terraform/backend/`, `terraform/env/`, `terraform/posthog/backend/` | Per-environment config subdirectories attached to a Terraform root | Hold `.hcl` backend configs and `.tfvars` variable files. Not Terraform roots in their own right — no `.tf` files, you don't run `terraform init` against them. Passed to a root's `terraform init -backend-config=…` / `-var-file=…`. |
 
-Both roots share the same per-environment GCS state bucket
+The two Terraform roots share the same per-environment GCS state bucket
 (`catvox-tf-state-<gcp-project-id>`); only the prefix differs. Active Dev
 points at `kathelix-catvox-dev`; future Prod will use a separate state/config
 set for the preserved `kathelix-catvox-prod` project. See ADR-0017, ADR-0018,
