@@ -72,12 +72,12 @@ terraform/env/*.tfvars
 !terraform/env/*.tfvars.example
 terraform/backend/*.hcl
 !terraform/backend/*.hcl.example
-# PostHog Terraform root (terraform/posthog/) follows the same convention.
-# Per ADR-0020 it does not have an env/<env>.tfvars directory; values come
-# from config/environments/<env>.xcconfig and the per-environment GitHub
-# Environment.
+# PostHog Terraform root (terraform/posthog/). Per ADR-0020 it does not have
+# an env/<env>.tfvars directory; values come from config/environments/<env>.xcconfig
+# and the per-environment GitHub Environment. The provider lock file
+# (.terraform.lock.hcl) is committed for this root — see PR #56 for the
+# rationale and TODO follow-up for the GCP root.
 terraform/posthog/.terraform/
-terraform/posthog/.terraform.lock.hcl
 terraform/posthog/*.tfstate
 terraform/posthog/*.tfstate.backup
 terraform/posthog/backend/*.hcl
