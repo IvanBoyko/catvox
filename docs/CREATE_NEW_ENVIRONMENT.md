@@ -22,17 +22,22 @@ Each environment owns these artifacts:
 | Apple Developer App ID | Apple Developer team | Conditional. Required only when the environment introduces a new iOS bundle ID that will be installed on physical devices or use App Attest. |
 | App Check | Terraform | Dev may have a Debug Provider token. Prod must not have mutable integration debug tokens and should use protected smoke checks only. |
 | Backend URLs | `config/environments/<env>.xcconfig` | Set after Functions deploy from the deployed Gen 2 Function URLs. |
-| PostHog config | `config/environments/<env>.xcconfig` | App-visible project token and ingestion hostname only. Create the environment's PostHog project before enabling real production analytics traffic. |
+| PostHog config | `config/environments/<env>.xcconfig` | App-visible project token (`CATVOX_POSTHOG_PROJECT_TOKEN`), ingestion hostname (`CATVOX_POSTHOG_HOST_NAME`), and PostHog project ID for Terraform (`CATVOX_POSTHOG_PROJECT_ID`). Create the environment's PostHog project before enabling real production analytics traffic. |
+| PostHog Terraform state | `gs://catvox-tf-state-<gcp-project-id>/posthog/state` | Same GCS bucket as the GCP root, different prefix. No new bucket. See ADR-0020. |
 
-PostHog environment isolation is project-based. Dev uses the `CatVox Dev`
-PostHog project, and real production analytics require a dedicated
-`CatVox Prod` PostHog project before App Store production traffic is enabled.
-Do not point a real environment at the existing Dev PostHog project as a
-stopgap.
-Keep PostHog personal/API credentials out of app config: future automation may
-use `POSTHOG_API_KEY`, `POSTHOG_ORGANIZATION_ID`, `POSTHOG_HOST`, and
-`POSTHOG_PROJECT_ID`, but those belong in local/CI operational secret handling,
-not in `config/environments/*.xcconfig`.
+PostHog environment isolation is project-based and maps 1:1 to CatVox
+environments. Dev uses the `CatVox Dev` PostHog project, and real production
+analytics require a dedicated `CatVox Prod` PostHog project before App Store
+production traffic is enabled. Do not point a real environment at the existing
+Dev PostHog project as a stopgap. See ADR-0019 and ADR-0020.
+
+Keep PostHog personal/API credentials out of app config. PostHog Terraform
+operational secrets — `POSTHOG_API_KEY` and `POSTHOG_ORGANIZATION_ID` — live in
+the matching per-environment GitHub Environment as secrets; `POSTHOG_HOST` and
+`POSTHOG_PROJECT_ID` live in the same GitHub Environment as variables. The
+PostHog project ID is also mirrored in `config/environments/<env>.xcconfig` as
+`CATVOX_POSTHOG_PROJECT_ID` so local Makefile-driven `posthog-terraform-*`
+targets resolve the same value.
 
 ## Inputs
 
@@ -97,6 +102,15 @@ Create or update the GitHub Environment named `<env>` and set:
 | `GCP_SERVICE_ACCOUNT` | `terraform output -raw ci_service_account_email` |
 | `TF_VAR_ALERT_EMAIL` | same value as `alert_email` in ignored tfvars |
 | `TF_VAR_APP_CHECK_DEBUG_TOKEN` | Dev/integration-safe environments only |
+| `POSTHOG_API_KEY` | PostHog scoped personal API key with project-write scope limited to this environment's PostHog project. |
+| `POSTHOG_ORGANIZATION_ID` | UUID of the PostHog organisation containing the project. |
+
+Set these GitHub Environment **variables** (non-secret) on the same `<env>`:
+
+| Variable | Value |
+|---|---|
+| `POSTHOG_HOST` | `https://us.posthog.com` (PostHog API host; non-secret). |
+| `POSTHOG_PROJECT_ID` | Numeric PostHog project ID for this environment (e.g. `402530` for `CatVox Dev`). |
 
 Example:
 
@@ -107,10 +121,16 @@ gh secret set GCP_WORKLOAD_IDENTITY_PROVIDER --env <env> --body "$(terraform -ch
 gh secret set GCP_SERVICE_ACCOUNT --env <env> --body "$(terraform -chdir=terraform output -raw ci_service_account_email)"
 gh secret set TF_VAR_ALERT_EMAIL --env <env>
 gh secret set TF_VAR_APP_CHECK_DEBUG_TOKEN --env <env>
+gh secret set POSTHOG_API_KEY --env <env>
+gh secret set POSTHOG_ORGANIZATION_ID --env <env>
+gh variable set POSTHOG_HOST --env <env> --body 'https://us.posthog.com'
+gh variable set POSTHOG_PROJECT_ID --env <env> --body '<posthog-project-id>'
 ```
 
 Future Prod must use a protected GitHub Environment and must not reuse Dev debug
-tokens or mutable integration settings.
+tokens or mutable integration settings. Each environment's `POSTHOG_API_KEY`
+must be a scoped PostHog personal API key limited to that environment's PostHog
+project — never a shared org-admin key.
 
 ## Conditional Apple Developer Bundle Setup
 
@@ -178,6 +198,7 @@ For Dev-like mutable environments:
 ```bash
 make functions-test
 CATVOX_TERRAFORM_ENV=<env> make terraform-plan
+CATVOX_TERRAFORM_ENV=<env> make posthog-terraform-plan
 CATVOX_ENV_CONFIG=config/environments/<env>.xcconfig make ios-generate
 CATVOX_ENV_CONFIG=config/environments/<env>.xcconfig make ios-test
 CATVOX_ENV_CONFIG=config/environments/<env>.xcconfig make functions-integration

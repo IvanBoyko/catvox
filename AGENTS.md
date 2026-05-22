@@ -77,12 +77,19 @@ catvox/
 │   ├── backend/dev.hcl.example    # Remote backend template
 │   ├── env/dev.tfvars.example     # Terraform values template
 │   ├── bootstrap_remote_state.sh  # Legacy helper; environment-create handles state bootstrap
-│   └── bootstrap_wif.sh           # Legacy helper; WIF is now Terraform-managed per environment
+│   ├── bootstrap_wif.sh           # Legacy helper; WIF is now Terraform-managed per environment
+│   └── posthog/                   # PostHog Terraform root — state prefix posthog/state; see ADR-0020
+│       ├── main.tf
+│       ├── variables.tf
+│       ├── outputs.tf
+│       ├── README.md
+│       └── backend/dev.hcl.example
 ├── .github/workflows/
 │   ├── build.yml                  # Path-filtered iOS build check on push/PR
 │   ├── functions.yml              # Functions build/deploy/integration workflow
 │   ├── markdownlint.yml           # Markdown lint for docs/ and README changes
-│   └── terraform.yml              # Terraform plan (PR) + apply (merge to main)
+│   ├── terraform.yml              # GCP Terraform plan (PR) + apply (merge to main)
+│   └── posthog-terraform.yml      # PostHog Terraform plan (PR) + apply (merge to main)
 ├── .codex/environments/
 │   └── environment.toml           # Codex app run actions; call Makefile targets
 ├── Makefile                       # Local/CI command facade for common automation
@@ -255,7 +262,11 @@ Implemented in `functions/src/gemini.ts` — update there, not here:
 
 ### Terraform State
 
-Active Dev remote state lives in GCS: `gs://catvox-tf-state-kathelix-catvox-dev/catvox/state`
+Active Dev GCP infrastructure state lives in GCS:
+`gs://catvox-tf-state-kathelix-catvox-dev/catvox/state`. PostHog Terraform
+state for Dev lives in the same bucket under prefix `posthog/state`:
+`gs://catvox-tf-state-kathelix-catvox-dev/posthog/state`. The two roots share
+the bucket and CI service account but never share state. See ADR-0020.
 
 Never run `terraform apply` locally without first confirming the remote state is clean:
 ```bash
@@ -292,8 +303,10 @@ GitHub Actions WIF produces an external-account Application Default Credentials 
 | `functions.yml` (build) | Push/PR touching `functions/**`, `firebase.json`, `docs/systemInstruction.md`, `Makefile`, or workflow | TypeScript compile check + backend unit tests |
 | `functions.yml` (deploy + integration) | Merge to `main` touching Functions inputs | Firebase Functions deploy, then backend integration tests against the current Dev backend |
 | `markdownlint.yml` | Push/PR touching `docs/**`, top-level `README.md`, `.markdownlint.jsonc`, or workflow | markdownlint quality check for repository docs |
-| `terraform.yml` (plan) | PR touching `terraform/**`, `Makefile`, or workflow | fmt-check → init → validate → plan → PR comment |
-| `terraform.yml` (apply) | Merge to `main` touching `terraform/**`, `Makefile`, or workflow | init → apply -auto-approve |
+| `terraform.yml` (plan) | PR touching `terraform/**` (excluding `terraform/posthog/**`), `Makefile`, or workflow | fmt-check → init → validate → plan → PR comment |
+| `terraform.yml` (apply) | Merge to `main` touching `terraform/**` (excluding `terraform/posthog/**`), `Makefile`, or workflow | init → apply -auto-approve |
+| `posthog-terraform.yml` (plan) | PR touching `terraform/posthog/**`, `config/environments/**`, `Makefile`, or workflow | fmt-check → init → validate → plan → PR comment |
+| `posthog-terraform.yml` (apply) | Merge to `main` touching `terraform/posthog/**`, `config/environments/**`, `Makefile`, or workflow | init → apply -auto-approve |
 
 ### Environment Creation / Bootstrap
 
@@ -308,6 +321,15 @@ Use `docs/CREATE_NEW_ENVIRONMENT.md` and `make environment-create` for new envir
 | `GCP_SERVICE_ACCOUNT` | `catvox-ci-sa@kathelix-catvox-dev.iam.gserviceaccount.com` |
 | `TF_VAR_ALERT_EMAIL` | Dev alert recipient |
 | `TF_VAR_APP_CHECK_DEBUG_TOKEN` | Dev Firebase App Check debug token |
+| `POSTHOG_API_KEY` | PostHog scoped personal API key for the `CatVox Dev` project |
+| `POSTHOG_ORGANIZATION_ID` | UUID of the PostHog organisation |
+
+**Required GitHub Environment variables for `dev`** (non-secret):
+
+| Variable | Value |
+|---|---|
+| `POSTHOG_HOST` | `https://us.posthog.com` |
+| `POSTHOG_PROJECT_ID` | Numeric PostHog project ID (`402530` for `CatVox Dev`) |
 
 ---
 

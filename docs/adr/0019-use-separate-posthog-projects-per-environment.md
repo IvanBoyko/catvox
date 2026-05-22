@@ -162,3 +162,14 @@ and keep Terraform/dashboard management simpler.
 - Evaluate PostHog feature flags, experiments, surveys, and error tracking only
   through later TRD/ADR updates.
 - Decide privacy-safe in-app feedback and error intake in a separate follow-up.
+
+## Update — 2026-05-22
+
+ADR-0020 supersedes the "mapping does not need to be one-to-one" clause of this
+ADR. PostHog projects now map 1:1 to CatVox environments. See
+`docs/adr/0020-bind-posthog-projects-to-catvox-environments.md` for the
+operational consequences (per-environment Terraform state in the matching GCS
+bucket, reuse of the per-environment CI service account, PostHog secrets layered
+into the existing per-environment GitHub Environments). The rest of this ADR's
+decision — separate PostHog projects per environment with `app_environment` as
+defence-in-depth metadata — remains unchanged.

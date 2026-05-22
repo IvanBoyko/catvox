@@ -36,11 +36,30 @@ CATVOX_TF_INIT_FLAGS ?= -reconfigure
 CATVOX_TFVARS_PATH ?= $(CATVOX_TF_VARS_FILE)
 CATVOX_FIREBASE_PLIST_OUTPUT ?= CatVox/Resources/Firebase/GoogleService-Info-$(CATVOX_ENVIRONMENT).plist
 
+# PostHog Terraform root (see ADR-0020). State lives in the matching environment's
+# GCS bucket with prefix `posthog/state`. There is no env/<env>.tfvars file —
+# per-environment values are sourced from config/environments/<env>.xcconfig
+# (locally, via the variables above) and from the matching GitHub Environment
+# (in CI). The CATVOX_POSTHOG_TF_VARS_FILE pointer is retained only so future
+# slices can opt back into a tfvars file if needed; it is unset by default.
+CATVOX_POSTHOG_PROJECT_ID ?= $(call catvox_xcconfig_value,CATVOX_POSTHOG_PROJECT_ID)
+CATVOX_POSTHOG_TF_BACKEND_CONFIG ?= terraform/posthog/backend/$(CATVOX_TERRAFORM_ENV).hcl
+CATVOX_POSTHOG_TF_VARS_FILE ?=
+CATVOX_POSTHOG_TF_STATE_BUCKET ?= $(CATVOX_TF_STATE_BUCKET)
+CATVOX_POSTHOG_TF_STATE_PREFIX ?= posthog/state
+CATVOX_POSTHOG_TF_INIT_FLAGS ?= -reconfigure
+
 catvox_tf_backend_rel = $(patsubst terraform/%,%,$(CATVOX_TF_BACKEND_CONFIG))
 catvox_tf_vars_rel = $(patsubst terraform/%,%,$(CATVOX_TF_VARS_FILE))
 # Local runs usually use ignored backend HCL files; CI supplies equivalent inline backend flags.
 catvox_tf_backend_args = $(if $(wildcard $(CATVOX_TF_BACKEND_CONFIG)),-backend-config="$(catvox_tf_backend_rel)",-backend-config="bucket=$(CATVOX_TF_STATE_BUCKET)" -backend-config="prefix=$(CATVOX_TF_STATE_PREFIX)")
 catvox_tf_var_file_arg = $(if $(wildcard $(CATVOX_TF_VARS_FILE)),-var-file="$(catvox_tf_vars_rel)",)
+
+catvox_posthog_tf_backend_rel = $(patsubst terraform/posthog/%,%,$(CATVOX_POSTHOG_TF_BACKEND_CONFIG))
+catvox_posthog_tf_vars_rel = $(patsubst terraform/posthog/%,%,$(CATVOX_POSTHOG_TF_VARS_FILE))
+catvox_posthog_tf_backend_args = $(if $(wildcard $(CATVOX_POSTHOG_TF_BACKEND_CONFIG)),-backend-config="$(catvox_posthog_tf_backend_rel)",-backend-config="bucket=$(CATVOX_POSTHOG_TF_STATE_BUCKET)" -backend-config="prefix=$(CATVOX_POSTHOG_TF_STATE_PREFIX)")
+catvox_posthog_tf_var_file_arg = $(if $(and $(CATVOX_POSTHOG_TF_VARS_FILE),$(wildcard $(CATVOX_POSTHOG_TF_VARS_FILE))),-var-file="$(catvox_posthog_tf_vars_rel)",)
+catvox_posthog_tf_env_args = TF_VAR_environment_name="$(CATVOX_ENVIRONMENT)" TF_VAR_posthog_project_id="$(CATVOX_POSTHOG_PROJECT_ID)"
 
 .PHONY: help doctor \
 	ios-generate ios-build ios-build-only ios-test ios-test-only ios-ui-test ios-ui-test-only ios-ci ios-device-launch ios-device-console app-deploy \
@@ -48,6 +67,7 @@ catvox_tf_var_file_arg = $(if $(wildcard $(CATVOX_TF_VARS_FILE)),-var-file="$(ca
 	functions-install functions-build functions-test functions-deploy functions-integration functions-ci \
 	backend-build backend-deploy backend-integration \
 	terraform-fmt-check terraform-init terraform-validate terraform-plan terraform-ci-plan terraform-apply terraform-ci-apply terraform-output-firebase-plist \
+	posthog-terraform-fmt-check posthog-terraform-init posthog-terraform-validate posthog-terraform-plan posthog-terraform-ci-plan posthog-terraform-apply posthog-terraform-ci-apply \
 	environment-create bootstrap-remote-state bootstrap-wif
 
 help:
@@ -77,6 +97,10 @@ help:
 		'  make terraform-ci-apply     CI-only auto-approved Terraform apply' \
 		'  make terraform-output-firebase-plist Write Firebase plist from Terraform output' \
 		'' \
+		'  make posthog-terraform-plan  fmt-check, init, validate, and plan PostHog Terraform' \
+		'  make posthog-terraform-apply Plan, then interactively apply PostHog Terraform; requires CONFIRM=apply' \
+		'  make posthog-terraform-ci-apply CI-only auto-approved PostHog Terraform apply' \
+		'' \
 		'  make environment-create     Bootstrap a named GCP/Firebase environment' \
 		'  make bootstrap-remote-state Legacy helper for Terraform state bucket bootstrap' \
 		'  make bootstrap-wif          Legacy helper; WIF is Terraform-managed for new envs' \
@@ -93,6 +117,8 @@ help:
 		'  CATVOX_TF_BACKEND_CONFIG=terraform/backend/dev.hcl overrides Terraform backend config' \
 		'  CATVOX_TF_VARS_FILE=terraform/env/dev.tfvars overrides Terraform var file' \
 		'  CATVOX_TFVARS_PATH=... overrides the local tfvars fallback path for App Check debug tokens' \
+		'  CATVOX_POSTHOG_PROJECT_ID=... selects the PostHog project ID for terraform/posthog/ (defaults to xcconfig value)' \
+		'  CATVOX_POSTHOG_TF_BACKEND_CONFIG=terraform/posthog/backend/dev.hcl overrides PostHog Terraform backend config' \
 		'  IOS_TEST_DESTINATION="platform=iOS Simulator,name=iPhone 16,OS=latest"' \
 		'  IOS_UI_TEST_DESTINATION="platform=iOS Simulator,name=iPhone 16,OS=latest"' \
 		'  DEVICE_ID=... make ios-device-launch' \
@@ -312,6 +338,36 @@ terraform-apply:
 
 terraform-ci-apply:
 	@cd terraform && GOOGLE_CLOUD_QUOTA_PROJECT="$(GCP_PROJECT_ID)" terraform apply -auto-approve -no-color $(catvox_tf_var_file_arg)
+
+posthog-terraform-fmt-check:
+	@cd terraform/posthog && terraform fmt -check -recursive
+
+posthog-terraform-init:
+	@cd terraform/posthog && terraform init $(CATVOX_POSTHOG_TF_INIT_FLAGS) $(catvox_posthog_tf_backend_args)
+
+posthog-terraform-validate:
+	@cd terraform/posthog && terraform validate -no-color
+
+posthog-terraform-plan:
+	@cd terraform/posthog && terraform fmt -check -recursive
+	@cd terraform/posthog && terraform init $(CATVOX_POSTHOG_TF_INIT_FLAGS) $(catvox_posthog_tf_backend_args)
+	@cd terraform/posthog && terraform validate -no-color
+	@cd terraform/posthog && $(catvox_posthog_tf_env_args) terraform plan -no-color $(catvox_posthog_tf_var_file_arg)
+
+posthog-terraform-ci-plan:
+	@cd terraform/posthog && $(catvox_posthog_tf_env_args) terraform plan -no-color $(catvox_posthog_tf_var_file_arg)
+
+posthog-terraform-apply:
+	@if [[ "$(CONFIRM)" != "apply" ]]; then \
+		printf 'Refusing to run PostHog Terraform apply. Re-run as: make posthog-terraform-apply CONFIRM=apply\n' >&2; \
+		exit 1; \
+	fi
+	@cd terraform/posthog && terraform init $(CATVOX_POSTHOG_TF_INIT_FLAGS) $(catvox_posthog_tf_backend_args)
+	@cd terraform/posthog && $(catvox_posthog_tf_env_args) terraform plan -no-color $(catvox_posthog_tf_var_file_arg)
+	@cd terraform/posthog && $(catvox_posthog_tf_env_args) terraform apply -no-color $(catvox_posthog_tf_var_file_arg)
+
+posthog-terraform-ci-apply:
+	@cd terraform/posthog && $(catvox_posthog_tf_env_args) terraform apply -auto-approve -no-color $(catvox_posthog_tf_var_file_arg)
 
 terraform-output-firebase-plist:
 	@mkdir -p "$$(dirname "$(CATVOX_FIREBASE_PLIST_OUTPUT)")"
