@@ -170,6 +170,11 @@ ADR. PostHog projects now map 1:1 to CatVox environments. See
 `docs/adr/0020-bind-posthog-projects-to-catvox-environments.md` for the
 operational consequences (per-environment Terraform state in the matching GCS
 bucket, reuse of the per-environment CI service account, PostHog secrets layered
-into the existing per-environment GitHub Environments). The rest of this ADR's
-decision — separate PostHog projects per environment with `app_environment` as
-defence-in-depth metadata — remains unchanged.
+into the existing per-environment GitHub Environments). ADR-0020 also supersedes
+the earlier operational-variable note for `POSTHOG_HOST` and
+`POSTHOG_PROJECT_ID`: the PostHog Terraform API host and project ID now live in
+`config/environments/<env>.xcconfig` as `CATVOX_POSTHOG_API_HOST_NAME` and
+`CATVOX_POSTHOG_PROJECT_ID`, while only PostHog API credentials remain GitHub
+Environment secrets. The rest of this ADR's decision — separate PostHog projects
+per environment with `app_environment` as defence-in-depth metadata — remains
+unchanged.

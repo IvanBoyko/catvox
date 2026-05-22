@@ -324,13 +324,6 @@ Use `docs/CREATE_NEW_ENVIRONMENT.md` and `make environment-create` for new envir
 | `POSTHOG_API_KEY` | PostHog scoped personal API key for the `CatVox Dev` project |
 | `POSTHOG_ORGANIZATION_ID` | UUID of the PostHog organisation |
 
-**Required GitHub Environment variables for `dev`** (non-secret):
-
-| Variable | Value |
-|---|---|
-| `POSTHOG_HOST` | `https://us.posthog.com` |
-| `POSTHOG_PROJECT_ID` | Numeric PostHog project ID (`402530` for `CatVox Dev`) |
-
 ---
 
 ## 7. Process Conventions

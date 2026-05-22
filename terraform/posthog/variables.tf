@@ -17,12 +17,22 @@ variable "environment_name" {
   }
 }
 
+variable "posthog_api_host" {
+  description = "PostHog API base URL for this CatVox environment. Sourced from CATVOX_POSTHOG_API_HOST_NAME in config/environments/<env>.xcconfig and composed as https://<host> by the Makefile."
+  type        = string
+
+  validation {
+    condition     = startswith(var.posthog_api_host, "https://")
+    error_message = "posthog_api_host must be a full https:// URL composed from CATVOX_POSTHOG_API_HOST_NAME."
+  }
+}
+
 variable "posthog_project_id" {
-  description = "PostHog project ID for this CatVox environment. Sourced from CATVOX_POSTHOG_PROJECT_ID in config/environments/<env>.xcconfig locally, or from the matching GitHub Environment variable in CI."
+  description = "PostHog project ID for this CatVox environment. Sourced from CATVOX_POSTHOG_PROJECT_ID in config/environments/<env>.xcconfig."
   type        = string
 
   validation {
     condition     = length(var.posthog_project_id) > 0
-    error_message = "posthog_project_id must not be empty. Set CATVOX_POSTHOG_PROJECT_ID in the matching xcconfig or pass TF_VAR_posthog_project_id."
+    error_message = "posthog_project_id must not be empty. Set CATVOX_POSTHOG_PROJECT_ID in the matching xcconfig."
   }
 }

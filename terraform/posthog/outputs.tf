@@ -12,6 +12,11 @@ output "environment_name" {
   value       = var.environment_name
 }
 
+output "posthog_api_host" {
+  description = "PostHog API host this state targets."
+  value       = var.posthog_api_host
+}
+
 output "posthog_project_id" {
   description = "PostHog project ID this state targets."
   value       = var.posthog_project_id

@@ -58,9 +58,11 @@ Operational implications:
 - PostHog CI authentication reuses the existing per-environment `catvox-ci-sa`
   and Workload Identity Federation pool. No new service account, no new WIF
   pool, no new GitHub Environment is introduced.
-- PostHog secrets (`POSTHOG_API_KEY`, `POSTHOG_HOST`, `POSTHOG_ORGANIZATION_ID`,
-  `POSTHOG_PROJECT_ID`) land in the existing per-environment GitHub Environments
-  — `dev` today, future `prod` later.
+- PostHog secrets (`POSTHOG_API_KEY`, `POSTHOG_ORGANIZATION_ID`) land in the
+  existing per-environment GitHub Environments — `dev` today, future `prod`
+  later. The PostHog API host and project ID remain in
+  `config/environments/<env>.xcconfig` as `CATVOX_POSTHOG_API_HOST_NAME` and
+  `CATVOX_POSTHOG_PROJECT_ID` and are passed to Terraform by the Makefile.
 - Each environment's PostHog API key is a scoped key limited to that
   environment's PostHog project, with the minimum organisation-level scope
   needed to manage the project resource. Organisation-level `project:write` is

@@ -32,8 +32,11 @@ terraform {
   backend "gcs" {}
 }
 
-# Provider configuration is intentionally empty. The PostHog provider reads
-# POSTHOG_API_KEY, POSTHOG_HOST, POSTHOG_ORGANIZATION_ID, and POSTHOG_PROJECT_ID
-# from environment variables. Local runs source these via the Makefile target;
-# CI runs source them from the per-environment GitHub Environment.
-provider "posthog" {}
+# The PostHog provider reads only operational secrets from environment
+# variables. Non-secret environment identity comes from xcconfig-driven
+# Terraform variables so config/environments/<env>.xcconfig remains the source
+# of truth.
+provider "posthog" {
+  host       = var.posthog_api_host
+  project_id = var.posthog_project_id
+}

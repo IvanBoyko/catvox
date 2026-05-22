@@ -47,13 +47,6 @@ Required secrets per environment:
 | `POSTHOG_API_KEY` | PostHog scoped personal API key for this environment's PostHog project. |
 | `POSTHOG_ORGANIZATION_ID` | UUID of the PostHog organisation containing the project. |
 
-Required variables per environment (non-secret):
-
-| Variable | Purpose |
-|---|---|
-| `POSTHOG_HOST` | PostHog API host, e.g. `https://us.posthog.com`. |
-| `POSTHOG_PROJECT_ID` | Numeric PostHog project ID for this environment. |
-
 ## WIF Trust Model
 
 Each GCP project gets its own `catvox-ci-sa`, WIF pool, and OIDC provider. The
