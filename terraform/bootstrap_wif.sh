@@ -177,7 +177,7 @@ gcloud storage buckets add-iam-policy-binding "gs://${STATE_BUCKET}" \
   --member="serviceAccount:${SA_EMAIL}" \
   --role="roles/storage.objectAdmin"
 
-# ── Done — print GitHub Secrets ───────────────────────────────────────────────
+# ── Done — print follow-up config ─────────────────────────────────────────────
 
 PROVIDER_RESOURCE="projects/${PROJECT_NUMBER}/locations/global/workloadIdentityPools/${POOL_ID}/providers/${PROVIDER_ID}"
 
@@ -185,13 +185,15 @@ echo ""
 echo "════════════════════════════════════════════════════════════"
 echo "✓ Workload Identity Federation configured."
 echo ""
-echo "Add the following secrets to GitHub:"
-echo "  Settings → Secrets and variables → Actions → New repository secret"
+echo "Add the following non-secret values to config/environments/<env>.xcconfig:"
 echo ""
 echo "  GCP_PROJECT_ID                  = ${PROJECT_ID}"
-echo "  GCP_WORKLOAD_IDENTITY_PROVIDER  = ${PROVIDER_RESOURCE}"
-echo "  GCP_SERVICE_ACCOUNT             = ${SA_EMAIL}"
-echo "  TF_VAR_app_check_debug_token    = <your App Check debug token>"
+echo "  CATVOX_GCP_WIF_PROVIDER        = ${PROVIDER_RESOURCE}"
+echo "  CATVOX_GCP_CI_SERVICE_ACCOUNT  = ${SA_EMAIL}"
+echo ""
+echo "Remaining GitHub Environment secrets:"
+echo "  TF_VAR_ALERT_EMAIL              = <alert recipient>"
+echo "  TF_VAR_APP_CHECK_DEBUG_TOKEN    = <Dev-only App Check debug token>"
 echo ""
 echo "Next step: add .github/workflows/terraform.yml"
 echo "════════════════════════════════════════════════════════════"

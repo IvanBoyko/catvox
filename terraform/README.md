@@ -6,7 +6,7 @@ CatVox's Terraform layout has three kinds of directories under `terraform/`:
 |---|---|---|
 | `terraform/` | Terraform root (GCP/Firebase foundation) | `.tf` files for GCP/Firebase infrastructure. State prefix `catvox/state`. CI workflow `.github/workflows/terraform.yml`. |
 | `terraform/posthog/` | Terraform root (PostHog analytics) | `.tf` files for PostHog projects/dashboards/insights. State prefix `posthog/state`. CI workflow `.github/workflows/posthog-terraform.yml`. See `terraform/posthog/README.md` and ADR-0020. |
-| `terraform/backend/`, `terraform/env/`, `terraform/posthog/backend/` | Per-environment config subdirectories attached to a Terraform root | Hold `.hcl` backend configs and `.tfvars` variable files. Not Terraform roots in their own right — no `.tf` files, you don't run `terraform init` against them. Passed to a root's `terraform init -backend-config=…` / `-var-file=…`. |
+| `terraform/backend/`, `terraform/env/`, `terraform/posthog/backend/` | Per-environment config subdirectories attached to a Terraform root | Hold `.hcl` backend configs and secrets-only `.tfvars` files. Not Terraform roots in their own right — no `.tf` files, you don't run `terraform init` against them. Passed to a root's `terraform init -backend-config=…` / `-var-file=…`. |
 
 The two Terraform roots share the same per-environment GCS state bucket
 (`catvox-tf-state-<gcp-project-id>`); only the prefix differs. Active Dev
@@ -19,12 +19,15 @@ ADR-0020, and `docs/CREATE_NEW_ENVIRONMENT.md`.
 Named environments use explicit files keyed by environment name:
 
 - `terraform/backend/<environment>.hcl` for remote-state backend config
-- `terraform/env/<environment>.tfvars` for environment-specific input values
+- `terraform/env/<environment>.tfvars` for environment-specific private values
 
 Terraform backend blocks cannot use normal input variables, so backend config
 must be passed explicitly during `terraform init` for each environment.
-The Makefile rejects backend/tfvars basenames that do not match
-`CATVOX_ENVIRONMENT`.
+Non-secret GCP/Firebase foundation values live in
+`config/environments/<environment>.xcconfig` and are passed by the Makefile as
+`TF_VAR_*` values. The ignored tfvars file remains only for
+`app_check_debug_token` and `alert_email`. The Makefile rejects backend/tfvars
+basenames that do not match `CATVOX_ENVIRONMENT`.
 
 Example local flow:
 
@@ -35,7 +38,7 @@ make terraform-plan CATVOX_ENVIRONMENT=dev
 ```
 
 Do not put secrets in committed tfvars files. Commit only `.example` files when
-documenting required values.
+documenting required private values. See ADR-0021.
 
 ## PostHog root (`terraform/posthog/`)
 

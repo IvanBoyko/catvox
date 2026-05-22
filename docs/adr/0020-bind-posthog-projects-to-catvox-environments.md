@@ -136,7 +136,7 @@ PostHog Terraform has no Terraform-only secrets that need a committed tfvars
 shape (`POSTHOG_API_KEY` lives in the GitHub Environment), so the existing
 xcconfig + GitHub Environment value model is sufficient.
 
-## Update — 2026-05-22
+## Update — 2026-05-22: POSTHOG_ORGANIZATION_ID reclassification
 
 The original ADR text treated `POSTHOG_ORGANIZATION_ID` as an operational
 secret. It is a non-secret UUID identifier, so it now follows the same source of
@@ -145,6 +145,13 @@ truth rule as the PostHog API host and project ID: each environment stores it in
 the Makefile passes it to Terraform as `TF_VAR_posthog_organization_id`.
 `POSTHOG_API_KEY` remains the only PostHog provider secret in GitHub
 Environments.
+
+## Update — 2026-05-22: ADR-0021 generalisation
+
+ADR-0021 generalises this source-of-truth rule to the GCP/Firebase foundation:
+non-secret environment values live in `config/environments/<env>.xcconfig`,
+while GitHub Environment secrets and ignored tfvars files hold only true
+secrets or deliberately private values.
 
 ## Future Work
 
@@ -157,6 +164,3 @@ Environments.
 - When future Prod GCP provisioning happens, set up the Prod PostHog Terraform
   state prefix (`posthog/state` in `catvox-tf-state-kathelix-catvox-prod`) and
   Prod-scoped PostHog credentials in the same change.
-- Consider whether to migrate the GCP Terraform root toward the same
-  xcconfig-driven environment definition model in a future cleanup, retiring
-  `terraform/env/<env>.tfvars` for non-secret values.

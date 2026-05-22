@@ -7,6 +7,8 @@ on:
       - 'terraform/posthog/**'
       - 'Makefile'
       - 'config/environments/**'
+      - 'scripts/lib/read-xcconfig-value.sh'
+      - '.github/actions/read-environment-config/**'
       - '.github/workflows/posthog-terraform.yml'
   pull_request:
     branches: [main]
@@ -14,6 +16,8 @@ on:
       - 'terraform/posthog/**'
       - 'Makefile'
       - 'config/environments/**'
+      - 'scripts/lib/read-xcconfig-value.sh'
+      - '.github/actions/read-environment-config/**'
       - '.github/workflows/posthog-terraform.yml'
 
 # Cancel any in-progress run for the same branch so each push doesn't queue
@@ -30,9 +34,6 @@ permissions:
 env:
   CATVOX_ENVIRONMENT: dev
   CATVOX_POSTHOG_TF_STATE_PREFIX: posthog/state
-  GCP_PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
-  # State bucket for the PostHog root reuses the per-environment GCS bucket.
-  CATVOX_POSTHOG_TF_STATE_BUCKET: ${{ format('catvox-tf-state-{0}', secrets.GCP_PROJECT_ID) }}
 
   # PostHog provider credential. Non-secret provider identifiers come from
   # config/environments/${CATVOX_ENVIRONMENT}.xcconfig via the Makefile.
@@ -56,11 +57,17 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v6
 
+      - name: Read environment config
+        id: env
+        uses: ./.github/actions/read-environment-config
+        with:
+          environment: ${{ env.CATVOX_ENVIRONMENT }}
+
       - name: Authenticate to GCP (Workload Identity Federation)
         uses: google-github-actions/auth@v3
         with:
-          workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
-          service_account: ${{ secrets.GCP_SERVICE_ACCOUNT }}
+          workload_identity_provider: ${{ steps.env.outputs.gcp_wif_provider }}
+          service_account: ${{ steps.env.outputs.gcp_service_account }}
 
       - name: Set up Terraform
         uses: hashicorp/setup-terraform@v4
@@ -169,11 +176,17 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v6
 
+      - name: Read environment config
+        id: env
+        uses: ./.github/actions/read-environment-config
+        with:
+          environment: ${{ env.CATVOX_ENVIRONMENT }}
+
       - name: Authenticate to GCP (Workload Identity Federation)
         uses: google-github-actions/auth@v3
         with:
-          workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
-          service_account: ${{ secrets.GCP_SERVICE_ACCOUNT }}
+          workload_identity_provider: ${{ steps.env.outputs.gcp_wif_provider }}
+          service_account: ${{ steps.env.outputs.gcp_service_account }}
 
       - name: Set up Terraform
         uses: hashicorp/setup-terraform@v4

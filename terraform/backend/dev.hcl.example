@@ -1,6 +1,6 @@
 # CatVox Dev remote state backend.
 # Copy to terraform/backend/dev.hcl for local runs, or let the Makefile derive
-# the same values from CATVOX_ENVIRONMENT / GCP_PROJECT_ID in CI.
+# the same values from config/environments/dev.xcconfig in CI.
 
 bucket = "catvox-tf-state-kathelix-catvox-dev"
 prefix = "catvox/state"

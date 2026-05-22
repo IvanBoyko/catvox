@@ -75,7 +75,7 @@ catvox/
 │   ├── variables.tf               # Input variables with defaults
 │   ├── outputs.tf                 # Output values
 │   ├── backend/dev.hcl.example    # Remote backend template
-│   ├── env/dev.tfvars.example     # Terraform values template
+│   ├── env/dev.tfvars.example     # Terraform private-values template
 │   ├── bootstrap_remote_state.sh  # Legacy helper; environment-create handles state bootstrap
 │   ├── bootstrap_wif.sh           # Legacy helper; WIF is now Terraform-managed per environment
 │   └── posthog/                   # PostHog Terraform root — state prefix posthog/state; see ADR-0020
@@ -132,7 +132,7 @@ FIREBASE_PROJECT=kathelix-catvox-dev make functions-deploy
 DEVICE_ID=<device-udid> make ios-device-launch
 ```
 
-Environment-dependent app/backend values are parameterized through generic
+Environment-dependent app/backend/CI/Terraform non-secret values are parameterized through generic
 `CATVOX_*` variables such as `CATVOX_ENVIRONMENT`,
 `CATVOX_SIGNED_UPLOAD_URL_ENDPOINT`, `CATVOX_ANALYSE_VIDEO_ENDPOINT`,
 `CATVOX_FIREBASE_APP_ID`, `CATVOX_FIREBASE_API_KEY`, and
@@ -141,10 +141,13 @@ Environment-dependent app/backend values are parameterized through generic
 generated project, and the Makefile derives the matching `CATVOX_ENV_CONFIG`,
 Terraform backend, and Terraform tfvars paths from `CATVOX_ENVIRONMENT` by
 default. Terraform targets reject backend/tfvars basenames that do not match
-`CATVOX_ENVIRONMENT`. Mutable integration tests also require
+`CATVOX_ENVIRONMENT`. Non-secret GCP/Firebase foundation values also live in
+xcconfig and flow through the Makefile as `TF_VAR_*`; ignored
+`terraform/env/<environment>.tfvars` files hold only `app_check_debug_token` and
+`alert_email`. Mutable integration tests also require
 `CATVOX_INTEGRATION_SAFE_ENVIRONMENTS` to include `CATVOX_ENVIRONMENT`. Treat
-the environment name as data, not as a hard-coded Dev/Prod branch. See ADR-0017
-and ADR-0018.
+the environment name as data, not as a hard-coded Dev/Prod branch. See ADR-0017,
+ADR-0018, and ADR-0021.
 In `config/environments/*.xcconfig`, keys ending in `_HOST` or `_HOST_NAME`
 store hostnames only: no `https://` scheme, path, or trailing slash. XcodeGen
 and the Makefile compose full `https://` URLs at consumption boundaries, and the
@@ -276,7 +279,7 @@ make terraform-plan   # connects to GCS backend and reviews planned changes
 make terraform-apply CONFIRM=apply
 ```
 
-`terraform/backend/*.hcl` and `terraform/env/*.tfvars` are gitignored. Copy from the matching `.example` files and fill in values.
+`terraform/backend/*.hcl` and `terraform/env/*.tfvars` are gitignored. Copy from the matching `.example` files and fill in the remaining private values. Backend HCL still carries remote-state coordinates; tfvars is secrets-only for `app_check_debug_token` and `alert_email`.
 
 ### Service Accounts
 
@@ -318,12 +321,13 @@ Use `docs/CREATE_NEW_ENVIRONMENT.md` and `make environment-create` for new envir
 
 | Secret | Value |
 |---|---|
-| `GCP_PROJECT_ID` | `kathelix-catvox-dev` |
-| `GCP_WORKLOAD_IDENTITY_PROVIDER` | Terraform output `github_actions_wif_provider` |
-| `GCP_SERVICE_ACCOUNT` | `catvox-ci-sa@kathelix-catvox-dev.iam.gserviceaccount.com` |
 | `TF_VAR_ALERT_EMAIL` | Dev alert recipient |
 | `TF_VAR_APP_CHECK_DEBUG_TOKEN` | Dev Firebase App Check debug token |
 | `POSTHOG_API_KEY` | PostHog scoped personal API key for the `CatVox Dev` project |
+
+`GCP_PROJECT_ID`, `CATVOX_GCP_CI_SERVICE_ACCOUNT`, and
+`CATVOX_GCP_WIF_PROVIDER` are non-secret values in
+`config/environments/dev.xcconfig`; CI reads them before WIF authentication.
 
 ---
 
@@ -400,6 +404,8 @@ The same rule applies at **design and planning** time. When a slice's viability 
 For infra, environment, secrets, build-setting, or runtime-configuration changes, do a small negative-test pass before review. Check missing config, malformed config, unsafe environment names, Release fail-loud behavior, and production-mutation rejection where relevant. Prefer automated tests for safety properties; manual live checks should supplement them, not be the only proof.
 
 For shared infrastructure modules, defaults must be production-safe and non-destructive. Dev/test environments should explicitly opt into disposable or destructive behavior, such as Firebase app deletion, debug tokens, mutable tests, or relaxed CI gates.
+
+Environment bootstrap scripts (such as `scripts/create-environment.sh`) take the inverse rule: fail fast on missing inputs rather than synthesize defaults at all. Defaults in bootstrap code make it harder to review what a new environment will actually inherit and can mask copy-paste errors when a new environment is being stood up. Defaults belong in committed environment config (`config/environments/<env>.xcconfig`) where they are reviewable, not in the script that consumes that config. The same applies to opt-in mutation flags such as `RUN_TERRAFORM_APPLY` or `RUN_FUNCTIONS_DEPLOY` — require an explicit value rather than defaulting to either side.
 
 When designing isolation boundaries for shared infrastructure — Terraform roots, CI workflows, state buckets, GitHub Environments — start with the question "what set of artifacts ships together for one user-visible change?" The conventional reflex is to isolate by tool family ("everything PostHog" vs "everything GCP"); the better question is whether splitting those tools across separate state, secrets, and review chains accumulates drift faster than it reduces blast radius. ADR-0020 chose 1:1 PostHog↔CatVox environment alignment over an org-scoped PostHog Terraform root on this basis.
 

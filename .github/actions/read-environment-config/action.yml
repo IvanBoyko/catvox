@@ -1,0 +1,69 @@
+name: Read environment config
+description: Read CatVox xcconfig values needed before GCP authentication.
+
+inputs:
+  environment:
+    description: CatVox environment name.
+    required: true
+
+outputs:
+  gcp_project_id:
+    description: GCP project ID for the selected CatVox environment.
+    value: ${{ steps.read.outputs.gcp_project_id }}
+  gcp_service_account:
+    description: CI service account email for Workload Identity Federation.
+    value: ${{ steps.read.outputs.gcp_service_account }}
+  gcp_wif_provider:
+    description: Workload Identity Federation provider resource name.
+    value: ${{ steps.read.outputs.gcp_wif_provider }}
+
+runs:
+  using: composite
+  steps:
+    - name: Read xcconfig
+      id: read
+      shell: bash
+      env:
+        CATVOX_ACTION_ENVIRONMENT: ${{ inputs.environment }}
+      run: |
+        set -euo pipefail
+
+        if [[ -z "$CATVOX_ACTION_ENVIRONMENT" ]]; then
+          echo "environment input is required." >&2
+          exit 1
+        fi
+
+        config="config/environments/${CATVOX_ACTION_ENVIRONMENT}.xcconfig"
+
+        read_value() {
+          scripts/lib/read-xcconfig-value.sh "$config" "$1"
+        }
+
+        gcp_project_id="$(read_value GCP_PROJECT_ID)"
+        gcp_service_account="$(read_value CATVOX_GCP_CI_SERVICE_ACCOUNT)"
+        gcp_wif_provider="$(read_value CATVOX_GCP_WIF_PROVIDER)"
+
+        if [[ -z "$gcp_project_id" ]]; then
+          echo "GCP_PROJECT_ID must be set in $config" >&2
+          exit 1
+        fi
+        if [[ -z "$gcp_service_account" ]]; then
+          echo "CATVOX_GCP_CI_SERVICE_ACCOUNT must be set in $config" >&2
+          exit 1
+        fi
+        if [[ -z "$gcp_wif_provider" ]]; then
+          echo "CATVOX_GCP_WIF_PROVIDER must be set in $config" >&2
+          exit 1
+        fi
+
+        {
+          printf 'gcp_project_id=%s\n' "$gcp_project_id"
+          printf 'gcp_service_account=%s\n' "$gcp_service_account"
+          printf 'gcp_wif_provider=%s\n' "$gcp_wif_provider"
+        } >> "$GITHUB_OUTPUT"
+
+        {
+          printf 'GCP_PROJECT_ID=%s\n' "$gcp_project_id"
+          printf 'CATVOX_GCP_CI_SERVICE_ACCOUNT=%s\n' "$gcp_service_account"
+          printf 'CATVOX_GCP_WIF_PROVIDER=%s\n' "$gcp_wif_provider"
+        } >> "$GITHUB_ENV"
