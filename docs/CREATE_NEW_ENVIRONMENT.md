@@ -47,7 +47,7 @@ Pick explicit values before running the script:
 |---|---|---|
 | `CATVOX_ENVIRONMENT` | `dev` | Yes |
 | `GCP_PROJECT_ID` | `kathelix-catvox-dev` | Yes |
-| `PROJECT_DISPLAY_NAME` | `Kathelix CatVox Dev` | Optional |
+| `PROJECT_DISPLAY_NAME` | `Kathelix CatVox Dev` | Yes |
 | `ORGANIZATION_ID` or `FOLDER_ID` | `1032067916665` | Optional, but usually needed for new projects |
 | `BILLING_ACCOUNT_ID` | billing account ID | Optional; if omitted, link billing manually before deploy |
 | `CATVOX_FUNCTION_REGION` | `us-central1` | Yes |
@@ -63,6 +63,8 @@ Pick explicit values before running the script:
 | `CATVOX_MANAGE_GCF_SOURCES_BUCKET_IAM` | `true` for Dev bootstrap | Yes. Use lowercase `true` or `false` only. |
 | `APP_CHECK_DEBUG_TOKEN` | UUID4 token | Required when `CATVOX_ENABLE_APP_CHECK_DEBUG_TOKEN=true` and the ignored tfvars file does not already exist |
 | `ALERT_EMAIL` | alert recipient | Required when the ignored tfvars file does not already exist |
+| `RUN_TERRAFORM_APPLY` | `0` or `1` | Yes. Set to `1` to apply Terraform; `0` runs only the safe preview phases. |
+| `RUN_FUNCTIONS_DEPLOY` | `0` or `1` | Yes. Set to `1` to deploy Cloud Functions; `0` skips the deploy. |
 
 ## Automated Creation
 
@@ -109,8 +111,9 @@ The script:
 10. Optionally sets the Functions artifact cleanup policy and deploys Cloud Functions.
 11. Prints the remaining GitHub Environment secrets and committed xcconfig values still needing review.
 
-If you do not pass `RUN_TERRAFORM_APPLY=1` or `RUN_FUNCTIONS_DEPLOY=1`, the script
-stops after the safe preview phases.
+Both `RUN_TERRAFORM_APPLY` and `RUN_FUNCTIONS_DEPLOY` must be set explicitly to
+either `0` or `1` — there are no defaults. Set them to `0` to stop after the
+safe preview phases.
 
 ## GitHub Environment Secrets
 
