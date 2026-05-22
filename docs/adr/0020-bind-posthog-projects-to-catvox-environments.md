@@ -58,11 +58,12 @@ Operational implications:
 - PostHog CI authentication reuses the existing per-environment `catvox-ci-sa`
   and Workload Identity Federation pool. No new service account, no new WIF
   pool, no new GitHub Environment is introduced.
-- PostHog secrets (`POSTHOG_API_KEY`, `POSTHOG_ORGANIZATION_ID`) land in the
-  existing per-environment GitHub Environments — `dev` today, future `prod`
-  later. The PostHog API host and project ID remain in
-  `config/environments/<env>.xcconfig` as `CATVOX_POSTHOG_API_HOST_NAME` and
-  `CATVOX_POSTHOG_PROJECT_ID` and are passed to Terraform by the Makefile.
+- PostHog API credentials (`POSTHOG_API_KEY`) land in the existing
+  per-environment GitHub Environments — `dev` today, future `prod` later. The
+  non-secret PostHog API host, project ID, and organization ID remain in
+  `config/environments/<env>.xcconfig` as `CATVOX_POSTHOG_API_HOST_NAME`,
+  `CATVOX_POSTHOG_PROJECT_ID`, and `CATVOX_POSTHOG_ORGANIZATION_ID` and are
+  passed to Terraform by the Makefile.
 - Each environment's PostHog API key is a scoped key limited to that
   environment's PostHog project, with the minimum organisation-level scope
   needed to manage the project resource. Organisation-level `project:write` is
@@ -74,8 +75,8 @@ Operational implications:
   keeps `terraform plan`/`apply` runtimes short.
 - Per-environment values for PostHog Terraform are driven from
   `config/environments/<env>.xcconfig` (the existing authoritative environment
-  definition) and per-environment GitHub Environment secrets/variables. The
-  PostHog Terraform root intentionally does not introduce a parallel
+  definition) and per-environment GitHub Environment secrets. The PostHog
+  Terraform root intentionally does not introduce a parallel
   `terraform/posthog/env/<env>.tfvars` directory.
 
 ## Consequences
@@ -132,8 +133,18 @@ alongside `config/environments/<env>.xcconfig`.
 
 Rejected because it duplicates the authoritative environment definition.
 PostHog Terraform has no Terraform-only secrets that need a committed tfvars
-shape (its secrets all live in GitHub Environment), so the existing xcconfig +
-GitHub Environment value model is sufficient.
+shape (`POSTHOG_API_KEY` lives in the GitHub Environment), so the existing
+xcconfig + GitHub Environment value model is sufficient.
+
+## Update — 2026-05-22
+
+The original ADR text treated `POSTHOG_ORGANIZATION_ID` as an operational
+secret. It is a non-secret UUID identifier, so it now follows the same source of
+truth rule as the PostHog API host and project ID: each environment stores it in
+`config/environments/<env>.xcconfig` as `CATVOX_POSTHOG_ORGANIZATION_ID`, and
+the Makefile passes it to Terraform as `TF_VAR_posthog_organization_id`.
+`POSTHOG_API_KEY` remains the only PostHog provider secret in GitHub
+Environments.
 
 ## Future Work
 

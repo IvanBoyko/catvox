@@ -45,7 +45,6 @@ Required secrets per environment:
 | `TF_VAR_ALERT_EMAIL` | Terraform alert recipient. |
 | `TF_VAR_APP_CHECK_DEBUG_TOKEN` | Dev/integration-safe environments only. |
 | `POSTHOG_API_KEY` | PostHog scoped personal API key for this environment's PostHog project. |
-| `POSTHOG_ORGANIZATION_ID` | UUID of the PostHog organisation containing the project. |
 
 ## WIF Trust Model
 

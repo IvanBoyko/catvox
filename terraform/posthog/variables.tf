@@ -1,10 +1,10 @@
 ###############################################################################
 # CatVox AI — PostHog Terraform Variables
 #
-# Per-environment values come from config/environments/<env>.xcconfig (read by
-# the Makefile) and per-environment GitHub Environment secrets (read by the CI
-# workflow). There is no committed tfvars file for the PostHog root — see
-# ADR-0020.
+# Per-environment non-secret values come from config/environments/<env>.xcconfig
+# (read by the Makefile), and the PostHog API key comes from the matching
+# GitHub Environment secret. There is no committed tfvars file for the PostHog
+# root — see ADR-0020.
 ###############################################################################
 
 variable "environment_name" {
@@ -22,7 +22,7 @@ variable "posthog_api_host" {
   type        = string
 
   validation {
-    condition     = startswith(var.posthog_api_host, "https://")
+    condition     = startswith(var.posthog_api_host, "https://") && length(trimprefix(var.posthog_api_host, "https://")) > 0
     error_message = "posthog_api_host must be a full https:// URL composed from CATVOX_POSTHOG_API_HOST_NAME."
   }
 }
@@ -34,5 +34,15 @@ variable "posthog_project_id" {
   validation {
     condition     = length(var.posthog_project_id) > 0
     error_message = "posthog_project_id must not be empty. Set CATVOX_POSTHOG_PROJECT_ID in the matching xcconfig."
+  }
+}
+
+variable "posthog_organization_id" {
+  description = "PostHog organization UUID for this CatVox environment. Sourced from CATVOX_POSTHOG_ORGANIZATION_ID in config/environments/<env>.xcconfig."
+  type        = string
+
+  validation {
+    condition     = length(var.posthog_organization_id) > 0
+    error_message = "posthog_organization_id must not be empty. Set CATVOX_POSTHOG_ORGANIZATION_ID in the matching xcconfig."
   }
 }

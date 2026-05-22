@@ -34,13 +34,13 @@ env:
   # State bucket for the PostHog root reuses the per-environment GCS bucket.
   CATVOX_POSTHOG_TF_STATE_BUCKET: ${{ format('catvox-tf-state-{0}', secrets.GCP_PROJECT_ID) }}
 
-  # PostHog provider configuration. The provider reads these env vars natively.
+  # PostHog provider credential. Non-secret provider identifiers come from
+  # config/environments/${CATVOX_ENVIRONMENT}.xcconfig via the Makefile.
   POSTHOG_API_KEY: ${{ secrets.POSTHOG_API_KEY }}
-  POSTHOG_ORGANIZATION_ID: ${{ secrets.POSTHOG_ORGANIZATION_ID }}
 
-  # The PostHog project ID and provider API host come from
-  # config/environments/${CATVOX_ENVIRONMENT}.xcconfig via the Makefile so app
-  # config remains the source of truth.
+  # The PostHog project ID, organization ID, and provider API host come from
+  # config/environments/${CATVOX_ENVIRONMENT}.xcconfig so app config remains
+  # the source of truth.
 
 jobs:
   # ── Plan ────────────────────────────────────────────────────────────────────

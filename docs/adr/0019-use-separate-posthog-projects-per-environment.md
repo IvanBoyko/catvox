@@ -172,9 +172,10 @@ operational consequences (per-environment Terraform state in the matching GCS
 bucket, reuse of the per-environment CI service account, PostHog secrets layered
 into the existing per-environment GitHub Environments). ADR-0020 also supersedes
 the earlier operational-variable note for `POSTHOG_HOST` and
-`POSTHOG_PROJECT_ID`: the PostHog Terraform API host and project ID now live in
-`config/environments/<env>.xcconfig` as `CATVOX_POSTHOG_API_HOST_NAME` and
-`CATVOX_POSTHOG_PROJECT_ID`, while only PostHog API credentials remain GitHub
-Environment secrets. The rest of this ADR's decision — separate PostHog projects
+`POSTHOG_PROJECT_ID`: the PostHog Terraform API host, project ID, and
+organization ID now live in `config/environments/<env>.xcconfig` as
+`CATVOX_POSTHOG_API_HOST_NAME`, `CATVOX_POSTHOG_PROJECT_ID`, and
+`CATVOX_POSTHOG_ORGANIZATION_ID`, while only `POSTHOG_API_KEY` remains a GitHub
+Environment secret. The rest of this ADR's decision — separate PostHog projects
 per environment with `app_environment` as defence-in-depth metadata — remains
 unchanged.

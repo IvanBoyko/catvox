@@ -37,6 +37,7 @@ terraform {
 # Terraform variables so config/environments/<env>.xcconfig remains the source
 # of truth.
 provider "posthog" {
-  host       = var.posthog_api_host
-  project_id = var.posthog_project_id
+  host            = var.posthog_api_host
+  project_id      = var.posthog_project_id
+  organization_id = var.posthog_organization_id
 }

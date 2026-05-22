@@ -23,13 +23,14 @@ bucket, so adding a second prefix requires no IAM changes.
 Per-environment values come from two places:
 
 - `config/environments/<env>.xcconfig` for non-secret values such as
-  `CATVOX_ENVIRONMENT`, `CATVOX_POSTHOG_API_HOST_NAME`, and
-  `CATVOX_POSTHOG_PROJECT_ID`. The Makefile reads these via
-  `scripts/lib/read-xcconfig-value.sh`, exports them as `TF_VAR_*`, and
-  configures the PostHog provider host and project default from those values.
+  `CATVOX_ENVIRONMENT`, `CATVOX_POSTHOG_API_HOST_NAME`,
+  `CATVOX_POSTHOG_PROJECT_ID`, and `CATVOX_POSTHOG_ORGANIZATION_ID`. The
+  Makefile reads these via `scripts/lib/read-xcconfig-value.sh`, exports them as
+  `TF_VAR_*`, and configures the PostHog provider host, project default, and
+  organization default from those values.
 - The matching per-environment GitHub Environment for secrets and tokens such
-  as `POSTHOG_API_KEY` and `POSTHOG_ORGANIZATION_ID`. The CI workflow exports
-  these as provider environment variables.
+  as `POSTHOG_API_KEY`. The CI workflow exports this as a provider environment
+  variable.
 
 There is no `terraform/posthog/env/<env>.tfvars` directory. The xcconfig file
 is the authoritative environment definition. See ADR-0020 for the rationale.
@@ -44,7 +45,6 @@ cp terraform/posthog/backend/dev.hcl.example terraform/posthog/backend/dev.hcl
 # Export PostHog credentials for the provider before running plan/apply.
 # Use a scoped API key limited to your environment's PostHog project.
 export POSTHOG_API_KEY=...
-export POSTHOG_ORGANIZATION_ID=...
 
 make posthog-terraform-plan CATVOX_ENVIRONMENT=dev
 ```
@@ -56,8 +56,8 @@ plan and apply interactively.
 
 The `.github/workflows/posthog-terraform.yml` workflow runs `plan` on PRs that
 touch `terraform/posthog/**` or the workflow itself, and runs `apply` on push
-to `main`. It targets the `dev` GitHub Environment and reads PostHog secrets
-from there.
+to `main`. It targets the `dev` GitHub Environment and reads the PostHog API
+key secret from there.
 
 ## Slice scope
 

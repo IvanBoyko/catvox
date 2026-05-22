@@ -21,3 +21,8 @@ output "posthog_project_id" {
   description = "PostHog project ID this state targets."
   value       = var.posthog_project_id
 }
+
+output "posthog_organization_id" {
+  description = "PostHog organization ID this state targets."
+  value       = var.posthog_organization_id
+}

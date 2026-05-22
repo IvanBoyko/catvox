@@ -324,7 +324,6 @@ Use `docs/CREATE_NEW_ENVIRONMENT.md` and `make environment-create` for new envir
 | `TF_VAR_ALERT_EMAIL` | Dev alert recipient |
 | `TF_VAR_APP_CHECK_DEBUG_TOKEN` | Dev Firebase App Check debug token |
 | `POSTHOG_API_KEY` | PostHog scoped personal API key for the `CatVox Dev` project |
-| `POSTHOG_ORGANIZATION_ID` | UUID of the PostHog organisation |
 
 ---
 

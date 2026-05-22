@@ -38,12 +38,13 @@ CATVOX_FIREBASE_PLIST_OUTPUT ?= CatVox/Resources/Firebase/GoogleService-Info-$(C
 # PostHog Terraform root (see ADR-0020). State lives in the matching environment's
 # GCS bucket with prefix `posthog/state`. There is no env/<env>.tfvars file —
 # per-environment values are sourced from config/environments/<env>.xcconfig
-# (locally, via the variables above) and from the matching GitHub Environment
-# (in CI). The CATVOX_POSTHOG_TF_VARS_FILE pointer is retained only so future
-# slices can opt back into a tfvars file if needed; it is unset by default.
+# via the variables above. The matching GitHub Environment supplies only the
+# PostHog API key. The CATVOX_POSTHOG_TF_VARS_FILE pointer is retained only so
+# future slices can opt back into a tfvars file if needed; it is unset by default.
 CATVOX_POSTHOG_PROJECT_ID ?= $(call catvox_xcconfig_value,CATVOX_POSTHOG_PROJECT_ID)
-CATVOX_POSTHOG_API_HOST_NAME ?= $(or $(call catvox_xcconfig_value,CATVOX_POSTHOG_API_HOST_NAME),us.posthog.com)
-CATVOX_POSTHOG_API_HOST ?= https://$(CATVOX_POSTHOG_API_HOST_NAME)
+CATVOX_POSTHOG_ORGANIZATION_ID ?= $(call catvox_xcconfig_value,CATVOX_POSTHOG_ORGANIZATION_ID)
+CATVOX_POSTHOG_API_HOST_NAME ?= $(call catvox_xcconfig_value,CATVOX_POSTHOG_API_HOST_NAME)
+CATVOX_POSTHOG_API_HOST ?= $(if $(CATVOX_POSTHOG_API_HOST_NAME),https://$(CATVOX_POSTHOG_API_HOST_NAME),)
 CATVOX_POSTHOG_TF_BACKEND_CONFIG ?= terraform/posthog/backend/$(CATVOX_ENVIRONMENT).hcl
 CATVOX_POSTHOG_TF_VARS_FILE ?=
 CATVOX_POSTHOG_TF_STATE_BUCKET ?= $(CATVOX_TF_STATE_BUCKET)
@@ -61,7 +62,7 @@ catvox_posthog_tf_backend_rel = $(patsubst terraform/posthog/%,%,$(CATVOX_POSTHO
 catvox_posthog_tf_vars_rel = $(patsubst terraform/posthog/%,%,$(CATVOX_POSTHOG_TF_VARS_FILE))
 catvox_posthog_tf_backend_args = $(if $(wildcard $(CATVOX_POSTHOG_TF_BACKEND_CONFIG)),-backend-config="$(catvox_posthog_tf_backend_rel)",-backend-config="bucket=$(CATVOX_POSTHOG_TF_STATE_BUCKET)" -backend-config="prefix=$(CATVOX_POSTHOG_TF_STATE_PREFIX)")
 catvox_posthog_tf_var_file_arg = $(if $(and $(CATVOX_POSTHOG_TF_VARS_FILE),$(wildcard $(CATVOX_POSTHOG_TF_VARS_FILE))),-var-file="$(catvox_posthog_tf_vars_rel)",)
-catvox_posthog_tf_env_args = TF_VAR_environment_name="$(CATVOX_ENVIRONMENT)" TF_VAR_posthog_api_host="$(CATVOX_POSTHOG_API_HOST)" TF_VAR_posthog_project_id="$(CATVOX_POSTHOG_PROJECT_ID)"
+catvox_posthog_tf_env_args = TF_VAR_environment_name="$(CATVOX_ENVIRONMENT)" TF_VAR_posthog_api_host="$(CATVOX_POSTHOG_API_HOST)" TF_VAR_posthog_project_id="$(CATVOX_POSTHOG_PROJECT_ID)" TF_VAR_posthog_organization_id="$(CATVOX_POSTHOG_ORGANIZATION_ID)"
 
 define catvox_require_env_path
 	@if [[ -n "$($(1))" && "$$(basename "$($(1))" "$(2)")" != "$(CATVOX_ENVIRONMENT)" ]]; then \
@@ -125,8 +126,9 @@ help:
 		'  CATVOX_TF_BACKEND_CONFIG=terraform/backend/dev.hcl overrides Terraform backend config; basename must match CATVOX_ENVIRONMENT' \
 		'  CATVOX_TF_VARS_FILE=terraform/env/dev.tfvars overrides Terraform var file; basename must match CATVOX_ENVIRONMENT' \
 		'  CATVOX_TFVARS_PATH=... overrides the local tfvars fallback path for App Check debug tokens' \
-		'  CATVOX_POSTHOG_PROJECT_ID=... selects the PostHog project ID for terraform/posthog/ (defaults to xcconfig value)' \
-		'  CATVOX_POSTHOG_API_HOST_NAME=us.posthog.com selects the PostHog Terraform API host name (defaults to xcconfig value)' \
+		'  CATVOX_POSTHOG_PROJECT_ID=... overrides the xcconfig PostHog project ID for terraform/posthog/' \
+		'  CATVOX_POSTHOG_ORGANIZATION_ID=... overrides the xcconfig PostHog organization ID for terraform/posthog/' \
+		'  CATVOX_POSTHOG_API_HOST_NAME=us.posthog.com overrides the xcconfig PostHog Terraform API host name' \
 		'  CATVOX_POSTHOG_TF_BACKEND_CONFIG=terraform/posthog/backend/dev.hcl overrides PostHog Terraform backend config; basename must match CATVOX_ENVIRONMENT' \
 		'  IOS_TEST_DESTINATION="platform=iOS Simulator,name=iPhone 16,OS=latest"' \
 		'  IOS_UI_TEST_DESTINATION="platform=iOS Simulator,name=iPhone 16,OS=latest"' \
