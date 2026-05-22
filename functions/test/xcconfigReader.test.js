@@ -88,11 +88,13 @@ test('read-xcconfig-value rejects URL schemes in host fields', () => {
       [
         'CATVOX_SIGNED_UPLOAD_URL_HOST = https://example.com',
         'CATVOX_POSTHOG_HOST_NAME = https://us.i.posthog.com',
+        'CATVOX_POSTHOG_API_HOST_NAME = https://us.posthog.com',
       ].join('\n')
     );
 
     assertReadFails(file, 'CATVOX_SIGNED_UPLOAD_URL_HOST', /must be a hostname only/);
     assertReadFails(file, 'CATVOX_POSTHOG_HOST_NAME', /must be a hostname only/);
+    assertReadFails(file, 'CATVOX_POSTHOG_API_HOST_NAME', /must be a hostname only/);
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
@@ -108,6 +110,7 @@ test('read-xcconfig-value allows host-only host fields', () => {
       [
         'CATVOX_SIGNED_UPLOAD_URL_HOST = getsigneduploadurl.example.com',
         'CATVOX_POSTHOG_HOST_NAME = us.i.posthog.com',
+        'CATVOX_POSTHOG_API_HOST_NAME = us.posthog.com',
       ].join('\n')
     );
 
@@ -116,6 +119,7 @@ test('read-xcconfig-value allows host-only host fields', () => {
       'getsigneduploadurl.example.com\n'
     );
     assert.equal(readValue(file, 'CATVOX_POSTHOG_HOST_NAME'), 'us.i.posthog.com\n');
+    assert.equal(readValue(file, 'CATVOX_POSTHOG_API_HOST_NAME'), 'us.posthog.com\n');
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }

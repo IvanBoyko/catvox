@@ -6,11 +6,13 @@ owned by a single CatVox environment. Per-environment creation is documented in
 
 ## GitHub Actions Availability
 
-GitHub Actions must be enabled for `kathelix/catvox`. The repository uses three
+GitHub Actions must be enabled for `kathelix/catvox`. The repository uses four
 workflow families:
 
 - iOS build and tests on PRs and pushes.
-- Terraform plan on PRs and apply on merge to `main`.
+- GCP Terraform plan on PRs and apply on merge to `main`.
+- PostHog Terraform plan on PRs and apply on merge to `main` (separate root,
+  separate state prefix; see ADR-0020).
 - Firebase Functions build on PRs and deploy plus integration after merge to
   `main`.
 
@@ -42,6 +44,7 @@ Required secrets per environment:
 | `GCP_SERVICE_ACCOUNT` | CI service account email for that project. |
 | `TF_VAR_ALERT_EMAIL` | Terraform alert recipient. |
 | `TF_VAR_APP_CHECK_DEBUG_TOKEN` | Dev/integration-safe environments only. |
+| `POSTHOG_API_KEY` | PostHog scoped personal API key for this environment's PostHog project. |
 
 ## WIF Trust Model
 

@@ -22,17 +22,22 @@ Each environment owns these artifacts:
 | Apple Developer App ID | Apple Developer team | Conditional. Required only when the environment introduces a new iOS bundle ID that will be installed on physical devices or use App Attest. |
 | App Check | Terraform | Dev may have a Debug Provider token. Prod must not have mutable integration debug tokens and should use protected smoke checks only. |
 | Backend URLs | `config/environments/<env>.xcconfig` | Set after Functions deploy from the deployed Gen 2 Function URLs. |
-| PostHog config | `config/environments/<env>.xcconfig` | App-visible project token and ingestion hostname only. Create the environment's PostHog project before enabling real production analytics traffic. |
+| PostHog config | `config/environments/<env>.xcconfig` | App-visible project token (`CATVOX_POSTHOG_PROJECT_TOKEN`), ingestion hostname (`CATVOX_POSTHOG_HOST_NAME`), Terraform API hostname (`CATVOX_POSTHOG_API_HOST_NAME`), PostHog project ID (`CATVOX_POSTHOG_PROJECT_ID`), and PostHog organization ID (`CATVOX_POSTHOG_ORGANIZATION_ID`). Create the environment's PostHog project before enabling real production analytics traffic. |
+| PostHog Terraform state | `gs://catvox-tf-state-<gcp-project-id>/posthog/state` | Same GCS bucket as the GCP root, different prefix. No new bucket. See ADR-0020. |
 
-PostHog environment isolation is project-based. Dev uses the `CatVox Dev`
-PostHog project, and real production analytics require a dedicated
-`CatVox Prod` PostHog project before App Store production traffic is enabled.
-Do not point a real environment at the existing Dev PostHog project as a
-stopgap.
-Keep PostHog personal/API credentials out of app config: future automation may
-use `POSTHOG_API_KEY`, `POSTHOG_ORGANIZATION_ID`, `POSTHOG_HOST`, and
-`POSTHOG_PROJECT_ID`, but those belong in local/CI operational secret handling,
-not in `config/environments/*.xcconfig`.
+PostHog environment isolation is project-based and maps 1:1 to CatVox
+environments. Dev uses the `CatVox Dev` PostHog project, and real production
+analytics require a dedicated `CatVox Prod` PostHog project before App Store
+production traffic is enabled. Do not point a real environment at the existing
+Dev PostHog project as a stopgap. See ADR-0019 and ADR-0020.
+
+Keep PostHog personal/API credentials out of app config. `POSTHOG_API_KEY`
+lives in the matching per-environment GitHub Environment as a secret. Non-secret
+PostHog Terraform identifiers live only in
+`config/environments/<env>.xcconfig` as `CATVOX_POSTHOG_API_HOST_NAME`,
+`CATVOX_POSTHOG_PROJECT_ID`, and `CATVOX_POSTHOG_ORGANIZATION_ID` so app config
+remains the source of truth for Makefile-driven `posthog-terraform-*` targets
+and CI.
 
 ## Inputs
 
@@ -97,6 +102,7 @@ Create or update the GitHub Environment named `<env>` and set:
 | `GCP_SERVICE_ACCOUNT` | `terraform output -raw ci_service_account_email` |
 | `TF_VAR_ALERT_EMAIL` | same value as `alert_email` in ignored tfvars |
 | `TF_VAR_APP_CHECK_DEBUG_TOKEN` | Dev/integration-safe environments only |
+| `POSTHOG_API_KEY` | PostHog scoped personal API key with project-write scope limited to this environment's PostHog project. |
 
 Example:
 
@@ -107,10 +113,13 @@ gh secret set GCP_WORKLOAD_IDENTITY_PROVIDER --env <env> --body "$(terraform -ch
 gh secret set GCP_SERVICE_ACCOUNT --env <env> --body "$(terraform -chdir=terraform output -raw ci_service_account_email)"
 gh secret set TF_VAR_ALERT_EMAIL --env <env>
 gh secret set TF_VAR_APP_CHECK_DEBUG_TOKEN --env <env>
+gh secret set POSTHOG_API_KEY --env <env>
 ```
 
 Future Prod must use a protected GitHub Environment and must not reuse Dev debug
-tokens or mutable integration settings.
+tokens or mutable integration settings. Each environment's `POSTHOG_API_KEY`
+must be a scoped PostHog personal API key limited to that environment's PostHog
+project — never a shared org-admin key.
 
 ## Conditional Apple Developer Bundle Setup
 
@@ -134,7 +143,7 @@ unless an Apple Developer API integration is added later.
    `CatVox.xcodeproj`; regenerate it with `make ios-generate`.
 5. Install and launch on the selected device:
    ```bash
-   CATVOX_ENV_CONFIG=config/environments/<env>.xcconfig \
+   CATVOX_ENVIRONMENT=<env> \
    DEVICE_ID=<device-udid> \
    make ios-device-launch
    ```
@@ -168,7 +177,7 @@ Strip `https://` and store only the hostname.
 Then validate:
 
 ```bash
-CATVOX_ENV_CONFIG=config/environments/<env>.xcconfig make ios-validate-env-config
+CATVOX_ENVIRONMENT=<env> make ios-validate-env-config
 ```
 
 ## Required Validation
@@ -176,12 +185,18 @@ CATVOX_ENV_CONFIG=config/environments/<env>.xcconfig make ios-validate-env-confi
 For Dev-like mutable environments:
 
 ```bash
+export CATVOX_ENVIRONMENT=<env>
+
 make functions-test
-CATVOX_TERRAFORM_ENV=<env> make terraform-plan
-CATVOX_ENV_CONFIG=config/environments/<env>.xcconfig make ios-generate
-CATVOX_ENV_CONFIG=config/environments/<env>.xcconfig make ios-test
-CATVOX_ENV_CONFIG=config/environments/<env>.xcconfig make functions-integration
+make terraform-plan
+make posthog-terraform-plan
+make ios-generate
+make ios-test
+make functions-integration
 ```
+
+Terraform backend and tfvars basenames must match `CATVOX_ENVIRONMENT`; the
+Makefile rejects mismatched backend/tfvars paths.
 
 Also run a real Debug device scan before retiring or cleaning any previous Dev
 backend.
@@ -222,13 +237,13 @@ scan:
    ```
 4. Run an explicit old-project destroy using the legacy backend and tfvars:
    ```bash
-   CATVOX_TERRAFORM_ENV=legacy-presplit \
+   CATVOX_ENVIRONMENT=legacy-presplit \
    GCP_PROJECT_ID=kathelix-catvox-prod \
    CATVOX_TF_BACKEND_CONFIG=terraform/backend/legacy-presplit.hcl \
    CATVOX_TF_VARS_FILE=terraform/env/legacy-presplit.tfvars \
    make terraform-plan
 
-   CATVOX_TERRAFORM_ENV=legacy-presplit \
+   CATVOX_ENVIRONMENT=legacy-presplit \
    GCP_PROJECT_ID=kathelix-catvox-prod \
    CATVOX_TF_BACKEND_CONFIG=terraform/backend/legacy-presplit.hcl \
    CATVOX_TF_VARS_FILE=terraform/env/legacy-presplit.tfvars \

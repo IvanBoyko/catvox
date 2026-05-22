@@ -1,60 +1,51 @@
-name: Terraform
+name: PostHog Terraform
 
 on:
   push:
     branches: [main]
     paths:
-      - 'terraform/**'
-      - '!terraform/posthog/**'
-      - 'CatVox/Resources/Firebase/GoogleService-Info-*.plist'
+      - 'terraform/posthog/**'
       - 'Makefile'
-      - '.github/workflows/terraform.yml'
+      - 'config/environments/**'
+      - '.github/workflows/posthog-terraform.yml'
   pull_request:
     branches: [main]
     paths:
-      - 'terraform/**'
-      - '!terraform/posthog/**'
-      - 'CatVox/Resources/Firebase/GoogleService-Info-*.plist'
+      - 'terraform/posthog/**'
       - 'Makefile'
-      - '.github/workflows/terraform.yml'
+      - 'config/environments/**'
+      - '.github/workflows/posthog-terraform.yml'
 
 # Cancel any in-progress run for the same branch so each push doesn't queue
-# behind the previous one. Separate group from the iOS build workflow.
+# behind the previous one. Separate group from the GCP Terraform workflow.
 concurrency:
-  group: terraform-${{ github.ref }}
+  group: posthog-terraform-${{ github.ref }}
   cancel-in-progress: true
 
 permissions:
   contents: read
-  id-token: write       # Required for Workload Identity Federation token exchange
+  id-token: write       # Required for Workload Identity Federation token exchange (state bucket access)
   pull-requests: write  # Required to post plan output as a PR comment
 
 env:
   CATVOX_ENVIRONMENT: dev
-  CATVOX_TF_STATE_PREFIX: catvox/state
+  CATVOX_POSTHOG_TF_STATE_PREFIX: posthog/state
   GCP_PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
-  # Environment/project Terraform variables are derived by the Makefile from
-  # CATVOX_ENVIRONMENT and GCP_PROJECT_ID.
-  # Remaining TF_VAR_* values are picked up automatically by Terraform.
-  TF_VAR_region: us-central1
-  TF_VAR_firestore_location: nam5
-  TF_VAR_tf_state_bucket: ${{ format('catvox-tf-state-{0}', secrets.GCP_PROJECT_ID) }}
-  TF_VAR_firebase_ios_bundle_id: com.kathelix.catvox.dev
-  TF_VAR_firebase_ios_app_display_name: CatVox Dev iOS
-  # DEV ONLY — Prod-like environments should inherit ABANDON so destroy/refactor cannot delete the App Store Firebase app.
-  TF_VAR_firebase_ios_app_deletion_policy: DELETE
-  TF_VAR_firebase_apple_team_id: QYT76L5836
-  # DEV ONLY — Prod must set false and omit TF_VAR_app_check_debug_token.
-  TF_VAR_enable_app_check_debug_token: true
-  TF_VAR_app_check_debug_token: ${{ secrets.TF_VAR_APP_CHECK_DEBUG_TOKEN }}
-  TF_VAR_app_check_debug_token_display_name: CatVox Dev integration token
-  TF_VAR_manage_gcf_sources_bucket_iam: true
-  TF_VAR_alert_email: ${{ secrets.TF_VAR_ALERT_EMAIL }}
+  # State bucket for the PostHog root reuses the per-environment GCS bucket.
+  CATVOX_POSTHOG_TF_STATE_BUCKET: ${{ format('catvox-tf-state-{0}', secrets.GCP_PROJECT_ID) }}
+
+  # PostHog provider credential. Non-secret provider identifiers come from
+  # config/environments/${CATVOX_ENVIRONMENT}.xcconfig via the Makefile.
+  POSTHOG_API_KEY: ${{ secrets.POSTHOG_API_KEY }}
+
+  # The PostHog project ID, organization ID, and provider API host come from
+  # config/environments/${CATVOX_ENVIRONMENT}.xcconfig so app config remains
+  # the source of truth.
 
 jobs:
   # ── Plan ────────────────────────────────────────────────────────────────────
-  # Runs on every PR targeting main. Authenticates to GCP via WIF, runs
-  # terraform plan, and posts the result as a PR comment.
+  # Runs on every PR targeting main. Authenticates to GCP via WIF (for state
+  # bucket access), runs terraform plan, and posts the result as a PR comment.
   plan:
     name: Plan
     runs-on: ubuntu-latest
@@ -77,23 +68,18 @@ jobs:
       # Check formatting before doing anything else — fast fail.
       - name: Terraform Format Check
         id: fmt
-        run: make terraform-fmt-check
+        run: make posthog-terraform-fmt-check
         continue-on-error: true  # Report in PR comment rather than failing the step
 
       - name: Terraform Init
         id: init
-        run: make terraform-init
-
-      - name: Firebase plist drift check
-        id: plist-drift
-        run: make ios-validate-env-config-drift
-        continue-on-error: true
+        run: make posthog-terraform-init
 
       - name: Terraform Validate
         id: validate
         run: |
           set +e
-          make terraform-validate 2>&1 | tee validate.txt
+          make posthog-terraform-validate 2>&1 | tee validate.txt
           exit_code=${PIPESTATUS[0]}
           {
             echo 'stdout<<EOF'
@@ -106,7 +92,7 @@ jobs:
         id: plan
         run: |
           set +e
-          make terraform-ci-plan 2>&1 | tee plan.txt
+          make posthog-terraform-ci-plan 2>&1 | tee plan.txt
           exit_code=${PIPESTATUS[0]}
           {
             echo 'stdout<<EOF'
@@ -125,7 +111,6 @@ jobs:
           script: |
             const fmt      = '${{ steps.fmt.outcome }}';
             const init     = '${{ steps.init.outcome }}';
-            const plist    = '${{ steps.plist-drift.outcome }}';
             const validate = ${{ toJSON(steps.validate.outputs.stdout) }};
             const plan     = ${{ toJSON(steps.plan.outputs.stdout) }};
             const outcome  = '${{ steps.plan.outcome }}';
@@ -137,13 +122,12 @@ jobs:
               : plan;
 
             const body = [
-              '## Terraform Plan — `' + outcome + '`',
+              '## PostHog Terraform Plan — `' + outcome + '`',
               '',
               '| Step | Result |',
               '|---|---|',
               '| Format  | `' + fmt + '` |',
               '| Init    | `' + init + '` |',
-              '| Plist drift | `' + plist + '` |',
               '',
               '**Validate**',
               '```',
@@ -168,10 +152,8 @@ jobs:
               body,
             });
 
-            if (plist === 'failure') {
-              core.setFailed('Firebase plist drift check failed — regenerate the plist from Terraform output.');
-            } else if (outcome === 'failure') {
-              core.setFailed('Terraform plan failed — see PR comment for details.');
+            if (outcome === 'failure') {
+              core.setFailed('PostHog Terraform plan failed — see PR comment for details.');
             }
 
   # ── Apply ────────────────────────────────────────────────────────────────────
@@ -197,7 +179,7 @@ jobs:
         uses: hashicorp/setup-terraform@v4
 
       - name: Terraform Init
-        run: make terraform-init
+        run: make posthog-terraform-init
 
       - name: Terraform Apply
-        run: make terraform-ci-apply
+        run: make posthog-terraform-ci-apply

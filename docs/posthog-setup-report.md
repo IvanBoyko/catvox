@@ -65,10 +65,12 @@ These dashboard definitions may need to be refreshed because `scan_shared` now
 means a completed share action, while `share_sheet_opened` tracks sheet
 presentation.
 
-These links are Dev-only references for the current `CatVox Dev` project. Later
-issue #37 slices should import and normalize these definitions through a
-separate `terraform/posthog/` root, then reproduce the managed MVP dashboard
-shape for `CatVox Prod` without sharing Dev project state or credentials.
+These links are Dev-only references for the current `CatVox Dev` project. The
+`terraform/posthog/` root now exists (issue #37 Slice 3) but declares no PostHog
+resources yet. Slice 4 imports the Dev project, its dashboard, and the
+wizard-created insights; Slice 5 normalises those definitions into reusable
+Terraform that reproduces the managed MVP dashboard shape for `CatVox Prod`
+without sharing Dev project state or credentials. See ADR-0019 and ADR-0020.
 
 ## Dashboard Refresh Notes
 

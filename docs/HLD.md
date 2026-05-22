@@ -66,7 +66,7 @@ The MVP also supports on-demand creation of a funny shareable result video deriv
 * **Backend Pattern:** Firebase Cloud Functions (2nd Gen) act as the backend proxy between the iOS client and privileged GCP services.
 * **Prompt Management:** The AI system prompt is maintained as a versioned markdown document in the repository and treated as part of the deployable backend behavior.
 * **Identity Separation:** Runtime cloud execution and automated infrastructure delivery use separate service accounts to reduce blast radius and keep privileged automation isolated from application runtime.
-* **Product Analytics:** MVP product analytics use PostHog to measure scan-funnel health, Photos-import validation, quota pressure, share/export behavior, and upgrade intent. Analytics use the same anonymous per-install UUID as quota enforcement and must not include raw video, AI-generated cat thoughts, file paths, or Photos asset identifiers. Dev and Prod analytics use separate PostHog projects, with `app_environment` retained as defense-in-depth metadata. See ADR-0011 and ADR-0019.
+* **Product Analytics:** MVP product analytics use PostHog to measure scan-funnel health, Photos-import validation, quota pressure, share/export behavior, and upgrade intent. Analytics use the same anonymous per-install UUID as quota enforcement and must not include raw video, AI-generated cat thoughts, file paths, or Photos asset identifiers. PostHog projects map 1:1 to CatVox environments — Dev and Prod analytics use separate PostHog projects bound to the same environment as the matching app build and backend, with `app_environment` retained as defense-in-depth metadata. See ADR-0011, ADR-0019, and ADR-0020.
 
 ## 5. Trust Boundary
 * The iOS client never calls Vertex AI directly.

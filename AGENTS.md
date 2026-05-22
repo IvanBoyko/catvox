@@ -77,12 +77,19 @@ catvox/
 │   ├── backend/dev.hcl.example    # Remote backend template
 │   ├── env/dev.tfvars.example     # Terraform values template
 │   ├── bootstrap_remote_state.sh  # Legacy helper; environment-create handles state bootstrap
-│   └── bootstrap_wif.sh           # Legacy helper; WIF is now Terraform-managed per environment
+│   ├── bootstrap_wif.sh           # Legacy helper; WIF is now Terraform-managed per environment
+│   └── posthog/                   # PostHog Terraform root — state prefix posthog/state; see ADR-0020
+│       ├── main.tf
+│       ├── variables.tf
+│       ├── outputs.tf
+│       ├── README.md
+│       └── backend/dev.hcl.example
 ├── .github/workflows/
 │   ├── build.yml                  # Path-filtered iOS build check on push/PR
 │   ├── functions.yml              # Functions build/deploy/integration workflow
 │   ├── markdownlint.yml           # Markdown lint for docs/ and README changes
-│   └── terraform.yml              # Terraform plan (PR) + apply (merge to main)
+│   ├── terraform.yml              # GCP Terraform plan (PR) + apply (merge to main)
+│   └── posthog-terraform.yml      # PostHog Terraform plan (PR) + apply (merge to main)
 ├── .codex/environments/
 │   └── environment.toml           # Codex app run actions; call Makefile targets
 ├── Makefile                       # Local/CI command facade for common automation
@@ -131,8 +138,10 @@ Environment-dependent app/backend values are parameterized through generic
 `CATVOX_FIREBASE_APP_ID`, `CATVOX_FIREBASE_API_KEY`, and
 `CATVOX_IOS_BUNDLE_ID`. App-facing defaults live in
 `config/environments/<environment>.xcconfig`; Xcode reads this file through the
-generated project, and the Makefile reads it through `CATVOX_ENV_CONFIG`
-(default `config/environments/dev.xcconfig`). Mutable integration tests also require
+generated project, and the Makefile derives the matching `CATVOX_ENV_CONFIG`,
+Terraform backend, and Terraform tfvars paths from `CATVOX_ENVIRONMENT` by
+default. Terraform targets reject backend/tfvars basenames that do not match
+`CATVOX_ENVIRONMENT`. Mutable integration tests also require
 `CATVOX_INTEGRATION_SAFE_ENVIRONMENTS` to include `CATVOX_ENVIRONMENT`. Treat
 the environment name as data, not as a hard-coded Dev/Prod branch. See ADR-0017
 and ADR-0018.
@@ -255,7 +264,11 @@ Implemented in `functions/src/gemini.ts` — update there, not here:
 
 ### Terraform State
 
-Active Dev remote state lives in GCS: `gs://catvox-tf-state-kathelix-catvox-dev/catvox/state`
+Active Dev GCP infrastructure state lives in GCS:
+`gs://catvox-tf-state-kathelix-catvox-dev/catvox/state`. PostHog Terraform
+state for Dev lives in the same bucket under prefix `posthog/state`:
+`gs://catvox-tf-state-kathelix-catvox-dev/posthog/state`. The two roots share
+the bucket and CI service account but never share state. See ADR-0020.
 
 Never run `terraform apply` locally without first confirming the remote state is clean:
 ```bash
@@ -292,8 +305,10 @@ GitHub Actions WIF produces an external-account Application Default Credentials 
 | `functions.yml` (build) | Push/PR touching `functions/**`, `firebase.json`, `docs/systemInstruction.md`, `Makefile`, or workflow | TypeScript compile check + backend unit tests |
 | `functions.yml` (deploy + integration) | Merge to `main` touching Functions inputs | Firebase Functions deploy, then backend integration tests against the current Dev backend |
 | `markdownlint.yml` | Push/PR touching `docs/**`, top-level `README.md`, `.markdownlint.jsonc`, or workflow | markdownlint quality check for repository docs |
-| `terraform.yml` (plan) | PR touching `terraform/**`, `Makefile`, or workflow | fmt-check → init → validate → plan → PR comment |
-| `terraform.yml` (apply) | Merge to `main` touching `terraform/**`, `Makefile`, or workflow | init → apply -auto-approve |
+| `terraform.yml` (plan) | PR touching `terraform/**` (excluding `terraform/posthog/**`), `Makefile`, or workflow | fmt-check → init → validate → plan → PR comment |
+| `terraform.yml` (apply) | Merge to `main` touching `terraform/**` (excluding `terraform/posthog/**`), `Makefile`, or workflow | init → apply -auto-approve |
+| `posthog-terraform.yml` (plan) | PR touching `terraform/posthog/**`, `config/environments/**`, `Makefile`, or workflow | fmt-check → init → validate → plan → PR comment |
+| `posthog-terraform.yml` (apply) | Merge to `main` touching `terraform/posthog/**`, `config/environments/**`, `Makefile`, or workflow | init → apply -auto-approve |
 
 ### Environment Creation / Bootstrap
 
@@ -308,6 +323,7 @@ Use `docs/CREATE_NEW_ENVIRONMENT.md` and `make environment-create` for new envir
 | `GCP_SERVICE_ACCOUNT` | `catvox-ci-sa@kathelix-catvox-dev.iam.gserviceaccount.com` |
 | `TF_VAR_ALERT_EMAIL` | Dev alert recipient |
 | `TF_VAR_APP_CHECK_DEBUG_TOKEN` | Dev Firebase App Check debug token |
+| `POSTHOG_API_KEY` | PostHog scoped personal API key for the `CatVox Dev` project |
 
 ---
 
@@ -359,6 +375,10 @@ Use `docs/CREATE_NEW_ENVIRONMENT.md` and `make environment-create` for new envir
 - When passing multiline step outputs into `actions/github-script`, prefer `${{ toJSON(steps.<id>.outputs.<name>) }}` so newlines, backticks, and quotes are represented safely as JavaScript string values.
 - Plain `run:` step stdout is not automatically available as `steps.<id>.outputs.stdout`; write needed values to `$GITHUB_OUTPUT`.
 
+### Command Invocation Notes
+
+When invoking commands from an agent tool call or CI script step, prefer subcommand flags such as `terraform -chdir=<path>`, `npm --prefix <path>`, and `git -C <path>` over `cd <path> && <command>` chains. Single-command form keeps logs, timing breakdowns, error attribution, and tool-allowlist matching clean. Existing Makefile recipes that already use `cd … && …` internally are fine — the convention applies to commands an agent or workflow step issues directly.
+
 ### Verifying SDK and Tool Behavior
 
 For any third-party SDK, library, or CLI tool, read the pinned source or installed package rather than relying on memory or public docs:
@@ -371,6 +391,8 @@ Public docs may lag or describe a different version; the pinned source is what t
 
 This applies to both implementation work ("does this SDK accept that option?") and review work ("is this config entry meaningful?"). For review findings, verify against the installed package, lockfile, or local command output before posting — not from memory or general knowledge.
 
+The same rule applies at **design and planning** time. When a slice's viability or shape depends on a specific tool capability — does this provider expose a non-mutating data source, does this action accept this input, does this CLI flag exist — verify against the source before building around an assumed answer. A design built on an SDK-behaviour guess produces multiple wasted rounds when the guess turns out wrong.
+
 **Negative claims need a higher verification bar.** Asserting that a feature, rule, or API *does not exist* in a third-party library is higher-stakes than asserting it does, because the recommendation that follows a negative claim is usually "remove this." If the rule that was disabled silently turns out to be real, removing it changes behavior. Before posting a "this doesn't exist, delete it" finding, verify the absence empirically — enumerate from the installed package, run the tool with the rule or flag explicitly enabled, grep the source — and record the verification step alongside the finding. This applies equally to Claude, Codex, and human reviewers.
 
 ### Config / Infrastructure Change Workflow
@@ -378,6 +400,8 @@ This applies to both implementation work ("does this SDK accept that option?") a
 For infra, environment, secrets, build-setting, or runtime-configuration changes, do a small negative-test pass before review. Check missing config, malformed config, unsafe environment names, Release fail-loud behavior, and production-mutation rejection where relevant. Prefer automated tests for safety properties; manual live checks should supplement them, not be the only proof.
 
 For shared infrastructure modules, defaults must be production-safe and non-destructive. Dev/test environments should explicitly opt into disposable or destructive behavior, such as Firebase app deletion, debug tokens, mutable tests, or relaxed CI gates.
+
+When designing isolation boundaries for shared infrastructure — Terraform roots, CI workflows, state buckets, GitHub Environments — start with the question "what set of artifacts ships together for one user-visible change?" The conventional reflex is to isolate by tool family ("everything PostHog" vs "everything GCP"); the better question is whether splitting those tools across separate state, secrets, and review chains accumulates drift faster than it reduces blast radius. ADR-0020 chose 1:1 PostHog↔CatVox environment alignment over an org-scoped PostHog Terraform root on this basis.
 
 When a safety, security, auth, or environment boundary is introduced or changed, extract the predicate/gate into a pure function with explicit inputs where practical and cover it with focused unit tests. Examples include mutation gates, service-account derivation, allowed-environment checks, Release config validation, and config-file parsing.
 
@@ -424,6 +448,18 @@ Do not collapse distinct failure sources into one user message unless the recove
 
 When a feature expands materially beyond its original scope, update the PR title and description promptly so they match the actual branch contents.
 
+### PR Retrospective
+
+Every PR ends with a retrospective before merge. This is not gated on the user (Ivan) asking — by the time the PR is ready to merge, the agent driving the work runs the retrospective unprompted. If the user forgets to ask, the agent still runs it.
+
+**When.** After the current head's CI has a successful or expected status rollup and all open review findings are resolved, before the PR is merged. If the retrospective produces no commit, it can be the last step before the merge button. If it produces a commit, push it and wait for the new head's status rollup to be successful or expected before merging; the final merge gate is always the latest PR head, not the pre-retrospective verdict.
+
+**What.** Capture what worked, what didn't, and what to do differently — be specific, not vague. Findings that generalise into durable conventions land in the appropriate Markdown file in the same PR: `AGENTS.md` for cross-agent project conventions, `CLAUDE.md` for Claude-specific review/work craft, ADRs only when the finding is an architectural decision (not a process rule). Findings that don't generalise — one-off friction, personal preference, redundant with existing rules — are explicitly skipped in the summary with reasoning, so the durable docs do not bloat.
+
+**Same-PR rule.** The retrospective commit lands in the PR the lessons came from, not a separate follow-up. This is intentional and deliberately contradicts the usual "keep PR scope tight" convention. Rationale: a future reader who lands on the PR sees both the change and the lessons it produced in one place, with the linkage intact. Reviewers should not flag retrospective commits as scope creep. Sequence: write the retrospective in chat → edit the relevant Markdown files → commit with a `Capture PR #N retrospective lessons in <FILES>` subject → push → post a short PR comment disclosing what the commit contains so a re-reviewer is not surprised → verify the latest-head PR status rollup before merge. The closing review's merge verdict is not re-litigated by a doc-only retrospective commit, but the post-retrospective head must still have successful or expected checks.
+
+**Proportional to PR size.** A one-line typo fix has nothing to capture; the retrospective still runs but produces a brief "nothing durable to add" note in chat with no commit. A multi-round, multi-session PR may produce several findings across multiple files. Match effort to material.
+
 ### Pre-Merge Checklist
 
 Before merging a feature PR, verify all of the following:
@@ -438,6 +474,7 @@ Before merging a feature PR, verify all of the following:
 - implemented backlog items are checked off in `docs/MVP_BACKLOG.md`
 - `docs/HLD.md` still matches the implemented MVP boundary
 - no leftover dev-only UI, preview shortcuts, or debug scaffolding remains in the user-facing flow
+- a retrospective has been run, any persistable lessons committed to the same PR, and the latest PR head after those commits has a successful or expected status rollup (see "PR Retrospective" above)
 
 For backend integration-test changes, also verify:
 - PR checks only run Functions build/unit tests; deploy and live integration run after merge to `main`

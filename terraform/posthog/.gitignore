@@ -1,0 +1,13 @@
+# PostHog Terraform root local files.
+#
+# Per ADR-0020 this root does not have an env/<env>.tfvars directory —
+# per-environment values come from config/environments/<env>.xcconfig and the
+# matching GitHub Environment. The provider lock file (.terraform.lock.hcl)
+# is intentionally committed (see PR #56) so CI and local dev validate against
+# identical provider versions and hashes.
+
+.terraform/
+*.tfstate
+*.tfstate.backup
+backend/*.hcl
+!backend/*.hcl.example
