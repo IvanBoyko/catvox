@@ -375,6 +375,10 @@ Use `docs/CREATE_NEW_ENVIRONMENT.md` and `make environment-create` for new envir
 - When passing multiline step outputs into `actions/github-script`, prefer `${{ toJSON(steps.<id>.outputs.<name>) }}` so newlines, backticks, and quotes are represented safely as JavaScript string values.
 - Plain `run:` step stdout is not automatically available as `steps.<id>.outputs.stdout`; write needed values to `$GITHUB_OUTPUT`.
 
+### Command Invocation Notes
+
+When invoking commands from an agent tool call or CI script step, prefer subcommand flags such as `terraform -chdir=<path>`, `npm --prefix <path>`, and `git -C <path>` over `cd <path> && <command>` chains. Single-command form keeps logs, timing breakdowns, error attribution, and tool-allowlist matching clean. Existing Makefile recipes that already use `cd … && …` internally are fine — the convention applies to commands an agent or workflow step issues directly.
+
 ### Verifying SDK and Tool Behavior
 
 For any third-party SDK, library, or CLI tool, read the pinned source or installed package rather than relying on memory or public docs:
@@ -387,6 +391,8 @@ Public docs may lag or describe a different version; the pinned source is what t
 
 This applies to both implementation work ("does this SDK accept that option?") and review work ("is this config entry meaningful?"). For review findings, verify against the installed package, lockfile, or local command output before posting — not from memory or general knowledge.
 
+The same rule applies at **design and planning** time. When a slice's viability or shape depends on a specific tool capability — does this provider expose a non-mutating data source, does this action accept this input, does this CLI flag exist — verify against the source before building around an assumed answer. A design built on an SDK-behaviour guess produces multiple wasted rounds when the guess turns out wrong.
+
 **Negative claims need a higher verification bar.** Asserting that a feature, rule, or API *does not exist* in a third-party library is higher-stakes than asserting it does, because the recommendation that follows a negative claim is usually "remove this." If the rule that was disabled silently turns out to be real, removing it changes behavior. Before posting a "this doesn't exist, delete it" finding, verify the absence empirically — enumerate from the installed package, run the tool with the rule or flag explicitly enabled, grep the source — and record the verification step alongside the finding. This applies equally to Claude, Codex, and human reviewers.
 
 ### Config / Infrastructure Change Workflow
@@ -394,6 +400,8 @@ This applies to both implementation work ("does this SDK accept that option?") a
 For infra, environment, secrets, build-setting, or runtime-configuration changes, do a small negative-test pass before review. Check missing config, malformed config, unsafe environment names, Release fail-loud behavior, and production-mutation rejection where relevant. Prefer automated tests for safety properties; manual live checks should supplement them, not be the only proof.
 
 For shared infrastructure modules, defaults must be production-safe and non-destructive. Dev/test environments should explicitly opt into disposable or destructive behavior, such as Firebase app deletion, debug tokens, mutable tests, or relaxed CI gates.
+
+When designing isolation boundaries for shared infrastructure — Terraform roots, CI workflows, state buckets, GitHub Environments — start with the question "what set of artifacts ships together for one user-visible change?" The conventional reflex is to isolate by tool family ("everything PostHog" vs "everything GCP"); the better question is whether splitting those tools across separate state, secrets, and review chains accumulates drift faster than it reduces blast radius. ADR-0020 chose 1:1 PostHog↔CatVox environment alignment over an org-scoped PostHog Terraform root on this basis.
 
 When a safety, security, auth, or environment boundary is introduced or changed, extract the predicate/gate into a pure function with explicit inputs where practical and cover it with focused unit tests. Examples include mutation gates, service-account derivation, allowed-environment checks, Release config validation, and config-file parsing.
 
