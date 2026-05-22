@@ -145,7 +145,7 @@ unless an Apple Developer API integration is added later.
    `CatVox.xcodeproj`; regenerate it with `make ios-generate`.
 5. Install and launch on the selected device:
    ```bash
-   CATVOX_ENV_CONFIG=config/environments/<env>.xcconfig \
+   CATVOX_ENVIRONMENT=<env> \
    DEVICE_ID=<device-udid> \
    make ios-device-launch
    ```
@@ -179,7 +179,7 @@ Strip `https://` and store only the hostname.
 Then validate:
 
 ```bash
-CATVOX_ENV_CONFIG=config/environments/<env>.xcconfig make ios-validate-env-config
+CATVOX_ENVIRONMENT=<env> make ios-validate-env-config
 ```
 
 ## Required Validation
@@ -188,7 +188,6 @@ For Dev-like mutable environments:
 
 ```bash
 export CATVOX_ENVIRONMENT=<env>
-export CATVOX_ENV_CONFIG="config/environments/${CATVOX_ENVIRONMENT}.xcconfig"
 
 make functions-test
 make terraform-plan
@@ -198,8 +197,8 @@ make ios-test
 make functions-integration
 ```
 
-Set `CATVOX_TERRAFORM_ENV` only when the Terraform backend/tfvars basename
-intentionally differs from `CATVOX_ENVIRONMENT`.
+Terraform backend and tfvars basenames must match `CATVOX_ENVIRONMENT`; the
+Makefile rejects mismatched backend/tfvars paths.
 
 Also run a real Debug device scan before retiring or cleaning any previous Dev
 backend.
@@ -240,13 +239,13 @@ scan:
    ```
 4. Run an explicit old-project destroy using the legacy backend and tfvars:
    ```bash
-   CATVOX_TERRAFORM_ENV=legacy-presplit \
+   CATVOX_ENVIRONMENT=legacy-presplit \
    GCP_PROJECT_ID=kathelix-catvox-prod \
    CATVOX_TF_BACKEND_CONFIG=terraform/backend/legacy-presplit.hcl \
    CATVOX_TF_VARS_FILE=terraform/env/legacy-presplit.tfvars \
    make terraform-plan
 
-   CATVOX_TERRAFORM_ENV=legacy-presplit \
+   CATVOX_ENVIRONMENT=legacy-presplit \
    GCP_PROJECT_ID=kathelix-catvox-prod \
    CATVOX_TF_BACKEND_CONFIG=terraform/backend/legacy-presplit.hcl \
    CATVOX_TF_VARS_FILE=terraform/env/legacy-presplit.tfvars \

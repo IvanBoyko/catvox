@@ -30,13 +30,12 @@ permissions:
   pull-requests: write  # Required to post plan output as a PR comment
 
 env:
-  CATVOX_TERRAFORM_ENV: dev
+  CATVOX_ENVIRONMENT: dev
   CATVOX_TF_STATE_PREFIX: catvox/state
   GCP_PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
-  # Passed to Terraform as TF_VAR_* values.
-  # TF_VAR_* prefix is picked up automatically — no extra wiring needed.
-  TF_VAR_environment_name: dev
-  TF_VAR_project_id: ${{ secrets.GCP_PROJECT_ID }}
+  # Environment/project Terraform variables are derived by the Makefile from
+  # CATVOX_ENVIRONMENT and GCP_PROJECT_ID.
+  # Remaining TF_VAR_* values are picked up automatically by Terraform.
   TF_VAR_region: us-central1
   TF_VAR_firestore_location: nam5
   TF_VAR_tf_state_bucket: ${{ format('catvox-tf-state-{0}', secrets.GCP_PROJECT_ID) }}

@@ -23,13 +23,15 @@ Named environments use explicit files keyed by environment name:
 
 Terraform backend blocks cannot use normal input variables, so backend config
 must be passed explicitly during `terraform init` for each environment.
+The Makefile rejects backend/tfvars basenames that do not match
+`CATVOX_ENVIRONMENT`.
 
 Example local flow:
 
 ```bash
 cp backend/dev.hcl.example backend/dev.hcl
 cp env/dev.tfvars.example env/dev.tfvars
-make terraform-plan CATVOX_TERRAFORM_ENV=dev
+make terraform-plan CATVOX_ENVIRONMENT=dev
 ```
 
 Do not put secrets in committed tfvars files. Commit only `.example` files when
@@ -42,3 +44,5 @@ not have an `env/<environment>.tfvars` directory. Per-environment values come
 from `config/environments/<environment>.xcconfig` (read by the Makefile) and
 the matching per-environment GitHub Environment (read by CI). See
 `terraform/posthog/README.md` and ADR-0020.
+The Makefile rejects backend/tfvars basenames that do not match
+`CATVOX_ENVIRONMENT`.

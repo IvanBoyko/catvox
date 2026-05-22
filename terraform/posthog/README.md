@@ -33,6 +33,8 @@ Per-environment values come from two places:
 
 There is no `terraform/posthog/env/<env>.tfvars` directory. The xcconfig file
 is the authoritative environment definition. See ADR-0020 for the rationale.
+The Makefile rejects backend/tfvars basenames that do not match
+`CATVOX_ENVIRONMENT`.
 
 ## Local flow
 
@@ -44,10 +46,10 @@ cp terraform/posthog/backend/dev.hcl.example terraform/posthog/backend/dev.hcl
 export POSTHOG_API_KEY=...
 export POSTHOG_ORGANIZATION_ID=...
 
-make posthog-terraform-plan CATVOX_TERRAFORM_ENV=dev
+make posthog-terraform-plan CATVOX_ENVIRONMENT=dev
 ```
 
-`make posthog-terraform-apply CONFIRM=apply CATVOX_TERRAFORM_ENV=dev` runs
+`make posthog-terraform-apply CONFIRM=apply CATVOX_ENVIRONMENT=dev` runs
 plan and apply interactively.
 
 ## CI flow

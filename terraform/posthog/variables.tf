@@ -2,9 +2,9 @@
 # CatVox AI — PostHog Terraform Variables
 #
 # Per-environment values come from config/environments/<env>.xcconfig (read by
-# the Makefile) and per-environment GitHub Environment secrets/variables (read
-# by the CI workflow). There is no committed tfvars file for the PostHog root
-# — see ADR-0020.
+# the Makefile) and per-environment GitHub Environment secrets (read by the CI
+# workflow). There is no committed tfvars file for the PostHog root — see
+# ADR-0020.
 ###############################################################################
 
 variable "environment_name" {

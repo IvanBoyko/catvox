@@ -1,6 +1,6 @@
 # CatVox Dev PostHog Terraform remote state backend.
 # Copy to terraform/posthog/backend/dev.hcl for local runs, or let the Makefile
-# derive the same values from CATVOX_TERRAFORM_ENV / GCP_PROJECT_ID in CI.
+# derive the same values from CATVOX_ENVIRONMENT / GCP_PROJECT_ID in CI.
 #
 # State for the PostHog root lives in the same GCS bucket as the matching
 # environment's GCP infrastructure state, with a different prefix. See ADR-0020.

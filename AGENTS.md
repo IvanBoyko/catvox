@@ -138,8 +138,10 @@ Environment-dependent app/backend values are parameterized through generic
 `CATVOX_FIREBASE_APP_ID`, `CATVOX_FIREBASE_API_KEY`, and
 `CATVOX_IOS_BUNDLE_ID`. App-facing defaults live in
 `config/environments/<environment>.xcconfig`; Xcode reads this file through the
-generated project, and the Makefile reads it through `CATVOX_ENV_CONFIG`
-(default `config/environments/dev.xcconfig`). Mutable integration tests also require
+generated project, and the Makefile derives the matching `CATVOX_ENV_CONFIG`,
+Terraform backend, and Terraform tfvars paths from `CATVOX_ENVIRONMENT` by
+default. Terraform targets reject backend/tfvars basenames that do not match
+`CATVOX_ENVIRONMENT`. Mutable integration tests also require
 `CATVOX_INTEGRATION_SAFE_ENVIRONMENTS` to include `CATVOX_ENVIRONMENT`. Treat
 the environment name as data, not as a hard-coded Dev/Prod branch. See ADR-0017
 and ADR-0018.
