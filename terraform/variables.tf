@@ -9,7 +9,6 @@
 variable "environment_name" {
   description = "CatVox named environment, for example dev, staging, or prod. Sourced from CATVOX_ENVIRONMENT."
   type        = string
-  default     = "dev"
 
   validation {
     condition     = length(var.environment_name) > 0

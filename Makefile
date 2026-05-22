@@ -138,7 +138,7 @@ help:
 		'  CATVOX_INTEGRATION_SAFE_ENVIRONMENTS=dev marks mutable-test environments' \
 		'  CATVOX_APP_CHECK_DEBUG_TOKEN=... make functions-integration' \
 		'  CATVOX_TF_BACKEND_CONFIG=terraform/backend/dev.hcl overrides Terraform backend config; basename must match CATVOX_ENVIRONMENT' \
-		'  CATVOX_TF_VARS_FILE=terraform/env/dev.tfvars overrides Terraform var file; basename must match CATVOX_ENVIRONMENT' \
+		'  CATVOX_TF_VARS_FILE=terraform/env/dev.tfvars overrides the secrets-only Terraform var file; basename must match CATVOX_ENVIRONMENT' \
 		'  CATVOX_TFVARS_PATH=... overrides the local tfvars fallback path for App Check debug tokens' \
 		'  CATVOX_POSTHOG_PROJECT_ID=... overrides the xcconfig PostHog project ID for terraform/posthog/' \
 		'  CATVOX_POSTHOG_ORGANIZATION_ID=... overrides the xcconfig PostHog organization ID for terraform/posthog/' \
@@ -340,11 +340,12 @@ terraform-fmt-check:
 terraform-check-env-paths:
 	$(call catvox_require_env_path,CATVOX_TF_BACKEND_CONFIG,.hcl)
 	$(call catvox_require_env_path,CATVOX_TF_VARS_FILE,.tfvars)
+	@bash scripts/guard-terraform-tfvars-private-only.sh "$(CATVOX_TF_VARS_FILE)" "$(CATVOX_ENVIRONMENT)"
 
 terraform-init: terraform-check-env-paths
 	@cd terraform && terraform init $(CATVOX_TF_INIT_FLAGS) $(catvox_tf_backend_args)
 
-terraform-validate:
+terraform-validate: terraform-check-env-paths
 	@cd terraform && terraform validate -no-color
 
 terraform-plan: terraform-check-env-paths
@@ -422,7 +423,6 @@ bootstrap-wif:
 environment-create:
 	@CATVOX_ENVIRONMENT="$(CATVOX_ENVIRONMENT)" \
 	 GCP_PROJECT_ID="$(GCP_PROJECT_ID)" \
-	 FIREBASE_PROJECT="$(FIREBASE_PROJECT)" \
 	 CATVOX_FUNCTION_REGION="$(CATVOX_FUNCTION_REGION)" \
 	 CATVOX_FIRESTORE_LOCATION="$(CATVOX_FIRESTORE_LOCATION)" \
 	 CATVOX_TF_BACKEND_CONFIG="$(CATVOX_TF_BACKEND_CONFIG)" \

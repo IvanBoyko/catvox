@@ -72,6 +72,15 @@ Terraform variables that receive xcconfig-driven values must fail loudly when
 required values are missing or malformed. Error messages should name the
 xcconfig key that must be fixed.
 
+Makefile-driven GCP Terraform commands must also reject ignored tfvars files
+that still contain migrated non-secret keys, because Terraform `-var-file`
+values override `TF_VAR_*` environment values.
+
+Boolean values committed to xcconfig use canonical lowercase `true` or `false`
+only. Shell tooling may trim whitespace and normalize case before passing those
+values on, but it must not accept alternate forms such as `1`, `0`, `yes`, or
+`no` as environment-file values.
+
 ## Consequences
 
 ### Positive

@@ -50,17 +50,19 @@ Pick explicit values before running the script:
 | `PROJECT_DISPLAY_NAME` | `Kathelix CatVox Dev` | Optional |
 | `ORGANIZATION_ID` or `FOLDER_ID` | `1032067916665` | Optional, but usually needed for new projects |
 | `BILLING_ACCOUNT_ID` | billing account ID | Optional; if omitted, link billing manually before deploy |
-| `CATVOX_FUNCTION_REGION` | `us-central1` | Optional |
-| `CATVOX_FIRESTORE_LOCATION` | `nam5` | Optional |
+| `CATVOX_FUNCTION_REGION` | `us-central1` | Yes |
+| `CATVOX_FIRESTORE_LOCATION` | `nam5` | Yes |
+| `CATVOX_TF_STATE_BUCKET` | `catvox-tf-state-kathelix-catvox-dev` | Yes |
+| `CATVOX_TF_STATE_PREFIX` | `catvox/state` | Yes |
 | `CATVOX_IOS_BUNDLE_ID` | `com.kathelix.catvox.dev` | Yes |
-| `CATVOX_FIREBASE_IOS_APP_DISPLAY_NAME` | `CatVox Dev iOS` | Optional |
-| `CATVOX_FIREBASE_IOS_APP_DELETION_POLICY` | `ABANDON` | Optional. Keep default for Prod-like environments; use `DELETE` only for disposable Dev-like environments. |
-| `CATVOX_FIREBASE_APPLE_TEAM_ID` | `QYT76L5836` | Optional |
-| `CATVOX_ENABLE_APP_CHECK_DEBUG_TOKEN` | `true` for Dev, `false` for Prod | Optional |
-| `CATVOX_APP_CHECK_DEBUG_TOKEN_DISPLAY_NAME` | `CatVox Dev integration token` | Optional |
-| `CATVOX_MANAGE_GCF_SOURCES_BUCKET_IAM` | `true` for Dev bootstrap | Optional |
-| `APP_CHECK_DEBUG_TOKEN` | UUID4 token | Dev only |
-| `ALERT_EMAIL` | alert recipient | Yes for Terraform apply |
+| `CATVOX_FIREBASE_IOS_APP_DISPLAY_NAME` | `CatVox Dev iOS` | Yes |
+| `CATVOX_FIREBASE_IOS_APP_DELETION_POLICY` | `ABANDON` | Yes. Use `ABANDON` for Prod-like environments; use `DELETE` only for disposable Dev-like environments. |
+| `CATVOX_FIREBASE_APPLE_TEAM_ID` | `QYT76L5836` | Yes |
+| `CATVOX_ENABLE_APP_CHECK_DEBUG_TOKEN` | `true` for Dev, `false` for Prod | Yes. Use lowercase `true` or `false` only. |
+| `CATVOX_APP_CHECK_DEBUG_TOKEN_DISPLAY_NAME` | `CatVox Dev integration token` | Yes |
+| `CATVOX_MANAGE_GCF_SOURCES_BUCKET_IAM` | `true` for Dev bootstrap | Yes. Use lowercase `true` or `false` only. |
+| `APP_CHECK_DEBUG_TOKEN` | UUID4 token | Required when `CATVOX_ENABLE_APP_CHECK_DEBUG_TOKEN=true` and the ignored tfvars file does not already exist |
+| `ALERT_EMAIL` | alert recipient | Required when the ignored tfvars file does not already exist |
 
 ## Automated Creation
 
@@ -74,6 +76,8 @@ ORGANIZATION_ID=<org-id> \
 BILLING_ACCOUNT_ID=<billing-account-id> \
 CATVOX_FUNCTION_REGION=us-central1 \
 CATVOX_FIRESTORE_LOCATION=nam5 \
+CATVOX_TF_STATE_BUCKET=catvox-tf-state-<project-id> \
+CATVOX_TF_STATE_PREFIX=catvox/state \
 CATVOX_IOS_BUNDLE_ID=<bundle-id> \
 CATVOX_FIREBASE_IOS_APP_DISPLAY_NAME="CatVox <Env> iOS" \
 CATVOX_FIREBASE_IOS_APP_DELETION_POLICY=ABANDON \
@@ -81,12 +85,15 @@ CATVOX_FIREBASE_APPLE_TEAM_ID=QYT76L5836 \
 CATVOX_ENABLE_APP_CHECK_DEBUG_TOKEN=false \
 CATVOX_APP_CHECK_DEBUG_TOKEN_DISPLAY_NAME="CatVox <Env> integration token" \
 CATVOX_MANAGE_GCF_SOURCES_BUCKET_IAM=true \
-APP_CHECK_DEBUG_TOKEN=<uuid4-debug-token> \
 ALERT_EMAIL=<alerts@example.com> \
 RUN_TERRAFORM_APPLY=1 \
 RUN_FUNCTIONS_DEPLOY=1 \
 make environment-create
 ```
+
+For Dev-like environments that intentionally register an App Check debug token,
+set `CATVOX_ENABLE_APP_CHECK_DEBUG_TOKEN=true` and also pass
+`APP_CHECK_DEBUG_TOKEN=<uuid4-debug-token>`.
 
 The script:
 
@@ -160,6 +167,8 @@ Keep `CATVOX_GCP_CI_SERVICE_ACCOUNT` and `CATVOX_GCP_WIF_PROVIDER` as full
 strings, not composed pieces. For Dev-like environments set
 `CATVOX_ENABLE_APP_CHECK_DEBUG_TOKEN = true` only when the matching debug token
 is intentionally present in the GitHub Environment and ignored tfvars file.
+Committed boolean values must be lowercase `true` or `false`; do not use `1`,
+`0`, `yes`, or `no`.
 
 ## Conditional Apple Developer Bundle Setup
 

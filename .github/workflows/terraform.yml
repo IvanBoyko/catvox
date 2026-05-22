@@ -9,6 +9,9 @@ on:
       - 'CatVox/Resources/Firebase/GoogleService-Info-*.plist'
       - 'Makefile'
       - 'config/environments/**'
+      - 'scripts/lib/read-xcconfig-value.sh'
+      - 'scripts/guard-terraform-tfvars-private-only.sh'
+      - '.github/actions/read-environment-config/**'
       - '.github/workflows/terraform.yml'
   pull_request:
     branches: [main]
@@ -18,6 +21,9 @@ on:
       - 'CatVox/Resources/Firebase/GoogleService-Info-*.plist'
       - 'Makefile'
       - 'config/environments/**'
+      - 'scripts/lib/read-xcconfig-value.sh'
+      - 'scripts/guard-terraform-tfvars-private-only.sh'
+      - '.github/actions/read-environment-config/**'
       - '.github/workflows/terraform.yml'
 
 # Cancel any in-progress run for the same branch so each push doesn't queue
@@ -56,44 +62,9 @@ jobs:
 
       - name: Read environment config
         id: env
-        shell: bash
-        run: |
-          set -euo pipefail
-          config="config/environments/${CATVOX_ENVIRONMENT}.xcconfig"
-
-          read_value() {
-            scripts/lib/read-xcconfig-value.sh "$config" "$1"
-          }
-
-          gcp_project_id="$(read_value GCP_PROJECT_ID)"
-          gcp_service_account="$(read_value CATVOX_GCP_CI_SERVICE_ACCOUNT)"
-          gcp_wif_provider="$(read_value CATVOX_GCP_WIF_PROVIDER)"
-
-          if [[ -z "$gcp_project_id" ]]; then
-            echo "GCP_PROJECT_ID must be set in $config" >&2
-            exit 1
-          fi
-          if [[ -z "$gcp_service_account" ]]; then
-            echo "CATVOX_GCP_CI_SERVICE_ACCOUNT must be set in $config" >&2
-            exit 1
-          fi
-          if [[ -z "$gcp_wif_provider" ]]; then
-            echo "CATVOX_GCP_WIF_PROVIDER must be set in $config" >&2
-            exit 1
-          fi
-
-          {
-            printf 'gcp_project_id=%s\n' "$gcp_project_id"
-            printf 'gcp_service_account=%s\n' "$gcp_service_account"
-            printf 'gcp_wif_provider=%s\n' "$gcp_wif_provider"
-          } >> "$GITHUB_OUTPUT"
-
-          {
-            printf 'CATVOX_ENV_CONFIG=%s\n' "$config"
-            printf 'GCP_PROJECT_ID=%s\n' "$gcp_project_id"
-            printf 'CATVOX_GCP_CI_SERVICE_ACCOUNT=%s\n' "$gcp_service_account"
-            printf 'CATVOX_GCP_WIF_PROVIDER=%s\n' "$gcp_wif_provider"
-          } >> "$GITHUB_ENV"
+        uses: ./.github/actions/read-environment-config
+        with:
+          environment: ${{ env.CATVOX_ENVIRONMENT }}
 
       - name: Authenticate to GCP (Workload Identity Federation)
         uses: google-github-actions/auth@v3
@@ -219,44 +190,9 @@ jobs:
 
       - name: Read environment config
         id: env
-        shell: bash
-        run: |
-          set -euo pipefail
-          config="config/environments/${CATVOX_ENVIRONMENT}.xcconfig"
-
-          read_value() {
-            scripts/lib/read-xcconfig-value.sh "$config" "$1"
-          }
-
-          gcp_project_id="$(read_value GCP_PROJECT_ID)"
-          gcp_service_account="$(read_value CATVOX_GCP_CI_SERVICE_ACCOUNT)"
-          gcp_wif_provider="$(read_value CATVOX_GCP_WIF_PROVIDER)"
-
-          if [[ -z "$gcp_project_id" ]]; then
-            echo "GCP_PROJECT_ID must be set in $config" >&2
-            exit 1
-          fi
-          if [[ -z "$gcp_service_account" ]]; then
-            echo "CATVOX_GCP_CI_SERVICE_ACCOUNT must be set in $config" >&2
-            exit 1
-          fi
-          if [[ -z "$gcp_wif_provider" ]]; then
-            echo "CATVOX_GCP_WIF_PROVIDER must be set in $config" >&2
-            exit 1
-          fi
-
-          {
-            printf 'gcp_project_id=%s\n' "$gcp_project_id"
-            printf 'gcp_service_account=%s\n' "$gcp_service_account"
-            printf 'gcp_wif_provider=%s\n' "$gcp_wif_provider"
-          } >> "$GITHUB_OUTPUT"
-
-          {
-            printf 'CATVOX_ENV_CONFIG=%s\n' "$config"
-            printf 'GCP_PROJECT_ID=%s\n' "$gcp_project_id"
-            printf 'CATVOX_GCP_CI_SERVICE_ACCOUNT=%s\n' "$gcp_service_account"
-            printf 'CATVOX_GCP_WIF_PROVIDER=%s\n' "$gcp_wif_provider"
-          } >> "$GITHUB_ENV"
+        uses: ./.github/actions/read-environment-config
+        with:
+          environment: ${{ env.CATVOX_ENVIRONMENT }}
 
       - name: Authenticate to GCP (Workload Identity Federation)
         uses: google-github-actions/auth@v3

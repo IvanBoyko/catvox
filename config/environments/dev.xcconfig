@@ -3,6 +3,7 @@
 // composes https:// values for CLI and integration-test runs.
 // Do not write https://... here: xcconfig treats // as a comment and silently
 // truncates the value to https:.
+// Boolean fields use lowercase true or false only.
 
 GCP_PROJECT_ID = kathelix-catvox-dev
 FIREBASE_PROJECT = kathelix-catvox-dev

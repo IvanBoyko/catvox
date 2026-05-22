@@ -344,6 +344,9 @@ GCP/Firebase foundation values sourced from xcconfig include:
 * `CATVOX_FIREBASE_IOS_APP_DISPLAY_NAME`, `CATVOX_FIREBASE_IOS_APP_DELETION_POLICY`, and `CATVOX_FIREBASE_APPLE_TEAM_ID`
 * `CATVOX_ENABLE_APP_CHECK_DEBUG_TOKEN`, `CATVOX_APP_CHECK_DEBUG_TOKEN_DISPLAY_NAME`, and `CATVOX_MANAGE_GCF_SOURCES_BUCKET_IAM`
 
+Committed boolean environment values use lowercase `true` or `false` only.
+Do not use numeric or yes/no forms.
+
 Initial iOS bundle ID convention:
 * `com.kathelix.catvox.dev` for Dev/internal builds
 * `com.kathelix.catvox` for future App Store Prod
