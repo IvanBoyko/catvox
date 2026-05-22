@@ -448,6 +448,18 @@ Do not collapse distinct failure sources into one user message unless the recove
 
 When a feature expands materially beyond its original scope, update the PR title and description promptly so they match the actual branch contents.
 
+### PR Retrospective
+
+Every PR ends with a retrospective before merge. This is not gated on the user (Ivan) asking — by the time the PR is ready to merge, the agent driving the work runs the retrospective unprompted. If the user forgets to ask, the agent still runs it.
+
+**When.** After CI is green and all open review findings are resolved, before the PR is merged. The retrospective is the last step before the merge button.
+
+**What.** Capture what worked, what didn't, and what to do differently — be specific, not vague. Findings that generalise into durable conventions land in the appropriate Markdown file in the same PR: `AGENTS.md` for cross-agent project conventions, `CLAUDE.md` for Claude-specific review/work craft, ADRs only when the finding is an architectural decision (not a process rule). Findings that don't generalise — one-off friction, personal preference, redundant with existing rules — are explicitly skipped in the summary with reasoning, so the durable docs do not bloat.
+
+**Same-PR rule.** The retrospective commit lands in the PR the lessons came from, not a separate follow-up. This is intentional and deliberately contradicts the usual "keep PR scope tight" convention. Rationale: a future reader who lands on the PR sees both the change and the lessons it produced in one place, with the linkage intact. Reviewers should not flag retrospective commits as scope creep. Sequence: write the retrospective in chat → edit the relevant Markdown files → commit with a `Capture PR #N retrospective lessons in <FILES>` subject → push → post a short PR comment disclosing what the commit contains so a re-reviewer is not surprised. The closing review's merge verdict is not re-litigated by a doc-only retrospective commit.
+
+**Proportional to PR size.** A one-line typo fix has nothing to capture; the retrospective still runs but produces a brief "nothing durable to add" note in chat with no commit. A multi-round, multi-session PR may produce several findings across multiple files. Match effort to material.
+
 ### Pre-Merge Checklist
 
 Before merging a feature PR, verify all of the following:
@@ -462,6 +474,7 @@ Before merging a feature PR, verify all of the following:
 - implemented backlog items are checked off in `docs/MVP_BACKLOG.md`
 - `docs/HLD.md` still matches the implemented MVP boundary
 - no leftover dev-only UI, preview shortcuts, or debug scaffolding remains in the user-facing flow
+- a retrospective has been run and any persistable lessons committed to the same PR (see "PR Retrospective" above)
 
 For backend integration-test changes, also verify:
 - PR checks only run Functions build/unit tests; deploy and live integration run after merge to `main`
