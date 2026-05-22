@@ -219,7 +219,7 @@ percentage. See ADR-0010 and ADR-0012.
     * **Databases:** Explicit provisioning of a **Firestore instance** in `(default)` mode.
     * **Artifact Registry repository** for Cloud Functions (2nd Gen) build images.
     * **Service Accounts:** `catvox-backend-sa` (Cloud Functions runtime) and `catvox-ci-sa` (Terraform CI / GitHub Actions) — see §6.3 for roles.
-    * **Secrets:** Secret Manager for `GCP_PROJECT_ID` and Dev-only `APP_CHECK_DEBUG_TOKEN`.
+    * **Runtime configuration and secrets:** Secret Manager for runtime `GCP_PROJECT_ID` configuration and the Dev-only `APP_CHECK_DEBUG_TOKEN` credential.
 
 ### 6.2 Compute & API Orchestration
 * **Environment:** Firebase Cloud Functions (2nd Generation).
@@ -334,7 +334,15 @@ CatVox uses named environments. Initial names are `dev` and `prod`, but product 
 
 Each environment owns its own GCP/Firebase project, Firebase iOS app, App Check configuration, backend endpoints, PostHog project/token configuration, GitHub Environment secret set, and Terraform state. PostHog Terraform automation lives in the `terraform/posthog/` root with state under prefix `posthog/state` in the matching environment's GCS bucket; operational PostHog API credentials live in per-environment GitHub Environment secrets (`POSTHOG_API_KEY`), while the PostHog API host, project ID, and organization ID remain in `config/environments/<environment>.xcconfig` as `CATVOX_POSTHOG_API_HOST_NAME`, `CATVOX_POSTHOG_PROJECT_ID`, and `CATVOX_POSTHOG_ORGANIZATION_ID` so app config is the source of truth. See ADR-0020.
 
-Active Dev defaults point at `kathelix-catvox-dev`. App-facing environment values use committed `config/environments/<environment>.xcconfig` files as the source of truth so bare Xcode runs and Makefile-driven automation read the same values. XcodeGen attaches the selected xcconfig to the app target and passes values through build settings into `Info.plist`; URL values in xcconfig are stored as hostnames and composed into `https://` URLs at the Info.plist and Makefile boundaries. The Makefile derives the matching `CATVOX_ENV_CONFIG`, Terraform backend basename, and Terraform tfvars basename from `CATVOX_ENVIRONMENT` by default, and Terraform targets reject backend/tfvars basenames that do not match `CATVOX_ENVIRONMENT`. Infrastructure-only values and secrets belong in explicit Terraform backend/tfvars files under `terraform/backend/<environment>.hcl` and `terraform/env/<environment>.tfvars`.
+Active Dev defaults point at `kathelix-catvox-dev`. Committed `config/environments/<environment>.xcconfig` files are the source of truth for non-secret app, backend, CI-auth identity, analytics, and Terraform environment values so bare Xcode runs and Makefile-driven automation read the same values. XcodeGen attaches the selected xcconfig to the app target and passes values through build settings into `Info.plist`; URL values in xcconfig are stored as hostnames and composed into `https://` URLs at the Info.plist and Makefile boundaries. The Makefile derives the matching `CATVOX_ENV_CONFIG`, Terraform backend basename, and Terraform tfvars basename from `CATVOX_ENVIRONMENT` by default, and Terraform targets reject backend/tfvars basenames that do not match `CATVOX_ENVIRONMENT`. GitHub Environment secrets and ignored `terraform/env/<environment>.tfvars` files hold only true secrets or deliberately private values: `POSTHOG_API_KEY`, App Check debug tokens, and `alert_email`. See ADR-0021.
+
+GCP/Firebase foundation values sourced from xcconfig include:
+* `GCP_PROJECT_ID`, `FIREBASE_PROJECT`, and `CATVOX_PROJECT_ID`
+* `CATVOX_GCP_CI_SERVICE_ACCOUNT` and `CATVOX_GCP_WIF_PROVIDER` as full strings
+* `CATVOX_FUNCTION_REGION`, `CATVOX_FIRESTORE_LOCATION`, and `CATVOX_TF_STATE_BUCKET`
+* `CATVOX_IOS_BUNDLE_ID` and `CATVOX_PRODUCT_BUNDLE_IDENTIFIER`
+* `CATVOX_FIREBASE_IOS_APP_DISPLAY_NAME`, `CATVOX_FIREBASE_IOS_APP_DELETION_POLICY`, and `CATVOX_FIREBASE_APPLE_TEAM_ID`
+* `CATVOX_ENABLE_APP_CHECK_DEBUG_TOKEN`, `CATVOX_APP_CHECK_DEBUG_TOKEN_DISPLAY_NAME`, and `CATVOX_MANAGE_GCF_SOURCES_BUCKET_IAM`
 
 Initial iOS bundle ID convention:
 * `com.kathelix.catvox.dev` for Dev/internal builds
@@ -394,12 +402,12 @@ GitHub Actions may call Makefile targets for the command body, but workflow YAML
     3. Post a structured comment to the PR with fmt/init outcomes and the full plan output (collapsible, truncated at 60k characters if needed).
     4. Fail the job if the plan step fails, surfacing the error in the PR comment.
 * **Apply job (on merge to `main`):** `make terraform-init` → `make terraform-ci-apply` (`terraform apply -auto-approve -no-color`).
-* **Variables:** Environment-scoped GitHub secrets supply `GCP_PROJECT_ID`, `TF_VAR_app_check_debug_token`, and `TF_VAR_alert_email`; the workflow supplies the selected environment name, bundle ID, state bucket, region, Firestore location, App Check flags, and source-bucket IAM switch as `TF_VAR_*` values. Local runs may instead use ignored `terraform/env/<environment>.tfvars` files.
+* **Variables:** The workflow reads `config/environments/<environment>.xcconfig` before WIF authentication, then the Makefile passes non-secret GCP/Firebase foundation values to Terraform as `TF_VAR_*` values. Environment-scoped GitHub secrets supply only `TF_VAR_app_check_debug_token` and `TF_VAR_alert_email`. Local ignored `terraform/env/<environment>.tfvars` files should contain only `app_check_debug_token` and `alert_email`.
 * **Local apply guard:** Developers must run `make terraform-plan` before review, and local `make terraform-apply` refuses to run unless invoked as `make terraform-apply CONFIRM=apply`. The target still uses Terraform's interactive apply prompt.
 
 ### 7.3 Firebase Cloud Functions Pipeline
 * **Trigger:** Push or pull request targeting `main` when files under `functions/`, `firebase.json`, `docs/systemInstruction.md`, the repository `Makefile`, or the workflow file itself change. `docs/systemInstruction.md` is included because it is copied into the deployment artifact at build time — a prompt-only change must trigger a redeploy. (See ADR-0008 and ADR-0010.)
-* **Authentication:** Same WIF setup as the Terraform pipeline — `catvox-ci-sa` via `GCP_WORKLOAD_IDENTITY_PROVIDER` and `GCP_SERVICE_ACCOUNT` secrets.
+* **Authentication:** Same WIF setup as the Terraform pipeline. Workflows read the selected xcconfig before authentication and pass `CATVOX_GCP_WIF_PROVIDER` and `CATVOX_GCP_CI_SERVICE_ACCOUNT` to `google-github-actions/auth`.
 * **Build job (on PR and push):** `make functions-install` → `make functions-test` (TypeScript compile check plus backend unit tests).
 * **Deploy job (on merge to `main`):** Runs after build passes → `make functions-deploy` (`npm --prefix functions run build` plus `firebase deploy --only functions`).
 * **Integration job (after merge-to-main deploy):** Runs `make functions-integration` against the currently deployed integration-safe Dev environment in `kathelix-catvox-dev`. Integration tests may write temporary Dev data when required and must clean it up. The current suite exchanges the registered App Check debug token for a valid App Check token, verifies that both HTTP Functions reject missing App Check tokens with `401 app_check_unauthorized`, verifies the Firestore quota reservation race contract with temporary `usage/{userId}` data through a direct `@google-cloud/firestore` probe, verifies the machine-readable daily-quota HTTP `429` response and structured Cloud Logging entry, then deletes temporary documents. See ADR-0015, ADR-0017, and ADR-0018.
@@ -409,17 +417,15 @@ GitHub Actions may call Makefile targets for the command body, but workflow YAML
 ### 7.4 CI Bootstrap & GitHub Environment Secrets
 One-time repository setup, GitHub Actions availability, GitHub Environment protection, and the WIF trust model are documented in `docs/CI_BOOTSTRAP.md`.
 
-Per-environment cloud setup is documented in `docs/CREATE_NEW_ENVIRONMENT.md`. Each environment gets its own GCP project, `catvox-ci-sa`, WIF pool/provider, Terraform state bucket, and GitHub Environment secrets.
+Per-environment cloud setup is documented in `docs/CREATE_NEW_ENVIRONMENT.md`. Each environment gets its own GCP project, `catvox-ci-sa`, WIF pool/provider, Terraform state bucket, committed xcconfig values, and GitHub Environment secrets for values that are actually secret or deliberately private.
 
 Active Dev uses the GitHub Environment named `dev` with:
 
 | Secret | Value |
 |---|---|
-| `GCP_PROJECT_ID` | `kathelix-catvox-dev` |
-| `GCP_WORKLOAD_IDENTITY_PROVIDER` | Terraform output `github_actions_wif_provider` |
-| `GCP_SERVICE_ACCOUNT` | Terraform output `ci_service_account_email` |
 | `TF_VAR_ALERT_EMAIL` | Dev alert recipient |
 | `TF_VAR_APP_CHECK_DEBUG_TOKEN` | Dev App Check debug token |
+| `POSTHOG_API_KEY` | Dev PostHog scoped personal API key |
 
 ### 7.5 Environment Creation Runbook
 

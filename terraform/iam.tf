@@ -82,11 +82,12 @@ data "google_project" "project" {
 }
 
 locals {
-  compute_default_sa = "serviceAccount:${data.google_project.project.number}-compute@developer.gserviceaccount.com"
+  compute_default_sa            = "serviceAccount:${data.google_project.project.number}-compute@developer.gserviceaccount.com"
+  manage_gcf_sources_bucket_iam = lower(trimspace(var.manage_gcf_sources_bucket_iam)) == "true"
 }
 
 resource "google_storage_bucket_iam_member" "compute_sa_sources_object_admin" {
-  count  = var.manage_gcf_sources_bucket_iam ? 1 : 0
+  count  = local.manage_gcf_sources_bucket_iam ? 1 : 0
   bucket = "gcf-v2-sources-${data.google_project.project.number}-${var.region}"
   role   = "roles/storage.objectAdmin"
   member = local.compute_default_sa

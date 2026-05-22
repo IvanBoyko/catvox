@@ -33,18 +33,20 @@ The current workflows target the `dev` GitHub Environment. A future Prod slice
 must add separate protected workflow jobs instead of reusing the Dev deploy path.
 When cloning Dev workflow shape for Prod, remove the App Check debug-token
 secret, keep mutable integration-test allowlists Dev-only, and keep Firebase iOS
-app deletion policy at the Terraform default `ABANDON`.
+app deletion policy set to `ABANDON` in `config/environments/prod.xcconfig`.
 
 Required secrets per environment:
 
 | Secret | Purpose |
 |---|---|
-| `GCP_PROJECT_ID` | Target GCP/Firebase project ID. |
-| `GCP_WORKLOAD_IDENTITY_PROVIDER` | WIF provider resource name for that project. |
-| `GCP_SERVICE_ACCOUNT` | CI service account email for that project. |
 | `TF_VAR_ALERT_EMAIL` | Terraform alert recipient. |
 | `TF_VAR_APP_CHECK_DEBUG_TOKEN` | Dev/integration-safe environments only. |
 | `POSTHOG_API_KEY` | PostHog scoped personal API key for this environment's PostHog project. |
+
+Non-secret environment values are committed in
+`config/environments/<env>.xcconfig`. This includes `GCP_PROJECT_ID`,
+`CATVOX_GCP_WIF_PROVIDER`, and `CATVOX_GCP_CI_SERVICE_ACCOUNT`; workflows read
+those values before WIF authentication. See ADR-0021.
 
 ## WIF Trust Model
 

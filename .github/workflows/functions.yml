@@ -8,6 +8,7 @@ on:
       - 'firebase.json'
       - 'docs/systemInstruction.md'
       - 'Makefile'
+      - 'config/environments/**'
       - '.github/workflows/functions.yml'
   pull_request:
     branches: [main]
@@ -16,6 +17,7 @@ on:
       - 'firebase.json'
       - 'docs/systemInstruction.md'
       - 'Makefile'
+      - 'config/environments/**'
       - '.github/workflows/functions.yml'
 
 concurrency:
@@ -67,11 +69,52 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v6
 
+      - name: Read environment config
+        id: env
+        shell: bash
+        run: |
+          set -euo pipefail
+          config="config/environments/${CATVOX_ENVIRONMENT}.xcconfig"
+
+          read_value() {
+            scripts/lib/read-xcconfig-value.sh "$config" "$1"
+          }
+
+          gcp_project_id="$(read_value GCP_PROJECT_ID)"
+          gcp_service_account="$(read_value CATVOX_GCP_CI_SERVICE_ACCOUNT)"
+          gcp_wif_provider="$(read_value CATVOX_GCP_WIF_PROVIDER)"
+
+          if [[ -z "$gcp_project_id" ]]; then
+            echo "GCP_PROJECT_ID must be set in $config" >&2
+            exit 1
+          fi
+          if [[ -z "$gcp_service_account" ]]; then
+            echo "CATVOX_GCP_CI_SERVICE_ACCOUNT must be set in $config" >&2
+            exit 1
+          fi
+          if [[ -z "$gcp_wif_provider" ]]; then
+            echo "CATVOX_GCP_WIF_PROVIDER must be set in $config" >&2
+            exit 1
+          fi
+
+          {
+            printf 'gcp_project_id=%s\n' "$gcp_project_id"
+            printf 'gcp_service_account=%s\n' "$gcp_service_account"
+            printf 'gcp_wif_provider=%s\n' "$gcp_wif_provider"
+          } >> "$GITHUB_OUTPUT"
+
+          {
+            printf 'CATVOX_ENV_CONFIG=%s\n' "$config"
+            printf 'GCP_PROJECT_ID=%s\n' "$gcp_project_id"
+            printf 'CATVOX_GCP_CI_SERVICE_ACCOUNT=%s\n' "$gcp_service_account"
+            printf 'CATVOX_GCP_WIF_PROVIDER=%s\n' "$gcp_wif_provider"
+          } >> "$GITHUB_ENV"
+
       - name: Authenticate to GCP (Workload Identity Federation)
         uses: google-github-actions/auth@v3
         with:
-          workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
-          service_account: ${{ secrets.GCP_SERVICE_ACCOUNT }}
+          workload_identity_provider: ${{ steps.env.outputs.gcp_wif_provider }}
+          service_account: ${{ steps.env.outputs.gcp_service_account }}
 
       - name: Set up Node.js
         uses: actions/setup-node@v6
@@ -87,8 +130,6 @@ jobs:
         run: make functions-install
 
       - name: Build and deploy to Firebase
-        env:
-          FIREBASE_PROJECT: ${{ secrets.GCP_PROJECT_ID }}
         run: make functions-deploy
 
   # ── Integration: post-deploy ─────────────────────────────────────────────────
@@ -104,11 +145,52 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v6
 
+      - name: Read environment config
+        id: env
+        shell: bash
+        run: |
+          set -euo pipefail
+          config="config/environments/${CATVOX_ENVIRONMENT}.xcconfig"
+
+          read_value() {
+            scripts/lib/read-xcconfig-value.sh "$config" "$1"
+          }
+
+          gcp_project_id="$(read_value GCP_PROJECT_ID)"
+          gcp_service_account="$(read_value CATVOX_GCP_CI_SERVICE_ACCOUNT)"
+          gcp_wif_provider="$(read_value CATVOX_GCP_WIF_PROVIDER)"
+
+          if [[ -z "$gcp_project_id" ]]; then
+            echo "GCP_PROJECT_ID must be set in $config" >&2
+            exit 1
+          fi
+          if [[ -z "$gcp_service_account" ]]; then
+            echo "CATVOX_GCP_CI_SERVICE_ACCOUNT must be set in $config" >&2
+            exit 1
+          fi
+          if [[ -z "$gcp_wif_provider" ]]; then
+            echo "CATVOX_GCP_WIF_PROVIDER must be set in $config" >&2
+            exit 1
+          fi
+
+          {
+            printf 'gcp_project_id=%s\n' "$gcp_project_id"
+            printf 'gcp_service_account=%s\n' "$gcp_service_account"
+            printf 'gcp_wif_provider=%s\n' "$gcp_wif_provider"
+          } >> "$GITHUB_OUTPUT"
+
+          {
+            printf 'CATVOX_ENV_CONFIG=%s\n' "$config"
+            printf 'GCP_PROJECT_ID=%s\n' "$gcp_project_id"
+            printf 'CATVOX_GCP_CI_SERVICE_ACCOUNT=%s\n' "$gcp_service_account"
+            printf 'CATVOX_GCP_WIF_PROVIDER=%s\n' "$gcp_wif_provider"
+          } >> "$GITHUB_ENV"
+
       - name: Authenticate to GCP (Workload Identity Federation)
         uses: google-github-actions/auth@v3
         with:
-          workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
-          service_account: ${{ secrets.GCP_SERVICE_ACCOUNT }}
+          workload_identity_provider: ${{ steps.env.outputs.gcp_wif_provider }}
+          service_account: ${{ steps.env.outputs.gcp_service_account }}
 
       - name: Set up gcloud
         uses: google-github-actions/setup-gcloud@v3
@@ -125,7 +207,6 @@ jobs:
 
       - name: Run integration tests
         env:
-          CATVOX_PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
           # DEV ONLY — Prod smoke checks must not include prod in this mutable-test allowlist.
           CATVOX_INTEGRATION_SAFE_ENVIRONMENTS: dev
           CATVOX_APP_CHECK_DEBUG_TOKEN: ${{ secrets.TF_VAR_APP_CHECK_DEBUG_TOKEN }}

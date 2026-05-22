@@ -12,10 +12,13 @@ CATVOX_ENVIRONMENT ?= dev
 CATVOX_ENV_CONFIG ?= config/environments/$(CATVOX_ENVIRONMENT).xcconfig
 catvox_xcconfig_value = $(strip $(shell scripts/lib/read-xcconfig-value.sh '$(CATVOX_ENV_CONFIG)' '$(1)' 2>/dev/null))
 
-GCP_PROJECT_ID ?= $(or $(call catvox_xcconfig_value,GCP_PROJECT_ID),kathelix-catvox-dev)
+GCP_PROJECT_ID ?= $(call catvox_xcconfig_value,GCP_PROJECT_ID)
 FIREBASE_PROJECT ?= $(or $(call catvox_xcconfig_value,FIREBASE_PROJECT),$(GCP_PROJECT_ID))
 CATVOX_PROJECT_ID ?= $(or $(call catvox_xcconfig_value,CATVOX_PROJECT_ID),$(GCP_PROJECT_ID))
-CATVOX_FUNCTION_REGION ?= $(or $(call catvox_xcconfig_value,CATVOX_FUNCTION_REGION),us-central1)
+CATVOX_FUNCTION_REGION ?= $(call catvox_xcconfig_value,CATVOX_FUNCTION_REGION)
+CATVOX_FIRESTORE_LOCATION ?= $(call catvox_xcconfig_value,CATVOX_FIRESTORE_LOCATION)
+CATVOX_GCP_CI_SERVICE_ACCOUNT ?= $(call catvox_xcconfig_value,CATVOX_GCP_CI_SERVICE_ACCOUNT)
+CATVOX_GCP_WIF_PROVIDER ?= $(call catvox_xcconfig_value,CATVOX_GCP_WIF_PROVIDER)
 CATVOX_BACKEND_SERVICE_ACCOUNT ?= $(or $(call catvox_xcconfig_value,CATVOX_BACKEND_SERVICE_ACCOUNT),catvox-backend-sa@$(FIREBASE_PROJECT).iam.gserviceaccount.com)
 CATVOX_SIGNED_UPLOAD_URL_HOST ?= $(or $(call catvox_xcconfig_value,CATVOX_SIGNED_UPLOAD_URL_HOST),replace-with-dev-signed-upload-host)
 CATVOX_ANALYSE_VIDEO_HOST ?= $(or $(call catvox_xcconfig_value,CATVOX_ANALYSE_VIDEO_HOST),replace-with-dev-analyse-video-host)
@@ -23,12 +26,18 @@ CATVOX_SIGNED_UPLOAD_URL_ENDPOINT ?= https://$(CATVOX_SIGNED_UPLOAD_URL_HOST)
 CATVOX_ANALYSE_VIDEO_ENDPOINT ?= https://$(CATVOX_ANALYSE_VIDEO_HOST)
 CATVOX_FIREBASE_APP_ID ?= $(or $(call catvox_xcconfig_value,CATVOX_FIREBASE_APP_ID),replace-with-dev-firebase-app-id)
 CATVOX_FIREBASE_API_KEY ?= $(or $(call catvox_xcconfig_value,CATVOX_FIREBASE_API_KEY),replace-with-dev-firebase-api-key)
-CATVOX_IOS_BUNDLE_ID ?= $(or $(call catvox_xcconfig_value,CATVOX_IOS_BUNDLE_ID),$(call catvox_xcconfig_value,CATVOX_PRODUCT_BUNDLE_IDENTIFIER),com.kathelix.catvox.dev)
+CATVOX_IOS_BUNDLE_ID ?= $(or $(call catvox_xcconfig_value,CATVOX_IOS_BUNDLE_ID),$(call catvox_xcconfig_value,CATVOX_PRODUCT_BUNDLE_IDENTIFIER))
+CATVOX_FIREBASE_IOS_APP_DISPLAY_NAME ?= $(call catvox_xcconfig_value,CATVOX_FIREBASE_IOS_APP_DISPLAY_NAME)
+CATVOX_FIREBASE_IOS_APP_DELETION_POLICY ?= $(call catvox_xcconfig_value,CATVOX_FIREBASE_IOS_APP_DELETION_POLICY)
+CATVOX_FIREBASE_APPLE_TEAM_ID ?= $(call catvox_xcconfig_value,CATVOX_FIREBASE_APPLE_TEAM_ID)
+CATVOX_ENABLE_APP_CHECK_DEBUG_TOKEN ?= $(call catvox_xcconfig_value,CATVOX_ENABLE_APP_CHECK_DEBUG_TOKEN)
+CATVOX_APP_CHECK_DEBUG_TOKEN_DISPLAY_NAME ?= $(call catvox_xcconfig_value,CATVOX_APP_CHECK_DEBUG_TOKEN_DISPLAY_NAME)
+CATVOX_MANAGE_GCF_SOURCES_BUCKET_IAM ?= $(call catvox_xcconfig_value,CATVOX_MANAGE_GCF_SOURCES_BUCKET_IAM)
 CATVOX_INTEGRATION_MUTATIONS_ALLOWED ?= 1
 CATVOX_INTEGRATION_SAFE_ENVIRONMENTS ?= $(or $(call catvox_xcconfig_value,CATVOX_INTEGRATION_SAFE_ENVIRONMENTS),dev)
 CATVOX_TF_BACKEND_CONFIG ?= terraform/backend/$(CATVOX_ENVIRONMENT).hcl
 CATVOX_TF_VARS_FILE ?= terraform/env/$(CATVOX_ENVIRONMENT).tfvars
-CATVOX_TF_STATE_BUCKET ?= catvox-tf-state-$(GCP_PROJECT_ID)
+CATVOX_TF_STATE_BUCKET ?= $(or $(call catvox_xcconfig_value,CATVOX_TF_STATE_BUCKET),catvox-tf-state-$(GCP_PROJECT_ID))
 CATVOX_TF_STATE_PREFIX ?= catvox/state
 CATVOX_TF_INIT_FLAGS ?= -reconfigure
 # Backward-compatible alias used by App Check token resolution helpers.
@@ -56,7 +65,7 @@ catvox_tf_vars_rel = $(patsubst terraform/%,%,$(CATVOX_TF_VARS_FILE))
 # Local runs usually use ignored backend HCL files; CI supplies equivalent inline backend flags.
 catvox_tf_backend_args = $(if $(wildcard $(CATVOX_TF_BACKEND_CONFIG)),-backend-config="$(catvox_tf_backend_rel)",-backend-config="bucket=$(CATVOX_TF_STATE_BUCKET)" -backend-config="prefix=$(CATVOX_TF_STATE_PREFIX)")
 catvox_tf_var_file_arg = $(if $(wildcard $(CATVOX_TF_VARS_FILE)),-var-file="$(catvox_tf_vars_rel)",)
-catvox_tf_env_args = TF_VAR_environment_name="$(CATVOX_ENVIRONMENT)" TF_VAR_project_id="$(GCP_PROJECT_ID)"
+catvox_tf_env_args = TF_VAR_environment_name="$(CATVOX_ENVIRONMENT)" TF_VAR_project_id="$(GCP_PROJECT_ID)" TF_VAR_region="$(CATVOX_FUNCTION_REGION)" TF_VAR_firestore_location="$(CATVOX_FIRESTORE_LOCATION)" TF_VAR_tf_state_bucket="$(CATVOX_TF_STATE_BUCKET)" TF_VAR_firebase_ios_bundle_id="$(CATVOX_IOS_BUNDLE_ID)" TF_VAR_firebase_ios_app_display_name="$(CATVOX_FIREBASE_IOS_APP_DISPLAY_NAME)" TF_VAR_firebase_ios_app_deletion_policy="$(CATVOX_FIREBASE_IOS_APP_DELETION_POLICY)" TF_VAR_firebase_apple_team_id="$(CATVOX_FIREBASE_APPLE_TEAM_ID)" TF_VAR_enable_app_check_debug_token="$(CATVOX_ENABLE_APP_CHECK_DEBUG_TOKEN)" TF_VAR_app_check_debug_token_display_name="$(CATVOX_APP_CHECK_DEBUG_TOKEN_DISPLAY_NAME)" TF_VAR_manage_gcf_sources_bucket_iam="$(CATVOX_MANAGE_GCF_SOURCES_BUCKET_IAM)"
 
 catvox_posthog_tf_backend_rel = $(patsubst terraform/posthog/%,%,$(CATVOX_POSTHOG_TF_BACKEND_CONFIG))
 catvox_posthog_tf_vars_rel = $(patsubst terraform/posthog/%,%,$(CATVOX_POSTHOG_TF_VARS_FILE))
@@ -118,9 +127,14 @@ help:
 		'Environment overrides:' \
 		'  CATVOX_ENVIRONMENT=dev selects config/environments/dev.xcconfig plus matching Terraform backend/tfvars basenames' \
 		'  GCP_PROJECT_ID=... FIREBASE_PROJECT=... CATVOX_PROJECT_ID=...' \
+		'  CATVOX_FUNCTION_REGION=... CATVOX_FIRESTORE_LOCATION=...' \
+		'  CATVOX_GCP_CI_SERVICE_ACCOUNT=... CATVOX_GCP_WIF_PROVIDER=...' \
 		'  CATVOX_SIGNED_UPLOAD_URL_HOST=... CATVOX_ANALYSE_VIDEO_HOST=...' \
 		'  CATVOX_SIGNED_UPLOAD_URL_ENDPOINT=... CATVOX_ANALYSE_VIDEO_ENDPOINT=... override full URLs' \
 		'  CATVOX_FIREBASE_APP_ID=... CATVOX_FIREBASE_API_KEY=... CATVOX_IOS_BUNDLE_ID=...' \
+		'  CATVOX_FIREBASE_IOS_APP_DISPLAY_NAME=... CATVOX_FIREBASE_IOS_APP_DELETION_POLICY=...' \
+		'  CATVOX_FIREBASE_APPLE_TEAM_ID=... CATVOX_ENABLE_APP_CHECK_DEBUG_TOKEN=true|false' \
+		'  CATVOX_APP_CHECK_DEBUG_TOKEN_DISPLAY_NAME=... CATVOX_MANAGE_GCF_SOURCES_BUCKET_IAM=true|false' \
 		'  CATVOX_INTEGRATION_SAFE_ENVIRONMENTS=dev marks mutable-test environments' \
 		'  CATVOX_APP_CHECK_DEBUG_TOKEN=... make functions-integration' \
 		'  CATVOX_TF_BACKEND_CONFIG=terraform/backend/dev.hcl overrides Terraform backend config; basename must match CATVOX_ENVIRONMENT' \
@@ -409,9 +423,17 @@ environment-create:
 	@CATVOX_ENVIRONMENT="$(CATVOX_ENVIRONMENT)" \
 	 GCP_PROJECT_ID="$(GCP_PROJECT_ID)" \
 	 FIREBASE_PROJECT="$(FIREBASE_PROJECT)" \
+	 CATVOX_FUNCTION_REGION="$(CATVOX_FUNCTION_REGION)" \
+	 CATVOX_FIRESTORE_LOCATION="$(CATVOX_FIRESTORE_LOCATION)" \
 	 CATVOX_TF_BACKEND_CONFIG="$(CATVOX_TF_BACKEND_CONFIG)" \
 	 CATVOX_TF_VARS_FILE="$(CATVOX_TF_VARS_FILE)" \
 	 CATVOX_TF_STATE_BUCKET="$(CATVOX_TF_STATE_BUCKET)" \
 	 CATVOX_TF_STATE_PREFIX="$(CATVOX_TF_STATE_PREFIX)" \
 	 CATVOX_IOS_BUNDLE_ID="$(CATVOX_IOS_BUNDLE_ID)" \
+	 CATVOX_FIREBASE_IOS_APP_DISPLAY_NAME="$(CATVOX_FIREBASE_IOS_APP_DISPLAY_NAME)" \
+	 CATVOX_FIREBASE_IOS_APP_DELETION_POLICY="$(CATVOX_FIREBASE_IOS_APP_DELETION_POLICY)" \
+	 CATVOX_FIREBASE_APPLE_TEAM_ID="$(CATVOX_FIREBASE_APPLE_TEAM_ID)" \
+	 CATVOX_ENABLE_APP_CHECK_DEBUG_TOKEN="$(CATVOX_ENABLE_APP_CHECK_DEBUG_TOKEN)" \
+	 CATVOX_APP_CHECK_DEBUG_TOKEN_DISPLAY_NAME="$(CATVOX_APP_CHECK_DEBUG_TOKEN_DISPLAY_NAME)" \
+	 CATVOX_MANAGE_GCF_SOURCES_BUCKET_IAM="$(CATVOX_MANAGE_GCF_SOURCES_BUCKET_IAM)" \
 	 ./scripts/create-environment.sh

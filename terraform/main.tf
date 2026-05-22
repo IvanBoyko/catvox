@@ -31,7 +31,8 @@ provider "google-beta" {
 }
 
 locals {
-  tf_state_bucket = coalesce(var.tf_state_bucket, "catvox-tf-state-${var.project_id}")
+  enable_app_check_debug_token = lower(trimspace(var.enable_app_check_debug_token)) == "true"
+  tf_state_bucket              = coalesce(var.tf_state_bucket, "catvox-tf-state-${var.project_id}")
 }
 
 # ── Project APIs ──────────────────────────────────────────────────────────────
@@ -182,7 +183,7 @@ resource "google_firebase_app_check_app_attest_config" "ios" {
 
 resource "google_firebase_app_check_debug_token" "ios_dev" {
   provider = google-beta
-  count    = var.enable_app_check_debug_token ? 1 : 0
+  count    = local.enable_app_check_debug_token ? 1 : 0
   project  = var.project_id
 
   app_id       = google_firebase_apple_app.ios.app_id
@@ -191,7 +192,7 @@ resource "google_firebase_app_check_debug_token" "ios_dev" {
 
   lifecycle {
     precondition {
-      condition     = !var.enable_app_check_debug_token || try(trimspace(var.app_check_debug_token) != "", false)
+      condition     = !local.enable_app_check_debug_token || try(trimspace(var.app_check_debug_token) != "", false)
       error_message = "app_check_debug_token must be set when enable_app_check_debug_token is true."
     }
   }
@@ -222,7 +223,7 @@ resource "google_secret_manager_secret_version" "gcp_project_id" {
 }
 
 resource "google_secret_manager_secret" "app_check_debug_token" {
-  count     = var.enable_app_check_debug_token ? 1 : 0
+  count     = local.enable_app_check_debug_token ? 1 : 0
   secret_id = "APP_CHECK_DEBUG_TOKEN"
   replication {
     auto {}
@@ -231,7 +232,7 @@ resource "google_secret_manager_secret" "app_check_debug_token" {
 }
 
 resource "google_secret_manager_secret_version" "app_check_debug_token" {
-  count       = var.enable_app_check_debug_token ? 1 : 0
+  count       = local.enable_app_check_debug_token ? 1 : 0
   secret      = google_secret_manager_secret.app_check_debug_token[0].id
   secret_data = var.app_check_debug_token # sensitive — supplied via tfvars
 }

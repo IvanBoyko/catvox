@@ -2,7 +2,7 @@
 
 This Terraform root manages PostHog projects, dashboards, and insights for one
 CatVox environment at a time. PostHog environments map 1:1 to CatVox
-environments — see ADR-0019 and ADR-0020.
+environments — see ADR-0019, ADR-0020, and ADR-0021.
 
 ## State
 
@@ -33,7 +33,8 @@ Per-environment values come from two places:
   variable.
 
 There is no `terraform/posthog/env/<env>.tfvars` directory. The xcconfig file
-is the authoritative environment definition. See ADR-0020 for the rationale.
+is the authoritative environment definition. See ADR-0020 and ADR-0021 for the
+rationale.
 The Makefile rejects backend/tfvars basenames that do not match
 `CATVOX_ENVIRONMENT`.
 
@@ -55,9 +56,10 @@ plan and apply interactively.
 ## CI flow
 
 The `.github/workflows/posthog-terraform.yml` workflow runs `plan` on PRs that
-touch `terraform/posthog/**` or the workflow itself, and runs `apply` on push
-to `main`. It targets the `dev` GitHub Environment and reads the PostHog API
-key secret from there.
+touch `terraform/posthog/**`, `config/environments/**`, or the workflow itself,
+and runs `apply` on push to `main`. It targets the `dev` GitHub Environment,
+reads GCP auth identity from xcconfig, and reads the PostHog API key secret from
+the GitHub Environment.
 
 ## Slice scope
 

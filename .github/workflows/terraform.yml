@@ -8,6 +8,7 @@ on:
       - '!terraform/posthog/**'
       - 'CatVox/Resources/Firebase/GoogleService-Info-*.plist'
       - 'Makefile'
+      - 'config/environments/**'
       - '.github/workflows/terraform.yml'
   pull_request:
     branches: [main]
@@ -16,6 +17,7 @@ on:
       - '!terraform/posthog/**'
       - 'CatVox/Resources/Firebase/GoogleService-Info-*.plist'
       - 'Makefile'
+      - 'config/environments/**'
       - '.github/workflows/terraform.yml'
 
 # Cancel any in-progress run for the same branch so each push doesn't queue
@@ -32,23 +34,10 @@ permissions:
 env:
   CATVOX_ENVIRONMENT: dev
   CATVOX_TF_STATE_PREFIX: catvox/state
-  GCP_PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
-  # Environment/project Terraform variables are derived by the Makefile from
-  # CATVOX_ENVIRONMENT and GCP_PROJECT_ID.
-  # Remaining TF_VAR_* values are picked up automatically by Terraform.
-  TF_VAR_region: us-central1
-  TF_VAR_firestore_location: nam5
-  TF_VAR_tf_state_bucket: ${{ format('catvox-tf-state-{0}', secrets.GCP_PROJECT_ID) }}
-  TF_VAR_firebase_ios_bundle_id: com.kathelix.catvox.dev
-  TF_VAR_firebase_ios_app_display_name: CatVox Dev iOS
-  # DEV ONLY — Prod-like environments should inherit ABANDON so destroy/refactor cannot delete the App Store Firebase app.
-  TF_VAR_firebase_ios_app_deletion_policy: DELETE
-  TF_VAR_firebase_apple_team_id: QYT76L5836
-  # DEV ONLY — Prod must set false and omit TF_VAR_app_check_debug_token.
-  TF_VAR_enable_app_check_debug_token: true
+
+  # Remaining Terraform secrets. Non-secret GCP/Firebase values come from
+  # config/environments/${CATVOX_ENVIRONMENT}.xcconfig via the Makefile.
   TF_VAR_app_check_debug_token: ${{ secrets.TF_VAR_APP_CHECK_DEBUG_TOKEN }}
-  TF_VAR_app_check_debug_token_display_name: CatVox Dev integration token
-  TF_VAR_manage_gcf_sources_bucket_iam: true
   TF_VAR_alert_email: ${{ secrets.TF_VAR_ALERT_EMAIL }}
 
 jobs:
@@ -65,11 +54,52 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v6
 
+      - name: Read environment config
+        id: env
+        shell: bash
+        run: |
+          set -euo pipefail
+          config="config/environments/${CATVOX_ENVIRONMENT}.xcconfig"
+
+          read_value() {
+            scripts/lib/read-xcconfig-value.sh "$config" "$1"
+          }
+
+          gcp_project_id="$(read_value GCP_PROJECT_ID)"
+          gcp_service_account="$(read_value CATVOX_GCP_CI_SERVICE_ACCOUNT)"
+          gcp_wif_provider="$(read_value CATVOX_GCP_WIF_PROVIDER)"
+
+          if [[ -z "$gcp_project_id" ]]; then
+            echo "GCP_PROJECT_ID must be set in $config" >&2
+            exit 1
+          fi
+          if [[ -z "$gcp_service_account" ]]; then
+            echo "CATVOX_GCP_CI_SERVICE_ACCOUNT must be set in $config" >&2
+            exit 1
+          fi
+          if [[ -z "$gcp_wif_provider" ]]; then
+            echo "CATVOX_GCP_WIF_PROVIDER must be set in $config" >&2
+            exit 1
+          fi
+
+          {
+            printf 'gcp_project_id=%s\n' "$gcp_project_id"
+            printf 'gcp_service_account=%s\n' "$gcp_service_account"
+            printf 'gcp_wif_provider=%s\n' "$gcp_wif_provider"
+          } >> "$GITHUB_OUTPUT"
+
+          {
+            printf 'CATVOX_ENV_CONFIG=%s\n' "$config"
+            printf 'GCP_PROJECT_ID=%s\n' "$gcp_project_id"
+            printf 'CATVOX_GCP_CI_SERVICE_ACCOUNT=%s\n' "$gcp_service_account"
+            printf 'CATVOX_GCP_WIF_PROVIDER=%s\n' "$gcp_wif_provider"
+          } >> "$GITHUB_ENV"
+
       - name: Authenticate to GCP (Workload Identity Federation)
         uses: google-github-actions/auth@v3
         with:
-          workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
-          service_account: ${{ secrets.GCP_SERVICE_ACCOUNT }}
+          workload_identity_provider: ${{ steps.env.outputs.gcp_wif_provider }}
+          service_account: ${{ steps.env.outputs.gcp_service_account }}
 
       - name: Set up Terraform
         uses: hashicorp/setup-terraform@v4
@@ -187,11 +217,52 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v6
 
+      - name: Read environment config
+        id: env
+        shell: bash
+        run: |
+          set -euo pipefail
+          config="config/environments/${CATVOX_ENVIRONMENT}.xcconfig"
+
+          read_value() {
+            scripts/lib/read-xcconfig-value.sh "$config" "$1"
+          }
+
+          gcp_project_id="$(read_value GCP_PROJECT_ID)"
+          gcp_service_account="$(read_value CATVOX_GCP_CI_SERVICE_ACCOUNT)"
+          gcp_wif_provider="$(read_value CATVOX_GCP_WIF_PROVIDER)"
+
+          if [[ -z "$gcp_project_id" ]]; then
+            echo "GCP_PROJECT_ID must be set in $config" >&2
+            exit 1
+          fi
+          if [[ -z "$gcp_service_account" ]]; then
+            echo "CATVOX_GCP_CI_SERVICE_ACCOUNT must be set in $config" >&2
+            exit 1
+          fi
+          if [[ -z "$gcp_wif_provider" ]]; then
+            echo "CATVOX_GCP_WIF_PROVIDER must be set in $config" >&2
+            exit 1
+          fi
+
+          {
+            printf 'gcp_project_id=%s\n' "$gcp_project_id"
+            printf 'gcp_service_account=%s\n' "$gcp_service_account"
+            printf 'gcp_wif_provider=%s\n' "$gcp_wif_provider"
+          } >> "$GITHUB_OUTPUT"
+
+          {
+            printf 'CATVOX_ENV_CONFIG=%s\n' "$config"
+            printf 'GCP_PROJECT_ID=%s\n' "$gcp_project_id"
+            printf 'CATVOX_GCP_CI_SERVICE_ACCOUNT=%s\n' "$gcp_service_account"
+            printf 'CATVOX_GCP_WIF_PROVIDER=%s\n' "$gcp_wif_provider"
+          } >> "$GITHUB_ENV"
+
       - name: Authenticate to GCP (Workload Identity Federation)
         uses: google-github-actions/auth@v3
         with:
-          workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
-          service_account: ${{ secrets.GCP_SERVICE_ACCOUNT }}
+          workload_identity_provider: ${{ steps.env.outputs.gcp_wif_provider }}
+          service_account: ${{ steps.env.outputs.gcp_service_account }}
 
       - name: Set up Terraform
         uses: hashicorp/setup-terraform@v4

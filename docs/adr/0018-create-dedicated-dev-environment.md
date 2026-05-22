@@ -3,6 +3,7 @@
 - Status: Accepted
 - Date: 2026-05-16
 - Owners: Kathelix / CatVox
+- Superseded by: ADR-0021 for non-secret Terraform input value placement
 - Related docs: `docs/HLD.md`, `docs/TRD.md`, `docs/CREATE_NEW_ENVIRONMENT.md`, `docs/CI_BOOTSTRAP.md`, `docs/adr/0017-environment-configuration-model.md`
 
 ## Context

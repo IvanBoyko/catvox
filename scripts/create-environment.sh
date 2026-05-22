@@ -15,18 +15,20 @@ ENVIRONMENT="${CATVOX_ENVIRONMENT:-dev}"
 PROJECT_ID="${GCP_PROJECT_ID:-${FIREBASE_PROJECT:-}}"
 PROJECT_DISPLAY_NAME="${PROJECT_DISPLAY_NAME:-Kathelix CatVox ${ENVIRONMENT}}"
 REGION="${CATVOX_FUNCTION_REGION:-us-central1}"
-FIRESTORE_LOCATION="${FIRESTORE_LOCATION:-nam5}"
+FIRESTORE_LOCATION="${CATVOX_FIRESTORE_LOCATION:-${FIRESTORE_LOCATION:-nam5}}"
 STATE_BUCKET="${CATVOX_TF_STATE_BUCKET:-catvox-tf-state-${PROJECT_ID}}"
 STATE_PREFIX="${CATVOX_TF_STATE_PREFIX:-catvox/state}"
 BACKEND_CONFIG="${CATVOX_TF_BACKEND_CONFIG:-terraform/backend/${ENVIRONMENT}.hcl}"
 TFVARS_FILE="${CATVOX_TF_VARS_FILE:-terraform/env/${ENVIRONMENT}.tfvars}"
 IOS_BUNDLE_ID="${CATVOX_IOS_BUNDLE_ID:-com.kathelix.catvox.${ENVIRONMENT}}"
-IOS_APP_DISPLAY_NAME="${FIREBASE_IOS_APP_DISPLAY_NAME:-CatVox ${ENVIRONMENT} iOS}"
-IOS_APP_DELETION_POLICY="${FIREBASE_IOS_APP_DELETION_POLICY:-ABANDON}"
-APPLE_TEAM_ID="${FIREBASE_APPLE_TEAM_ID:-QYT76L5836}"
+IOS_APP_DISPLAY_NAME="${CATVOX_FIREBASE_IOS_APP_DISPLAY_NAME:-${FIREBASE_IOS_APP_DISPLAY_NAME:-CatVox ${ENVIRONMENT} iOS}}"
+IOS_APP_DELETION_POLICY="${CATVOX_FIREBASE_IOS_APP_DELETION_POLICY:-${FIREBASE_IOS_APP_DELETION_POLICY:-ABANDON}}"
+APPLE_TEAM_ID="${CATVOX_FIREBASE_APPLE_TEAM_ID:-${FIREBASE_APPLE_TEAM_ID:-QYT76L5836}}"
 RUN_TERRAFORM_APPLY="${RUN_TERRAFORM_APPLY:-0}"
 RUN_FUNCTIONS_DEPLOY="${RUN_FUNCTIONS_DEPLOY:-0}"
-ENABLE_APP_CHECK_DEBUG_TOKEN="${ENABLE_APP_CHECK_DEBUG_TOKEN:-}"
+ENABLE_APP_CHECK_DEBUG_TOKEN="${CATVOX_ENABLE_APP_CHECK_DEBUG_TOKEN:-${ENABLE_APP_CHECK_DEBUG_TOKEN:-}}"
+APP_CHECK_DEBUG_TOKEN_DISPLAY_NAME="${CATVOX_APP_CHECK_DEBUG_TOKEN_DISPLAY_NAME:-CatVox ${ENVIRONMENT} integration token}"
+MANAGE_GCF_SOURCES_BUCKET_IAM="${CATVOX_MANAGE_GCF_SOURCES_BUCKET_IAM:-true}"
 
 if [[ -z "${PROJECT_ID}" ]]; then
   echo "GCP_PROJECT_ID or FIREBASE_PROJECT is required." >&2
@@ -123,52 +125,49 @@ else
   echo "Keeping existing ${BACKEND_CONFIG}"
 fi
 
-if [[ ! -f "${TFVARS_FILE}" ]]; then
-  if [[ -z "${ENABLE_APP_CHECK_DEBUG_TOKEN}" ]]; then
-    if [[ -n "${APP_CHECK_DEBUG_TOKEN:-}" ]]; then
-      ENABLE_APP_CHECK_DEBUG_TOKEN="true"
-    else
-      ENABLE_APP_CHECK_DEBUG_TOKEN="false"
-    fi
+if [[ -z "${ENABLE_APP_CHECK_DEBUG_TOKEN}" ]]; then
+  if [[ -n "${APP_CHECK_DEBUG_TOKEN:-}" ]]; then
+    ENABLE_APP_CHECK_DEBUG_TOKEN="true"
+  else
+    ENABLE_APP_CHECK_DEBUG_TOKEN="false"
   fi
-  case "$(printf '%s' "${ENABLE_APP_CHECK_DEBUG_TOKEN}" | tr '[:upper:]' '[:lower:]')" in
-    1|true|yes)
-      ENABLE_APP_CHECK_DEBUG_TOKEN="true"
-      ;;
-    0|false|no)
-      ENABLE_APP_CHECK_DEBUG_TOKEN="false"
-      ;;
-    *)
-      echo "ENABLE_APP_CHECK_DEBUG_TOKEN must be true or false." >&2
-      exit 1
-      ;;
-  esac
+fi
+case "$(printf '%s' "${ENABLE_APP_CHECK_DEBUG_TOKEN}" | tr '[:upper:]' '[:lower:]')" in
+  1|true|yes)
+    ENABLE_APP_CHECK_DEBUG_TOKEN="true"
+    ;;
+  0|false|no)
+    ENABLE_APP_CHECK_DEBUG_TOKEN="false"
+    ;;
+  *)
+    echo "CATVOX_ENABLE_APP_CHECK_DEBUG_TOKEN or ENABLE_APP_CHECK_DEBUG_TOKEN must be true or false." >&2
+    exit 1
+    ;;
+esac
 
+if [[ ! -f "${TFVARS_FILE}" ]]; then
   app_check_line='app_check_debug_token             = null'
   if [[ -n "${APP_CHECK_DEBUG_TOKEN:-}" ]]; then
     app_check_line="app_check_debug_token             = \"$(quote_tf_string "${APP_CHECK_DEBUG_TOKEN}")\""
   fi
   alert_email="${ALERT_EMAIL:-you@example.com}"
   cat > "${TFVARS_FILE}" <<EOF
-environment_name                  = "${ENVIRONMENT}"
-project_id                        = "${PROJECT_ID}"
-region                            = "${REGION}"
-firestore_location                = "${FIRESTORE_LOCATION}"
-tf_state_bucket                   = "${STATE_BUCKET}"
-firebase_ios_bundle_id            = "${IOS_BUNDLE_ID}"
-firebase_ios_app_display_name     = "${IOS_APP_DISPLAY_NAME}"
-firebase_ios_app_deletion_policy  = "${IOS_APP_DELETION_POLICY}"
-firebase_apple_team_id            = "${APPLE_TEAM_ID}"
-enable_app_check_debug_token      = ${ENABLE_APP_CHECK_DEBUG_TOKEN}
 ${app_check_line}
-app_check_debug_token_display_name = "CatVox ${ENVIRONMENT} integration token"
-manage_gcf_sources_bucket_iam    = true
-alert_email                       = "${alert_email}"
+alert_email           = "${alert_email}"
 EOF
   echo "Created ${TFVARS_FILE}"
 else
   echo "Keeping existing ${TFVARS_FILE}"
 fi
+
+export CATVOX_FUNCTION_REGION="${REGION}"
+export CATVOX_FIRESTORE_LOCATION="${FIRESTORE_LOCATION}"
+export CATVOX_FIREBASE_IOS_APP_DISPLAY_NAME="${IOS_APP_DISPLAY_NAME}"
+export CATVOX_FIREBASE_IOS_APP_DELETION_POLICY="${IOS_APP_DELETION_POLICY}"
+export CATVOX_FIREBASE_APPLE_TEAM_ID="${APPLE_TEAM_ID}"
+export CATVOX_ENABLE_APP_CHECK_DEBUG_TOKEN="${ENABLE_APP_CHECK_DEBUG_TOKEN}"
+export CATVOX_APP_CHECK_DEBUG_TOKEN_DISPLAY_NAME="${APP_CHECK_DEBUG_TOKEN_DISPLAY_NAME}"
+export CATVOX_MANAGE_GCF_SOURCES_BUCKET_IAM="${MANAGE_GCF_SOURCES_BUCKET_IAM}"
 
 make terraform-init \
   CATVOX_ENVIRONMENT="${ENVIRONMENT}" \
@@ -216,14 +215,28 @@ fi
 
 cat <<EOF
 
-Next values to add to the GitHub Environment named '${ENVIRONMENT}':
-  GCP_PROJECT_ID=${PROJECT_ID}
-  GCP_SERVICE_ACCOUNT=catvox-ci-sa@${PROJECT_ID}.iam.gserviceaccount.com
-  GCP_WORKLOAD_IDENTITY_PROVIDER=<terraform output -raw github_actions_wif_provider>
+Remaining secrets to add to the GitHub Environment named '${ENVIRONMENT}':
   TF_VAR_ALERT_EMAIL=<same alert email used in ${TFVARS_FILE}>
   TF_VAR_APP_CHECK_DEBUG_TOKEN=<Dev only; same UUID used in ${TFVARS_FILE}>
 
-After Functions deploy, update config/environments/${ENVIRONMENT}.xcconfig with:
+After Terraform apply and Functions deploy, update config/environments/${ENVIRONMENT}.xcconfig with:
+  GCP_PROJECT_ID=${PROJECT_ID}
+  FIREBASE_PROJECT=${PROJECT_ID}
+  CATVOX_PROJECT_ID=${PROJECT_ID}
+  CATVOX_ENVIRONMENT=${ENVIRONMENT}
+  CATVOX_FUNCTION_REGION=${REGION}
+  CATVOX_FIRESTORE_LOCATION=${FIRESTORE_LOCATION}
+  CATVOX_TF_STATE_BUCKET=${STATE_BUCKET}
+  CATVOX_GCP_CI_SERVICE_ACCOUNT=catvox-ci-sa@${PROJECT_ID}.iam.gserviceaccount.com
+  CATVOX_GCP_WIF_PROVIDER=projects/${PROJECT_NUMBER}/locations/global/workloadIdentityPools/github-actions-pool/providers/github-actions-provider
+  CATVOX_PRODUCT_BUNDLE_IDENTIFIER=${IOS_BUNDLE_ID}
+  CATVOX_IOS_BUNDLE_ID=${IOS_BUNDLE_ID}
+  CATVOX_FIREBASE_IOS_APP_DISPLAY_NAME=${IOS_APP_DISPLAY_NAME}
+  CATVOX_FIREBASE_IOS_APP_DELETION_POLICY=${IOS_APP_DELETION_POLICY}
+  CATVOX_FIREBASE_APPLE_TEAM_ID=${APPLE_TEAM_ID}
+  CATVOX_ENABLE_APP_CHECK_DEBUG_TOKEN=${ENABLE_APP_CHECK_DEBUG_TOKEN}
+  CATVOX_APP_CHECK_DEBUG_TOKEN_DISPLAY_NAME=${APP_CHECK_DEBUG_TOKEN_DISPLAY_NAME}
+  CATVOX_MANAGE_GCF_SOURCES_BUCKET_IAM=${MANAGE_GCF_SOURCES_BUCKET_IAM}
   CATVOX_SIGNED_UPLOAD_URL_HOST=<getSignedUploadURL Cloud Run host only>
   CATVOX_ANALYSE_VIDEO_HOST=<analyseVideo Cloud Run host only>
 EOF
