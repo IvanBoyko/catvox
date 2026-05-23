@@ -342,7 +342,7 @@ GCP/Firebase foundation values sourced from xcconfig include:
 * `CATVOX_FUNCTION_REGION`, `CATVOX_FIRESTORE_LOCATION`, and `CATVOX_TF_STATE_BUCKET`
 * `CATVOX_IOS_BUNDLE_ID` and `CATVOX_PRODUCT_BUNDLE_IDENTIFIER`
 * `CATVOX_FIREBASE_IOS_APP_DISPLAY_NAME`, `CATVOX_FIREBASE_IOS_APP_DELETION_POLICY`, and `CATVOX_FIREBASE_APPLE_TEAM_ID`
-* `CATVOX_ENABLE_APP_CHECK_DEBUG_TOKEN`, `CATVOX_APP_CHECK_DEBUG_TOKEN_DISPLAY_NAME`, and `CATVOX_MANAGE_GCF_SOURCES_BUCKET_IAM`
+* `CATVOX_MANAGE_GCF_SOURCES_BUCKET_IAM` — boolean toggle for environment provisioning.
 
 Committed boolean environment values use lowercase `true` or `false` only.
 Do not use numeric or yes/no forms.

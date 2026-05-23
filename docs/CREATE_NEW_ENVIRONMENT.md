@@ -58,10 +58,8 @@ Pick explicit values before running the script:
 | `CATVOX_FIREBASE_IOS_APP_DISPLAY_NAME` | `CatVox Dev iOS` | Yes |
 | `CATVOX_FIREBASE_IOS_APP_DELETION_POLICY` | `ABANDON` | Yes. Use `ABANDON` for Prod-like environments; use `DELETE` only for disposable Dev-like environments. |
 | `CATVOX_FIREBASE_APPLE_TEAM_ID` | `QYT76L5836` | Yes |
-| `CATVOX_ENABLE_APP_CHECK_DEBUG_TOKEN` | `true` for Dev, `false` for Prod | Yes. Use lowercase `true` or `false` only. |
-| `CATVOX_APP_CHECK_DEBUG_TOKEN_DISPLAY_NAME` | `CatVox Dev integration token` | Yes |
 | `CATVOX_MANAGE_GCF_SOURCES_BUCKET_IAM` | `true` for Dev bootstrap | Yes. Use lowercase `true` or `false` only. |
-| `APP_CHECK_DEBUG_TOKEN` | UUID4 token | Required when `CATVOX_ENABLE_APP_CHECK_DEBUG_TOKEN=true` and the ignored tfvars file does not already exist |
+| `APP_CHECK_DEBUG_TOKEN` | UUID4 token | Optional. Presence registers the token. |
 | `ALERT_EMAIL` | alert recipient | Required when the ignored tfvars file does not already exist |
 | `RUN_TERRAFORM_APPLY` | `0` or `1` | Yes. Set to `1` to apply Terraform; `0` runs only the safe preview phases. |
 | `RUN_FUNCTIONS_DEPLOY` | `0` or `1` | Yes. Set to `1` to deploy Cloud Functions; `0` skips the deploy. |
@@ -84,8 +82,7 @@ CATVOX_IOS_BUNDLE_ID=<bundle-id> \
 CATVOX_FIREBASE_IOS_APP_DISPLAY_NAME="CatVox <Env> iOS" \
 CATVOX_FIREBASE_IOS_APP_DELETION_POLICY=ABANDON \
 CATVOX_FIREBASE_APPLE_TEAM_ID=QYT76L5836 \
-CATVOX_ENABLE_APP_CHECK_DEBUG_TOKEN=false \
-CATVOX_APP_CHECK_DEBUG_TOKEN_DISPLAY_NAME="CatVox <Env> integration token" \
+
 CATVOX_MANAGE_GCF_SOURCES_BUCKET_IAM=true \
 ALERT_EMAIL=<alerts@example.com> \
 RUN_TERRAFORM_APPLY=1 \
@@ -93,9 +90,8 @@ RUN_FUNCTIONS_DEPLOY=1 \
 make environment-create
 ```
 
-For Dev-like environments that intentionally register an App Check debug token,
-set `CATVOX_ENABLE_APP_CHECK_DEBUG_TOKEN=true` and also pass
-`APP_CHECK_DEBUG_TOKEN=<uuid4-debug-token>`.
+If you are bootstrapping an environment that allows mutable integration tests,
+pass `APP_CHECK_DEBUG_TOKEN=<your-uuid4>`.
 
 The script:
 
@@ -159,17 +155,14 @@ CATVOX_IOS_BUNDLE_ID = <bundle-id>
 CATVOX_FIREBASE_IOS_APP_DISPLAY_NAME = <display-name>
 CATVOX_FIREBASE_IOS_APP_DELETION_POLICY = ABANDON
 CATVOX_FIREBASE_APPLE_TEAM_ID = QYT76L5836
-CATVOX_ENABLE_APP_CHECK_DEBUG_TOKEN = false
-CATVOX_APP_CHECK_DEBUG_TOKEN_DISPLAY_NAME = CatVox <Env> integration token
+
 CATVOX_MANAGE_GCF_SOURCES_BUCKET_IAM = true
 CATVOX_SIGNED_UPLOAD_URL_HOST = <getSignedUploadURL Cloud Run host only>
 CATVOX_ANALYSE_VIDEO_HOST = <analyseVideo Cloud Run host only>
 ```
 
 Keep `CATVOX_GCP_CI_SERVICE_ACCOUNT` and `CATVOX_GCP_WIF_PROVIDER` as full
-strings, not composed pieces. For Dev-like environments set
-`CATVOX_ENABLE_APP_CHECK_DEBUG_TOKEN = true` only when the matching debug token
-is intentionally present in the GitHub Environment and ignored tfvars file.
+strings, not composed pieces. **Note for App Check:** `config/environments/<env>.xcconfig` no longer requires App Check debug token boolean flags. The token itself in `terraform/env/<env>.tfvars` or the GitHub Environment secret determines registration.
 Committed boolean values must be lowercase `true` or `false`; do not use `1`,
 `0`, `yes`, or `no`.
 

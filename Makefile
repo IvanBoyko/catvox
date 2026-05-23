@@ -82,7 +82,7 @@ CATVOX_POSTHOG_TF_INIT_FLAGS ?= -reconfigure
 catvox_tf_vars_rel = $(patsubst terraform/%,%,$(CATVOX_TF_VARS_FILE))
 catvox_tf_backend_args = -backend-config="bucket=$(CATVOX_TF_STATE_BUCKET)" -backend-config="prefix=$(CATVOX_TF_STATE_PREFIX)"
 catvox_tf_var_file_arg = $(if $(wildcard $(CATVOX_TF_VARS_FILE)),-var-file="$(catvox_tf_vars_rel)",)
-catvox_tf_env_args = TF_VAR_environment_name="$(CATVOX_ENVIRONMENT)" TF_VAR_project_id="$(GCP_PROJECT_ID)" TF_VAR_region="$(CATVOX_FUNCTION_REGION)" TF_VAR_firestore_location="$(CATVOX_FIRESTORE_LOCATION)" TF_VAR_tf_state_bucket="$(CATVOX_TF_STATE_BUCKET)" TF_VAR_firebase_ios_bundle_id="$(CATVOX_IOS_BUNDLE_ID)" TF_VAR_firebase_ios_app_display_name="$(CATVOX_FIREBASE_IOS_APP_DISPLAY_NAME)" TF_VAR_firebase_ios_app_deletion_policy="$(CATVOX_FIREBASE_IOS_APP_DELETION_POLICY)" TF_VAR_firebase_apple_team_id="$(CATVOX_FIREBASE_APPLE_TEAM_ID)" TF_VAR_enable_app_check_debug_token="$(CATVOX_ENABLE_APP_CHECK_DEBUG_TOKEN)" TF_VAR_app_check_debug_token_display_name="$(CATVOX_APP_CHECK_DEBUG_TOKEN_DISPLAY_NAME)" TF_VAR_manage_gcf_sources_bucket_iam="$(CATVOX_MANAGE_GCF_SOURCES_BUCKET_IAM)"
+catvox_tf_env_args = TF_VAR_environment_name="$(CATVOX_ENVIRONMENT)" TF_VAR_project_id="$(GCP_PROJECT_ID)" TF_VAR_region="$(CATVOX_FUNCTION_REGION)" TF_VAR_firestore_location="$(CATVOX_FIRESTORE_LOCATION)" TF_VAR_tf_state_bucket="$(CATVOX_TF_STATE_BUCKET)" TF_VAR_firebase_ios_bundle_id="$(CATVOX_IOS_BUNDLE_ID)" TF_VAR_firebase_ios_app_display_name="$(CATVOX_FIREBASE_IOS_APP_DISPLAY_NAME)" TF_VAR_firebase_ios_app_deletion_policy="$(CATVOX_FIREBASE_IOS_APP_DELETION_POLICY)" TF_VAR_firebase_apple_team_id="$(CATVOX_FIREBASE_APPLE_TEAM_ID)" TF_VAR_manage_gcf_sources_bucket_iam="$(CATVOX_MANAGE_GCF_SOURCES_BUCKET_IAM)"
 
 catvox_posthog_tf_vars_rel = $(patsubst terraform/posthog/%,%,$(CATVOX_POSTHOG_TF_VARS_FILE))
 catvox_posthog_tf_backend_args = -backend-config="bucket=$(CATVOX_POSTHOG_TF_STATE_BUCKET)" -backend-config="prefix=$(CATVOX_POSTHOG_TF_STATE_PREFIX)"
@@ -149,8 +149,7 @@ help:
 		'  CATVOX_SIGNED_UPLOAD_URL_ENDPOINT=... CATVOX_ANALYSE_VIDEO_ENDPOINT=... override full URLs' \
 		'  CATVOX_FIREBASE_APP_ID=... CATVOX_FIREBASE_API_KEY=... CATVOX_IOS_BUNDLE_ID=...' \
 		'  CATVOX_FIREBASE_IOS_APP_DISPLAY_NAME=... CATVOX_FIREBASE_IOS_APP_DELETION_POLICY=...' \
-		'  CATVOX_FIREBASE_APPLE_TEAM_ID=... CATVOX_ENABLE_APP_CHECK_DEBUG_TOKEN=true|false' \
-		'  CATVOX_APP_CHECK_DEBUG_TOKEN_DISPLAY_NAME=... CATVOX_MANAGE_GCF_SOURCES_BUCKET_IAM=true|false' \
+		'  CATVOX_FIREBASE_APPLE_TEAM_ID=... CATVOX_MANAGE_GCF_SOURCES_BUCKET_IAM=true|false' \
 		'  CATVOX_INTEGRATION_SAFE_ENVIRONMENTS=dev marks mutable-test environments' \
 		'  CATVOX_APP_CHECK_DEBUG_TOKEN=... make functions-integration' \
 		'  CATVOX_TFVARS_PATH=... overrides the local tfvars fallback path for App Check debug tokens' \
@@ -447,7 +446,5 @@ environment-create:
 	 CATVOX_FIREBASE_IOS_APP_DISPLAY_NAME="$(CATVOX_FIREBASE_IOS_APP_DISPLAY_NAME)" \
 	 CATVOX_FIREBASE_IOS_APP_DELETION_POLICY="$(CATVOX_FIREBASE_IOS_APP_DELETION_POLICY)" \
 	 CATVOX_FIREBASE_APPLE_TEAM_ID="$(CATVOX_FIREBASE_APPLE_TEAM_ID)" \
-	 CATVOX_ENABLE_APP_CHECK_DEBUG_TOKEN="$(CATVOX_ENABLE_APP_CHECK_DEBUG_TOKEN)" \
-	 CATVOX_APP_CHECK_DEBUG_TOKEN_DISPLAY_NAME="$(CATVOX_APP_CHECK_DEBUG_TOKEN_DISPLAY_NAME)" \
 	 CATVOX_MANAGE_GCF_SOURCES_BUCKET_IAM="$(CATVOX_MANAGE_GCF_SOURCES_BUCKET_IAM)" \
 	 ./scripts/create-environment.sh
