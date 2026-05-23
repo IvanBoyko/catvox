@@ -35,7 +35,7 @@ targets:
         product: FirebaseAppCheck
     configFiles:
       Debug: config/environments/dev.xcconfig
-      Release: config/environments/dev.xcconfig
+      Release: config/environments/prod.xcconfig
     preBuildScripts:
       - name: Validate Firebase Environment Config
         basedOnDependencyAnalysis: false

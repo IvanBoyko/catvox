@@ -59,7 +59,7 @@ variable "app_check_debug_token" {
     Firebase App Check debug token for local development and mutable integration tests.
     Mark as sensitive — never commit the value to source control.
     Generate a UUID4 locally and store it in the environment tfvars / GitHub secret.
-    Required only when enable_app_check_debug_token is true.
+    Optional. Its presence dictates whether the debug token is registered.
   EOT
   type        = string
   default     = null
@@ -67,25 +67,7 @@ variable "app_check_debug_token" {
   nullable    = true
 }
 
-variable "enable_app_check_debug_token" {
-  description = "Whether to register app_check_debug_token for this environment's Firebase iOS app. Sourced from CATVOX_ENABLE_APP_CHECK_DEBUG_TOKEN in config/environments/<env>.xcconfig as true or false."
-  type        = string
 
-  validation {
-    condition     = contains(["true", "false"], lower(trimspace(var.enable_app_check_debug_token)))
-    error_message = "enable_app_check_debug_token must be true or false. Set CATVOX_ENABLE_APP_CHECK_DEBUG_TOKEN in the matching xcconfig."
-  }
-}
-
-variable "app_check_debug_token_display_name" {
-  description = "Display name for the Firebase App Check debug token registered by Terraform. Sourced from CATVOX_APP_CHECK_DEBUG_TOKEN_DISPLAY_NAME in config/environments/<env>.xcconfig."
-  type        = string
-
-  validation {
-    condition     = length(var.app_check_debug_token_display_name) > 0
-    error_message = "app_check_debug_token_display_name must not be empty. Set CATVOX_APP_CHECK_DEBUG_TOKEN_DISPLAY_NAME in the matching xcconfig."
-  }
-}
 
 variable "app_check_token_ttl" {
   description = "Firebase App Check App Attest token TTL."

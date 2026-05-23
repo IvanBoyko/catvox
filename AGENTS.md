@@ -74,7 +74,7 @@ catvox/
 │   ├── iam.tf                     # Service accounts and IAM bindings
 │   ├── variables.tf               # Input variables with defaults
 │   ├── outputs.tf                 # Output values
-│   ├── backend/dev.hcl.example    # Remote backend template
+
 │   ├── env/dev.tfvars.example     # Terraform private-values template
 │   ├── bootstrap_remote_state.sh  # Legacy helper; environment-create handles state bootstrap
 │   ├── bootstrap_wif.sh           # Legacy helper; WIF is now Terraform-managed per environment
@@ -83,7 +83,7 @@ catvox/
 │       ├── variables.tf
 │       ├── outputs.tf
 │       ├── README.md
-│       └── backend/dev.hcl.example
+
 ├── .github/workflows/
 │   ├── build.yml                  # Path-filtered iOS build check on push/PR
 │   ├── functions.yml              # Functions build/deploy/integration workflow
@@ -142,9 +142,9 @@ Environment-dependent app/backend/CI/Terraform non-secret values are parameteriz
 `CATVOX_FIREBASE_APP_ID`, `CATVOX_FIREBASE_API_KEY`, and
 `CATVOX_IOS_BUNDLE_ID`. App-facing defaults live in
 `config/environments/<environment>.xcconfig`; Xcode reads this file through the
-generated project, and the Makefile derives the matching `CATVOX_ENV_CONFIG`,
-Terraform backend, and Terraform tfvars paths from `CATVOX_ENVIRONMENT` by
-default. Terraform targets reject backend/tfvars basenames that do not match
+generated project, and the Makefile derives the matching `CATVOX_ENV_CONFIG` and
+Terraform tfvars path from `CATVOX_ENVIRONMENT` by
+default. Terraform targets reject tfvars basenames that do not match
 `CATVOX_ENVIRONMENT`. Non-secret GCP/Firebase foundation values also live in
 xcconfig and flow through the Makefile as `TF_VAR_*`; ignored
 `terraform/env/<environment>.tfvars` files hold only `app_check_debug_token` and
@@ -172,7 +172,7 @@ xcconfig reader tests should keep this convention covered.
 make ios-generate
 ```
 
-The `schemes:` block in `project.yml` is intentional — XcodeGen silently deletes shared schemes unless they are declared there. Do not remove it.
+The `schemes:` block in `project.yml` is intentional — XcodeGen silently deletes shared schemes unless they are declared there. Do not remove it, and conversely, any `.xcscheme` added under `CatVox.xcodeproj/xcshareddata/xcschemes/` must be declared in the `schemes:` block or it will be silently deleted on the next `make ios-generate`. PR reviewers verifying scheme additions should cross-check the new file against `project.yml:schemes`.
 
 Treat generated `.xcodeproj` and `.xcscheme` diffs as a rendered contract, not meaningless noise. If the rendered project and `project.yml` disagree, fix `project.yml` first, then regenerate.
 
@@ -281,7 +281,7 @@ make terraform-plan   # connects to GCS backend and reviews planned changes
 make terraform-apply CONFIRM=apply
 ```
 
-`terraform/backend/*.hcl` and `terraform/env/*.tfvars` are gitignored. Copy from the matching `.example` files and fill in the remaining private values. Backend HCL still carries remote-state coordinates; tfvars is secrets-only for `app_check_debug_token` and `alert_email`.
+`terraform/env/*.tfvars` is gitignored. Copy from the matching `.example` files and fill in the remaining private values. The tfvars file is secrets-only for `app_check_debug_token` and `alert_email`. The Makefile injects the remote-state coordinates directly via inline `-backend-config` arguments.
 
 ### Service Accounts
 
@@ -356,7 +356,10 @@ Use `docs/CREATE_NEW_ENVIRONMENT.md` and `make environment-create` for new envir
 - Prefer the GitHub connector for creating PRs when available, but if it returns `403 Resource not accessible by integration`, do not retry the same connector path. Fall back to the authenticated `gh` CLI and mention the fallback in the final summary.
 - PR descriptions should capture the original user-visible bug report or feature request, root cause, implementation summary, validation performed, manual test status, and any notable review follow-up. If the user reported an error message or screenshot, preserve the relevant text in the PR body so the review has the original symptom in context.
 - Before posting any GitHub comment or PR description, scan for tokens GitHub auto-resolves: `#N` becomes a cross-reference to a PR/issue in this repo, `@user` notifies, bare GitHub URLs unfurl. Use distinct prefixes for review-finding labels across rounds (`F1`-`Fn` for initial findings, `T1`-`Tn` for test follow-ups, etc.) so inline references unambiguously target one round and don't collide with GitHub's `#N` syntax. If a comment already posted contains a collision, edit it in place via `gh api PATCH /repos/<owner>/<repo>/issues/comments/<id>` rather than reposting.
-- When a PR is one slice of a larger issue or epic, reference the parent issue in the PR body with non-closing language such as `Part of #NN` or `Refs #NN`. Use closing keywords such as `Closes #NN` only on the final PR that actually completes the issue. When available, also associate the PR with the issue in GitHub's Development metadata so the relationship is visible from both sides.
+- Before creating a PR, AI agents MUST evaluate if it corresponds to an existing GitHub Issue (e.g., chores or hotfixes may not need one). If there is no clear parent Issue, the agent must explicitly ask the user: "Should this PR be linked to a GitHub Issue?" before proceeding.
+- If the PR *does* correspond to an issue, it must be linked in two distinct ways:
+  1. **Text Reference in PR Body:** When a PR is one slice of a larger issue, use non-closing language such as `Part of #NN` or `Refs #NN`. Use closing keywords such as `Closes #NN` ONLY on the final PR that actually completes the issue.
+  2. **Development Metadata Section:** For closing PRs, GitHub automatically creates this link. However, for partial (non-closing) PRs, GitHub does not automatically create it, and there is no API to do so programmatically. Therefore, **AI agents MUST explicitly remind the user in their chat response to manually link the PR to the Issue in the "Development" sidebar via the GitHub UI.**
 - For parent issue slice checklists, do not mark an interim slice complete while its PR is still open. Leave the slice unchecked until the PR has merged and the relevant post-merge `main` CI has passed; use PR comments or the PR body for in-progress handoff notes.
 - When review or implementation is bouncing between AI agents (like Codex, Gemini, Claude) and a human reviewer, use concise PR comments as the durable handoff log after meaningful review/fix rounds. Keep chat for decisions and status; keep the PR thread readable for the next agent or reviewer.
 - Every PR comment or PR description an AI agent posts must start with a short italic attribution line on its own at the very top, before any heading or other content, using its own name (e.g., `_Posted by Claude Code_`, `_Posted by Codex_`, or `_Posted by Gemini_`). This makes the AI's comments distinguishable from Ivan's direct comments — since they post under the same GitHub account, the attribution is the only way a future reader can tell them apart. Keep the line role-agnostic; the AI may act as implementer, reviewer, debugger, or planner depending on the task.
@@ -474,11 +477,15 @@ When a review round prompts scope expansion that no longer matches the PR title,
 
 Use severity gating (High / Medium / Low / Observations) with explicit "block on" vs "nice to have" labels. Numbering every nit at Low severity inflates the punch list — cluster sub-low items under a single "Nits" heading rather than giving each its own ID. If a Low or Observation item needs hedging in the chat preview ("borderline", "arguably", "could go either way"), drop it instead of clustering — the clustering rule applies to nits you'd post unconditionally; hedged items add review noise without adding signal.
 
+Before classifying a formatting finding as cosmetic, check whether the formatting is mechanically meaningful in its context. Examples where "stray whitespace" is functional: blank lines inside `\`-terminated shell continuation blocks (the blank line ends the continuation, breaking the documented command), YAML indentation, Makefile leading tabs, Markdown table pipes, and the xcconfig `//` rule that silently truncates URL values. A formatting issue in one of those contexts is a functional bug, not a nit — the hedging-drop rule above does not apply.
+
 When two docs, config files, or build settings name what looks like the same thing differently, trace each name to what it actually points to in code/config before drafting a "pick one" finding. In layered build systems (xcconfig keys, build-setting passthrough, Info.plist values, runtime env-var overrides), the same conceptual value often has multiple correct names at different layers — for example, an xcconfig key like `*_HOST_NAME` that stores hostname only, alongside a runtime env-var override like `*_HOST` that expects a full URL. The first move on a naming disagreement is reconstruction, not arbitration.
 
 When the developer's revision improves on your suggestion (for example, splitting one error case into two semantically distinct cases rather than the tagged-source variant you proposed), call it out explicitly in the next round. Credit the thinking, not just the diff.
 
 For substantive PR reviews, the PR comment thread is the source of truth — the next reviewer (Codex, Claude, Gemini, or human) picks up findings there. Post structured findings, verification tables, and follow-ups to `gh pr comment`, not chat. Chat is for the user's decisions and opinions; the chat reply after posting should be a one-line link to the PR comment, not a duplicate of the findings.
+
+Round-to-round corollary: if a chat-only or otherwise private observation about the work would help the next reviewer or implementer landing cold, and it doesn't get acted on by the next round, promote it to a PR finding on the round after — don't wait for the user to re-raise it. The signal that an observation belongs in the durable thread isn't "the user repeated it" — it's "would the next agent landing cold benefit from seeing this." Examples of "private channels" the corollary applies to: Claude's chat preview to the user, an agent's own scratch/reasoning state, summary comments that get buried by later commits.
 
 When a review surfaces a safety, security, or auth boundary (mutation gates, env-aware checks, predicate functions), bundle a "make this unit-testable" structural suggestion into the same finding — typically: extract the gate as a pure function with explicit inputs. A boundary verifiable only by aiming at the production system is a boundary that won't be verified.
 

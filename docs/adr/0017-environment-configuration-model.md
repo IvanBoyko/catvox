@@ -3,6 +3,7 @@
 - Status: Accepted
 - Date: 2026-05-15
 - Owners: Kathelix / CatVox
+- Amended: 2026-05-24: backend HCL files were retired; Makefile-driven Terraform commands now pass inline backend config from `config/environments/<environment>.xcconfig` (PR #60).
 - Related docs: `docs/HLD.md`, `docs/TRD.md`, `docs/TODO.md` (historical; retired), `project.yml`, `Makefile`, `.github/workflows/`
 
 ## Context
@@ -33,7 +34,7 @@ Initial environment names are:
 - `prod` for App Store production
 
 Environment-specific values must be supplied through build settings, scripts,
-CI secrets, Terraform backend/tfvars files, or deployment environment variables
+CI secrets, Terraform state/tfvars inputs, or deployment environment variables
 rather than scattered source constants.
 
 Each environment owns its own:
@@ -83,8 +84,8 @@ marked integration-safe. Prod receives only protected, non-invasive smoke tests.
   the source of truth so bare Xcode builds and Makefile-driven automation read
   the same environment defaults.
 - Terraform backend configuration cannot use normal Terraform variables, so
-  future state files should use explicit backend config files such as
-  `terraform/backend/<environment>.hcl`.
+  Makefile-driven Terraform commands pass inline backend config derived from
+  `config/environments/<environment>.xcconfig`.
 - Future variable files should follow a matching convention such as
   `terraform/env/<environment>.tfvars`.
 - Runtime Cloud Functions use the same service-account name within each

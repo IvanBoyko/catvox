@@ -1,0 +1,5 @@
+# CatVox Prod Terraform values.
+# Copy to terraform/env/prod.tfvars and fill secret values locally or via CI.
+# Non-secret environment values live in config/environments/prod.xcconfig.
+
+alert_email = "you@example.com"

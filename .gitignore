@@ -82,3 +82,5 @@ terraform/backend/*.hcl
 
 # Codex
 .agents/
+.mcp.json
+.agentsroom/

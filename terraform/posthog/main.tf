@@ -4,7 +4,7 @@
 #
 # This root manages PostHog projects, dashboards, and insights for one CatVox
 # environment at a time. The environment is selected at `terraform init` time
-# via the backend HCL file (see backend/<env>.hcl).
+# via inline `-backend-config` arguments passed by the Makefile.
 #
 # State for each environment lives in the matching GCP project's state bucket
 # with prefix `posthog/state`, alongside the GCP infrastructure state at
