@@ -10,10 +10,6 @@ IOS_UI_TEST_DESTINATION := $(IOS_TEST_DESTINATION)
 
 CATVOX_ENVIRONMENT ?= dev
 CATVOX_ENV_CONFIG ?= config/environments/$(CATVOX_ENVIRONMENT).xcconfig
-ifneq ($(filter prod-smoke,$(MAKECMDGOALS)),)
-CATVOX_ENVIRONMENT := prod
-CATVOX_ENV_CONFIG := config/environments/prod.xcconfig
-endif
 CATVOX_ENV_CACHE_DIR ?= .make.d
 # Derive the cache filename from the full CATVOX_ENV_CONFIG path, not just
 # CATVOX_ENVIRONMENT, so callers that override the config path (e.g.
