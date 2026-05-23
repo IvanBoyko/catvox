@@ -239,8 +239,8 @@ make ios-test
 make functions-integration
 ```
 
-Terraform backend and tfvars basenames must match `CATVOX_ENVIRONMENT`; the
-Makefile rejects mismatched backend/tfvars paths.
+The Terraform tfvars basename must match `CATVOX_ENVIRONMENT`; the
+Makefile rejects mismatched tfvars paths.
 
 Also run a real Debug device scan before retiring or cleaning any previous Dev
 backend.

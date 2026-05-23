@@ -22,7 +22,7 @@ echo "Deprecated helper: use 'make environment-create' for new environments." >&
 
 # ── Configuration ─────────────────────────────────────────────────────────────
 # Legacy helper. New environments should use scripts/create-environment.sh via
-# `make environment-create`, which also writes backend/tfvars files.
+# `make environment-create`, which also sets up the environment properly.
 # PROJECT_ID must match the selected environment project ID. Override via env
 # var if needed:
 #   PROJECT_ID=kathelix-catvox-dev ./bootstrap_remote_state.sh
@@ -77,7 +77,5 @@ echo "✓ State bucket ready: gs://${STATE_BUCKET}"
 echo ""
 echo "Next steps:"
 echo "  1. Prefer make environment-create for new environments."
-echo "  2. Otherwise create terraform/backend/<environment>.hcl with:"
-echo "       bucket = \"${STATE_BUCKET}\""
-echo "       prefix = \"catvox/state\""
+echo "  2. The Makefile will automatically use this bucket name for the environment."
 echo ""

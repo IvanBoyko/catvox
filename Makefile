@@ -141,7 +141,7 @@ help:
 		'  make bootstrap-wif          Legacy helper; WIF is Terraform-managed for new envs' \
 		'' \
 		'Environment overrides:' \
-		'  CATVOX_ENVIRONMENT=dev selects config/environments/dev.xcconfig plus matching Terraform backend/tfvars basenames' \
+		'  CATVOX_ENVIRONMENT=dev selects config/environments/dev.xcconfig plus matching Terraform tfvars basename' \
 		'  GCP_PROJECT_ID=... FIREBASE_PROJECT=... CATVOX_PROJECT_ID=...' \
 		'  CATVOX_FUNCTION_REGION=... CATVOX_FIRESTORE_LOCATION=...' \
 		'  CATVOX_GCP_CI_SERVICE_ACCOUNT=... CATVOX_GCP_WIF_PROVIDER=...' \

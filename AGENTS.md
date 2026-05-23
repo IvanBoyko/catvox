@@ -142,9 +142,9 @@ Environment-dependent app/backend/CI/Terraform non-secret values are parameteriz
 `CATVOX_FIREBASE_APP_ID`, `CATVOX_FIREBASE_API_KEY`, and
 `CATVOX_IOS_BUNDLE_ID`. App-facing defaults live in
 `config/environments/<environment>.xcconfig`; Xcode reads this file through the
-generated project, and the Makefile derives the matching `CATVOX_ENV_CONFIG`,
-Terraform backend, and Terraform tfvars paths from `CATVOX_ENVIRONMENT` by
-default. Terraform targets reject backend/tfvars basenames that do not match
+generated project, and the Makefile derives the matching `CATVOX_ENV_CONFIG` and
+Terraform tfvars path from `CATVOX_ENVIRONMENT` by
+default. Terraform targets reject tfvars basenames that do not match
 `CATVOX_ENVIRONMENT`. Non-secret GCP/Firebase foundation values also live in
 xcconfig and flow through the Makefile as `TF_VAR_*`; ignored
 `terraform/env/<environment>.tfvars` files hold only `app_check_debug_token` and
