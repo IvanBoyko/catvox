@@ -26,6 +26,18 @@ failed_cases=()
 
 note() { printf '  %s\n' "$*"; }
 
+# Portable mtime in seconds since epoch. GNU `stat -f` exists but means
+# something completely different (filesystem info) and exits 0, so the naive
+# `stat -f '%m' || stat -c '%Y'` chain never falls through on Linux. Branch
+# on `uname` to pick the right invocation up front.
+mtime_epoch() {
+  if [[ "$(uname)" == "Darwin" ]]; then
+    stat -f '%m' "$1"
+  else
+    stat -c '%Y' "$1"
+  fi
+}
+
 run_case() {
   local name="$1"
   rm -rf "${repo_root}/.make.d"
@@ -99,11 +111,11 @@ case_cache_hit_on_repeat() {
   make -f Makefile -f "$snapshot_mk" snapshot > /dev/null 2>&1
   local cache=".make.d/config__environments__dev.xcconfig.env.mk"
   local mtime1
-  mtime1=$(stat -f '%m' "$cache" 2>/dev/null || stat -c '%Y' "$cache" 2>/dev/null)
+  mtime1=$(mtime_epoch "$cache")
   sleep 1
   make -f Makefile -f "$snapshot_mk" snapshot > /dev/null 2>&1
   local mtime2
-  mtime2=$(stat -f '%m' "$cache" 2>/dev/null || stat -c '%Y' "$cache" 2>/dev/null)
+  mtime2=$(mtime_epoch "$cache")
   if [[ "$mtime1" != "$mtime2" ]]; then
     note "cache file mtime changed: $mtime1 -> $mtime2 (expected no rebuild)"
     return 1
@@ -115,12 +127,12 @@ case_cache_invalidates_on_xcconfig_touch() {
   make -f Makefile -f "$snapshot_mk" snapshot > /dev/null 2>&1
   local cache=".make.d/config__environments__dev.xcconfig.env.mk"
   local mtime1
-  mtime1=$(stat -f '%m' "$cache" 2>/dev/null || stat -c '%Y' "$cache" 2>/dev/null)
+  mtime1=$(mtime_epoch "$cache")
   sleep 1
   touch config/environments/dev.xcconfig
   make -f Makefile -f "$snapshot_mk" snapshot > /dev/null 2>&1
   local mtime2
-  mtime2=$(stat -f '%m' "$cache" 2>/dev/null || stat -c '%Y' "$cache" 2>/dev/null)
+  mtime2=$(mtime_epoch "$cache")
   if [[ "$mtime1" == "$mtime2" ]]; then
     note "cache file mtime unchanged after touching xcconfig"
     return 1
