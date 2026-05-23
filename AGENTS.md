@@ -172,7 +172,7 @@ xcconfig reader tests should keep this convention covered.
 make ios-generate
 ```
 
-The `schemes:` block in `project.yml` is intentional — XcodeGen silently deletes shared schemes unless they are declared there. Do not remove it.
+The `schemes:` block in `project.yml` is intentional — XcodeGen silently deletes shared schemes unless they are declared there. Do not remove it, and conversely, any `.xcscheme` added under `CatVox.xcodeproj/xcshareddata/xcschemes/` must be declared in the `schemes:` block or it will be silently deleted on the next `make ios-generate`. PR reviewers verifying scheme additions should cross-check the new file against `project.yml:schemes`.
 
 Treat generated `.xcodeproj` and `.xcscheme` diffs as a rendered contract, not meaningless noise. If the rendered project and `project.yml` disagree, fix `project.yml` first, then regenerate.
 
@@ -477,11 +477,15 @@ When a review round prompts scope expansion that no longer matches the PR title,
 
 Use severity gating (High / Medium / Low / Observations) with explicit "block on" vs "nice to have" labels. Numbering every nit at Low severity inflates the punch list — cluster sub-low items under a single "Nits" heading rather than giving each its own ID. If a Low or Observation item needs hedging in the chat preview ("borderline", "arguably", "could go either way"), drop it instead of clustering — the clustering rule applies to nits you'd post unconditionally; hedged items add review noise without adding signal.
 
+Before classifying a formatting finding as cosmetic, check whether the formatting is mechanically meaningful in its context. Examples where "stray whitespace" is functional: blank lines inside `\`-terminated shell continuation blocks (the blank line ends the continuation, breaking the documented command), YAML indentation, Makefile leading tabs, Markdown table pipes, and the xcconfig `//` rule that silently truncates URL values. A formatting issue in one of those contexts is a functional bug, not a nit — the hedging-drop rule above does not apply.
+
 When two docs, config files, or build settings name what looks like the same thing differently, trace each name to what it actually points to in code/config before drafting a "pick one" finding. In layered build systems (xcconfig keys, build-setting passthrough, Info.plist values, runtime env-var overrides), the same conceptual value often has multiple correct names at different layers — for example, an xcconfig key like `*_HOST_NAME` that stores hostname only, alongside a runtime env-var override like `*_HOST` that expects a full URL. The first move on a naming disagreement is reconstruction, not arbitration.
 
 When the developer's revision improves on your suggestion (for example, splitting one error case into two semantically distinct cases rather than the tagged-source variant you proposed), call it out explicitly in the next round. Credit the thinking, not just the diff.
 
 For substantive PR reviews, the PR comment thread is the source of truth — the next reviewer (Codex, Claude, Gemini, or human) picks up findings there. Post structured findings, verification tables, and follow-ups to `gh pr comment`, not chat. Chat is for the user's decisions and opinions; the chat reply after posting should be a one-line link to the PR comment, not a duplicate of the findings.
+
+Round-to-round corollary: if a chat-only or otherwise private observation about the work would help the next reviewer or implementer landing cold, and it doesn't get acted on by the next round, promote it to a PR finding on the round after — don't wait for the user to re-raise it. The signal that an observation belongs in the durable thread isn't "the user repeated it" — it's "would the next agent landing cold benefit from seeing this." Examples of "private channels" the corollary applies to: Claude's chat preview to the user, an agent's own scratch/reasoning state, summary comments that get buried by later commits.
 
 When a review surfaces a safety, security, or auth boundary (mutation gates, env-aware checks, predicate functions), bundle a "make this unit-testable" structural suggestion into the same finding — typically: extract the gate as a pure function with explicit inputs. A boundary verifiable only by aiming at the production system is a boundary that won't be verified.
 
