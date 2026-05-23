@@ -38,6 +38,14 @@ For iOS App Check, Firebase, or async/state-related findings, follow the failure
 
 See `AGENTS.md` § Verifying SDK and Tool Behavior — the rules apply to Claude exactly as written. Verify library behavior against the pinned source before asserting; treat negative claims ("this rule doesn't exist," "this flag isn't supported") as needing empirical verification before they become "remove this" recommendations.
 
+## Verifying local changes before claiming green
+
+Local-host green is not CI green when the change touches a split-personality CLI utility — one that exists on both BSD (macOS) and GNU (Linux) but does something different. Examples: `stat` (`-f` means filesystem-info on GNU and BSD-format on macOS, with overlapping format specifiers that look right but aren't), `date -r` (BSD only), `sed -i ''` vs `sed -i` (BSD requires the empty suffix; GNU rejects it), `readlink -f` (GNU only on older macOS), `mktemp` templates (`mktemp` vs `mktemp -t`), `grep -P`, `awk` regex extensions, `tar --transform`. The naive defensive idiom `bsd_form || gnu_form` does not save you when both invocations exit 0 with different output, which is the common case.
+
+The rule: when a script or test uses any of those utilities, branch on `uname` (or `$OSTYPE`) up front and pick the right invocation explicitly, or run the script on both platforms before claiming green. A `bsd || gnu` fallback chain is a code smell — it implies that one form will fail loudly on the other host, which is rarely true.
+
+When posting a verification table for a change that includes shell scripts or shell-based tests, name the host the verification ran on (e.g. "macOS local" or "Linux runner") so reviewers know whether the green is host-specific or platform-portable. A row that says `make scripts-test: pass` without naming the host overstates what was checked.
+
 ## Posting review content to GitHub
 
 For review writeups, retrospectives, and manual-test plans, use the `gh pr comment` plus temporary-file pattern documented in `AGENTS.md` § GitHub PR Publishing Notes. Do not commit review artifacts to the repo root; keep PR discussion inside the PR so the next reader has the full thread in one place.
