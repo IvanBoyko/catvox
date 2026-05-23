@@ -10,34 +10,54 @@ IOS_UI_TEST_DESTINATION := $(IOS_TEST_DESTINATION)
 
 CATVOX_ENVIRONMENT ?= dev
 CATVOX_ENV_CONFIG ?= config/environments/$(CATVOX_ENVIRONMENT).xcconfig
-catvox_xcconfig_value = $(strip $(shell scripts/lib/read-xcconfig-value.sh '$(CATVOX_ENV_CONFIG)' '$(1)' 2>/dev/null))
+CATVOX_ENV_CACHE_DIR ?= .make.d
+CATVOX_ENV_CACHE ?= $(CATVOX_ENV_CACHE_DIR)/$(CATVOX_ENVIRONMENT).env.mk
 
-GCP_PROJECT_ID ?= $(call catvox_xcconfig_value,GCP_PROJECT_ID)
-FIREBASE_PROJECT ?= $(or $(call catvox_xcconfig_value,FIREBASE_PROJECT),$(GCP_PROJECT_ID))
-CATVOX_PROJECT_ID ?= $(or $(call catvox_xcconfig_value,CATVOX_PROJECT_ID),$(GCP_PROJECT_ID))
-CATVOX_FUNCTION_REGION ?= $(call catvox_xcconfig_value,CATVOX_FUNCTION_REGION)
-CATVOX_FIRESTORE_LOCATION ?= $(call catvox_xcconfig_value,CATVOX_FIRESTORE_LOCATION)
-CATVOX_GCP_CI_SERVICE_ACCOUNT ?= $(call catvox_xcconfig_value,CATVOX_GCP_CI_SERVICE_ACCOUNT)
-CATVOX_GCP_WIF_PROVIDER ?= $(call catvox_xcconfig_value,CATVOX_GCP_WIF_PROVIDER)
-CATVOX_BACKEND_SERVICE_ACCOUNT ?= $(or $(call catvox_xcconfig_value,CATVOX_BACKEND_SERVICE_ACCOUNT),catvox-backend-sa@$(FIREBASE_PROJECT).iam.gserviceaccount.com)
-CATVOX_SIGNED_UPLOAD_URL_HOST ?= $(or $(call catvox_xcconfig_value,CATVOX_SIGNED_UPLOAD_URL_HOST),replace-with-dev-signed-upload-host)
-CATVOX_ANALYSE_VIDEO_HOST ?= $(or $(call catvox_xcconfig_value,CATVOX_ANALYSE_VIDEO_HOST),replace-with-dev-analyse-video-host)
+# Parse <env>.xcconfig once per environment and cache the resulting `KEY ?= VALUE`
+# lines as a Makefile fragment. Standard prerequisite mtime tracking handles
+# invalidation: any change to the xcconfig file or to the parser scripts
+# regenerates the fragment on the next make invocation. Use `mktemp` inside the
+# cache dir so parallel make processes in the same workspace do not race on a
+# fixed `$@.tmp` path.
+$(CATVOX_ENV_CACHE): $(CATVOX_ENV_CONFIG) scripts/lib/emit-xcconfig-env.sh scripts/lib/xcconfig-parse.awk scripts/lib/xcconfig-validate.sh | $(CATVOX_ENV_CACHE_DIR)
+	@tmp=$$(mktemp '$@.XXXXXX') && \
+	  trap 'rm -f "$$tmp"' EXIT && \
+	  scripts/lib/emit-xcconfig-env.sh --format=make '$<' > "$$tmp" && \
+	  mv "$$tmp" '$@'
+
+$(CATVOX_ENV_CACHE_DIR):
+	@mkdir -p '$@'
+
+# When the xcconfig is present, use `include` so a parser/validation failure
+# halts the build loudly. When it is absent (fresh checkout, brand-new env),
+# fall back to `-include` so non-environment targets like `make help` and
+# `make doctor` continue to work; the post-include `?=` fallbacks below cover
+# the unset keys.
+ifneq ($(wildcard $(CATVOX_ENV_CONFIG)),)
+include $(CATVOX_ENV_CACHE)
+else
+-include $(CATVOX_ENV_CACHE)
+endif
+
+# Post-include defaults: apply only when the xcconfig did not set the key.
+# Environment-supplied values (`GCP_PROJECT_ID=foo make ...`) and command-line
+# overrides (`make GCP_PROJECT_ID=foo ...`) still win because `?=` is a no-op on
+# already-defined variables.
+FIREBASE_PROJECT ?= $(GCP_PROJECT_ID)
+CATVOX_PROJECT_ID ?= $(GCP_PROJECT_ID)
+CATVOX_BACKEND_SERVICE_ACCOUNT ?= catvox-backend-sa@$(FIREBASE_PROJECT).iam.gserviceaccount.com
+CATVOX_SIGNED_UPLOAD_URL_HOST ?= replace-with-dev-signed-upload-host
+CATVOX_ANALYSE_VIDEO_HOST ?= replace-with-dev-analyse-video-host
 CATVOX_SIGNED_UPLOAD_URL_ENDPOINT ?= https://$(CATVOX_SIGNED_UPLOAD_URL_HOST)
 CATVOX_ANALYSE_VIDEO_ENDPOINT ?= https://$(CATVOX_ANALYSE_VIDEO_HOST)
-CATVOX_FIREBASE_APP_ID ?= $(or $(call catvox_xcconfig_value,CATVOX_FIREBASE_APP_ID),replace-with-dev-firebase-app-id)
-CATVOX_FIREBASE_API_KEY ?= $(or $(call catvox_xcconfig_value,CATVOX_FIREBASE_API_KEY),replace-with-dev-firebase-api-key)
-CATVOX_IOS_BUNDLE_ID ?= $(or $(call catvox_xcconfig_value,CATVOX_IOS_BUNDLE_ID),$(call catvox_xcconfig_value,CATVOX_PRODUCT_BUNDLE_IDENTIFIER))
-CATVOX_FIREBASE_IOS_APP_DISPLAY_NAME ?= $(call catvox_xcconfig_value,CATVOX_FIREBASE_IOS_APP_DISPLAY_NAME)
-CATVOX_FIREBASE_IOS_APP_DELETION_POLICY ?= $(call catvox_xcconfig_value,CATVOX_FIREBASE_IOS_APP_DELETION_POLICY)
-CATVOX_FIREBASE_APPLE_TEAM_ID ?= $(call catvox_xcconfig_value,CATVOX_FIREBASE_APPLE_TEAM_ID)
-CATVOX_ENABLE_APP_CHECK_DEBUG_TOKEN ?= $(call catvox_xcconfig_value,CATVOX_ENABLE_APP_CHECK_DEBUG_TOKEN)
-CATVOX_APP_CHECK_DEBUG_TOKEN_DISPLAY_NAME ?= $(call catvox_xcconfig_value,CATVOX_APP_CHECK_DEBUG_TOKEN_DISPLAY_NAME)
-CATVOX_MANAGE_GCF_SOURCES_BUCKET_IAM ?= $(call catvox_xcconfig_value,CATVOX_MANAGE_GCF_SOURCES_BUCKET_IAM)
+CATVOX_FIREBASE_APP_ID ?= replace-with-dev-firebase-app-id
+CATVOX_FIREBASE_API_KEY ?= replace-with-dev-firebase-api-key
+CATVOX_IOS_BUNDLE_ID ?= $(CATVOX_PRODUCT_BUNDLE_IDENTIFIER)
 CATVOX_INTEGRATION_MUTATIONS_ALLOWED ?= 1
-CATVOX_INTEGRATION_SAFE_ENVIRONMENTS ?= $(or $(call catvox_xcconfig_value,CATVOX_INTEGRATION_SAFE_ENVIRONMENTS),dev)
+CATVOX_INTEGRATION_SAFE_ENVIRONMENTS ?= dev
 CATVOX_TF_BACKEND_CONFIG ?= terraform/backend/$(CATVOX_ENVIRONMENT).hcl
 CATVOX_TF_VARS_FILE ?= terraform/env/$(CATVOX_ENVIRONMENT).tfvars
-CATVOX_TF_STATE_BUCKET ?= $(or $(call catvox_xcconfig_value,CATVOX_TF_STATE_BUCKET),catvox-tf-state-$(GCP_PROJECT_ID))
+CATVOX_TF_STATE_BUCKET ?= catvox-tf-state-$(GCP_PROJECT_ID)
 CATVOX_TF_STATE_PREFIX ?= catvox/state
 CATVOX_TF_INIT_FLAGS ?= -reconfigure
 # Backward-compatible alias used by App Check token resolution helpers.
@@ -47,12 +67,9 @@ CATVOX_FIREBASE_PLIST_OUTPUT ?= CatVox/Resources/Firebase/GoogleService-Info-$(C
 # PostHog Terraform root (see ADR-0020). State lives in the matching environment's
 # GCS bucket with prefix `posthog/state`. There is no env/<env>.tfvars file —
 # per-environment values are sourced from config/environments/<env>.xcconfig
-# via the variables above. The matching GitHub Environment supplies only the
+# via the include above. The matching GitHub Environment supplies only the
 # PostHog API key. The CATVOX_POSTHOG_TF_VARS_FILE pointer is retained only so
 # future slices can opt back into a tfvars file if needed; it is unset by default.
-CATVOX_POSTHOG_PROJECT_ID ?= $(call catvox_xcconfig_value,CATVOX_POSTHOG_PROJECT_ID)
-CATVOX_POSTHOG_ORGANIZATION_ID ?= $(call catvox_xcconfig_value,CATVOX_POSTHOG_ORGANIZATION_ID)
-CATVOX_POSTHOG_API_HOST_NAME ?= $(call catvox_xcconfig_value,CATVOX_POSTHOG_API_HOST_NAME)
 CATVOX_POSTHOG_API_HOST ?= $(if $(CATVOX_POSTHOG_API_HOST_NAME),https://$(CATVOX_POSTHOG_API_HOST_NAME),)
 CATVOX_POSTHOG_TF_BACKEND_CONFIG ?= terraform/posthog/backend/$(CATVOX_ENVIRONMENT).hcl
 CATVOX_POSTHOG_TF_VARS_FILE ?=
@@ -80,7 +97,7 @@ define catvox_require_env_path
 	fi
 endef
 
-.PHONY: help doctor \
+.PHONY: help doctor scripts-test \
 	ios-generate ios-build ios-build-only ios-test ios-test-only ios-ui-test ios-ui-test-only ios-ci ios-device-launch ios-device-console app-deploy \
 	ios-validate-env-config ios-validate-env-config-drift ios-analytics-guard \
 	functions-install functions-build functions-test functions-deploy functions-integration functions-ci \
@@ -173,6 +190,9 @@ doctor:
 		printf 'warn: xcpretty is not installed; iOS targets will use raw xcodebuild output locally\n' >&2; \
 	fi; \
 	exit "$$missing"
+
+scripts-test:
+	@bash scripts/test/emit-xcconfig-env.test.sh
 
 ios-generate:
 	@xcodegen generate

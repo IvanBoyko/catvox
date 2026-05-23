@@ -8,6 +8,9 @@ on:
       - 'Makefile'
       - 'config/environments/**'
       - 'scripts/lib/read-xcconfig-value.sh'
+      - 'scripts/lib/emit-xcconfig-env.sh'
+      - 'scripts/lib/xcconfig-parse.awk'
+      - 'scripts/lib/xcconfig-validate.sh'
       - '.github/actions/read-environment-config/**'
       - '.github/workflows/posthog-terraform.yml'
   pull_request:
@@ -17,6 +20,9 @@ on:
       - 'Makefile'
       - 'config/environments/**'
       - 'scripts/lib/read-xcconfig-value.sh'
+      - 'scripts/lib/emit-xcconfig-env.sh'
+      - 'scripts/lib/xcconfig-parse.awk'
+      - 'scripts/lib/xcconfig-validate.sh'
       - '.github/actions/read-environment-config/**'
       - '.github/workflows/posthog-terraform.yml'
 
