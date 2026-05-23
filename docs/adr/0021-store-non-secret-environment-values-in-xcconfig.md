@@ -4,6 +4,7 @@
 - Date: 2026-05-22
 - Owners: Kathelix / CatVox
 - Supersedes: the ADR-0018 implementation note that Terraform environment input values stay broadly in `terraform/env/<env>.tfvars`
+- Amended: 2026-05-23: `enable_app_check_debug_token` and `app_check_debug_token_display_name` have been removed in favor of token presence driving registration (PR #60).
 - Related docs: `docs/HLD.md`, `docs/TRD.md`, `docs/CREATE_NEW_ENVIRONMENT.md`, `docs/CI_BOOTSTRAP.md`, `docs/adr/0018-create-dedicated-dev-environment.md`, `docs/adr/0020-bind-posthog-projects-to-catvox-environments.md`, GitHub issue #38
 
 ## Context

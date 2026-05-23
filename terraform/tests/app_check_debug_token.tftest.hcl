@@ -26,6 +26,16 @@ run "null_token" {
     condition     = length(google_firebase_app_check_debug_token.ios_dev) == 0
     error_message = "App Check debug token should not be registered when token is null."
   }
+
+  assert {
+    condition     = length(google_secret_manager_secret.app_check_debug_token) == 0
+    error_message = "Secret Manager secret should not be registered when token is null."
+  }
+
+  assert {
+    condition     = length(google_secret_manager_secret_version.app_check_debug_token) == 0
+    error_message = "Secret Manager secret version should not be registered when token is null."
+  }
 }
 
 run "empty_token" {
@@ -38,6 +48,16 @@ run "empty_token" {
   assert {
     condition     = length(google_firebase_app_check_debug_token.ios_dev) == 0
     error_message = "App Check debug token should not be registered when token is empty."
+  }
+
+  assert {
+    condition     = length(google_secret_manager_secret.app_check_debug_token) == 0
+    error_message = "Secret Manager secret should not be registered when token is empty."
+  }
+
+  assert {
+    condition     = length(google_secret_manager_secret_version.app_check_debug_token) == 0
+    error_message = "Secret Manager secret version should not be registered when token is empty."
   }
 }
 
@@ -52,6 +72,16 @@ run "whitespace_token" {
     condition     = length(google_firebase_app_check_debug_token.ios_dev) == 0
     error_message = "App Check debug token should not be registered when token is only whitespace."
   }
+
+  assert {
+    condition     = length(google_secret_manager_secret.app_check_debug_token) == 0
+    error_message = "Secret Manager secret should not be registered when token is only whitespace."
+  }
+
+  assert {
+    condition     = length(google_secret_manager_secret_version.app_check_debug_token) == 0
+    error_message = "Secret Manager secret version should not be registered when token is only whitespace."
+  }
 }
 
 run "valid_token" {
@@ -64,6 +94,16 @@ run "valid_token" {
   assert {
     condition     = length(google_firebase_app_check_debug_token.ios_dev) == 1
     error_message = "App Check debug token should be registered when token is valid."
+  }
+
+  assert {
+    condition     = length(google_secret_manager_secret.app_check_debug_token) == 1
+    error_message = "Secret Manager secret should be registered when token is valid."
+  }
+
+  assert {
+    condition     = length(google_secret_manager_secret_version.app_check_debug_token) == 1
+    error_message = "Secret Manager secret version should be registered when token is valid."
   }
 
   assert {

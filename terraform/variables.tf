@@ -59,7 +59,7 @@ variable "app_check_debug_token" {
     Firebase App Check debug token for local development and mutable integration tests.
     Mark as sensitive — never commit the value to source control.
     Generate a UUID4 locally and store it in the environment tfvars / GitHub secret.
-    Required only when enable_app_check_debug_token is true.
+    Optional. Its presence dictates whether the debug token is registered.
   EOT
   type        = string
   default     = null

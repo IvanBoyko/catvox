@@ -109,6 +109,10 @@ jobs:
           } >> "$GITHUB_OUTPUT"
           exit "$exit_code"
 
+      - name: Terraform Test
+        id: test
+        run: make terraform-test
+
       - name: Terraform Plan
         id: plan
         run: |
@@ -134,6 +138,7 @@ jobs:
             const init     = '${{ steps.init.outcome }}';
             const plist    = '${{ steps.plist-drift.outcome }}';
             const validate = ${{ toJSON(steps.validate.outputs.stdout) }};
+            const test     = '${{ steps.test.outcome }}';
             const plan     = ${{ toJSON(steps.plan.outputs.stdout) }};
             const outcome  = '${{ steps.plan.outcome }}';
             const actor    = '${{ github.actor }}';
@@ -150,6 +155,7 @@ jobs:
               '|---|---|',
               '| Format  | `' + fmt + '` |',
               '| Init    | `' + init + '` |',
+              '| Test    | `' + test + '` |',
               '| Plist drift | `' + plist + '` |',
               '',
               '**Validate**',

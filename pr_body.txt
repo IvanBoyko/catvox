@@ -1,0 +1,30 @@
+_Posted by Antigravity_
+
+Part of #38.
+
+This PR establishes the codebase foundation for the real Prod environment (`kathelix-catvox-prod`), fulfilling step 1 and step 2 of the Epic Plan in #38. 
+
+By completing this slice, we wire the `prod` environment into the app configuration and ensure that local/CI `Release` builds (including App Store archives) correctly target Prod and fail loudly if Prod artifacts are missing. No cloud resources are mutated in this PR.
+
+### Changes Made:
+
+1. **Prod App Configuration (`prod.xcconfig`)**:
+   - Created the Prod app configuration mirroring `dev.xcconfig` but with Prod-specific values and placeholders.
+   - Set `CATVOX_ENVIRONMENT` = `prod`.
+   - Added safe placeholders for backend hosts, Firebase keys, and PostHog tokens.
+   - Ensured no App Check debug token variables are present, relying on token presence for logic.
+
+2. **Xcode Release Wiring (`project.yml`)**:
+   - Updated the `CatVox` target's `configFiles` to explicitly bind the `Release` configuration to `prod.xcconfig`.
+   - With this change, any Release build will automatically fail if `GoogleService-Info-prod.plist` is missing, protecting the App Store archive path.
+
+3. **Prod Terraform Configuration (`prod.tfvars.example`)**:
+   - Created the template for the Prod environment variables.
+   - Deliberately omitted `app_check_debug_token` completely to prevent accidental debug injection into Prod.
+
+4. **Makefile & Infrastructure Simplification**:
+   - Removed manual `.hcl.example` backend files and automated `.hcl` generation scripts.
+   - **Reasoning**: Since the Makefile and CI pipelines automatically inject the `bucket` and `prefix` arguments inline during `terraform init` (pulling directly from the parsed `xcconfig`), the redundant `terraform/backend/*.hcl` files added unnecessary boilerplate and drift risk.
+   - Stripped `BACKEND_CONFIG` logic from `scripts/create-environment.sh` and simplified the Terraform targets in the Makefile to rely strictly on the inline configuration.
+   - Updated documentation (`AGENTS.md`, `TRD.md`, `CREATE_NEW_ENVIRONMENT.md`) to reflect this cleaner, single-source-of-truth approach.
+

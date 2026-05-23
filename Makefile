@@ -101,7 +101,7 @@ endef
 	ios-validate-env-config ios-validate-env-config-drift ios-analytics-guard \
 	functions-install functions-build functions-test functions-deploy functions-integration functions-ci \
 	backend-build backend-deploy backend-integration \
-	terraform-check-env-paths terraform-fmt-check terraform-init terraform-validate terraform-plan terraform-ci-plan terraform-apply terraform-ci-apply terraform-output-firebase-plist \
+	terraform-check-env-paths terraform-fmt-check terraform-init terraform-validate terraform-test terraform-plan terraform-ci-plan terraform-apply terraform-ci-apply terraform-output-firebase-plist \
 	posthog-terraform-check-env-paths posthog-terraform-fmt-check posthog-terraform-init posthog-terraform-validate posthog-terraform-plan posthog-terraform-ci-plan posthog-terraform-apply posthog-terraform-ci-apply \
 	environment-create bootstrap-remote-state bootstrap-wif
 
@@ -362,6 +362,9 @@ terraform-init: terraform-check-env-paths
 
 terraform-validate: terraform-check-env-paths
 	@cd terraform && terraform validate -no-color
+
+terraform-test: terraform-check-env-paths
+	@cd terraform && terraform test
 
 terraform-plan: terraform-check-env-paths
 	@cd terraform && $(catvox_tf_env_args) GOOGLE_CLOUD_QUOTA_PROJECT="$(GCP_PROJECT_ID)" terraform fmt -check -recursive
