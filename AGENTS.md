@@ -1,6 +1,6 @@
 # AGENTS.md — CatVox AI Developer Onboarding
 
-This file is read automatically by Codex at session start. It captures the work style, process decisions, and architectural context established during this project's development.
+This file is read automatically by AI agents at session start. It captures the work style, process decisions, and architectural context established during this project's development.
 
 ---
 
@@ -11,7 +11,7 @@ Read these documents in order before touching any code or infrastructure:
 | Document | Purpose |
 |---|---|
 | `docs/HLD.md` | High-level design decisions only — the stable "why". Feed to Gemini/ChatGPT for design ideation. |
-| `docs/TRD.md` | Full technical spec — the authoritative "what". Feed to Codex for implementation. |
+| `docs/TRD.md` | Full technical spec — the authoritative "what". Feed to AI for implementation. |
 | `docs/MVP_BACKLOG.md` | MVP backlog status — the source of truth for completed and pending MVP implementation items. |
 | `docs/adr/` | Architecture Decision Records — the "why a decision was made". Append-only log. |
 | `docs/systemInstruction.md` | The Gemini AI system prompt (the "Prompt Gate"). Do not modify without updating TRD §4. |
@@ -90,10 +90,14 @@ catvox/
 │   ├── markdownlint.yml           # Markdown lint for docs/ and README changes
 │   ├── terraform.yml              # GCP Terraform plan (PR) + apply (merge to main)
 │   └── posthog-terraform.yml      # PostHog Terraform plan (PR) + apply (merge to main)
-├── .codex/environments/
-│   └── environment.toml           # Codex app run actions; call Makefile targets
+├── .codex/
+│   ├── AGENTS.md                  # Codex-specific quirks (sandbox, identity)
+│   └── environments/
+│       └── environment.toml       # Codex app run actions; call Makefile targets
+├── .antigravityrules              # Antigravity (Gemini) agent-specific quirks
+├── CLAUDE.md                      # Claude Code-specific quirks
 ├── Makefile                       # Local/CI command facade for common automation
-└── AGENTS.md                      # Developer onboarding (read automatically by Codex)
+└── AGENTS.md                      # Developer onboarding (read automatically by AI agents)
 ```
 
 ---
@@ -225,8 +229,6 @@ make ios-test
 make ios-ui-test
 ```
 
-- In Codex, simulator builds may fail inside the sandbox because of `CoreSimulatorService` and `~/Library` access. If that happens, rerun the same `xcodebuild` command outside the sandbox instead of changing the build command.
-
 ### Key Implementation Details
 
 - **Video recording:** `CameraService.swift` — `sessionPreset = .hd1920x1080` caps at 1080p; HEVC codec enforced via `setOutputSettings` after `addOutput()`. Falls back to H.264 silently on pre-A10 devices.
@@ -356,8 +358,8 @@ Use `docs/CREATE_NEW_ENVIRONMENT.md` and `make environment-create` for new envir
 - Before posting any GitHub comment or PR description, scan for tokens GitHub auto-resolves: `#N` becomes a cross-reference to a PR/issue in this repo, `@user` notifies, bare GitHub URLs unfurl. Use distinct prefixes for review-finding labels across rounds (`F1`-`Fn` for initial findings, `T1`-`Tn` for test follow-ups, etc.) so inline references unambiguously target one round and don't collide with GitHub's `#N` syntax. If a comment already posted contains a collision, edit it in place via `gh api PATCH /repos/<owner>/<repo>/issues/comments/<id>` rather than reposting.
 - When a PR is one slice of a larger issue or epic, reference the parent issue in the PR body with non-closing language such as `Part of #NN` or `Refs #NN`. Use closing keywords such as `Closes #NN` only on the final PR that actually completes the issue. When available, also associate the PR with the issue in GitHub's Development metadata so the relationship is visible from both sides.
 - For parent issue slice checklists, do not mark an interim slice complete while its PR is still open. Leave the slice unchecked until the PR has merged and the relevant post-merge `main` CI has passed; use PR comments or the PR body for in-progress handoff notes.
-- When review or implementation is bouncing between Codex, Claude, and a human reviewer, use concise PR comments as the durable handoff log after meaningful review/fix rounds. Keep chat for decisions and status; keep the PR thread readable for the next agent or reviewer.
-- Every PR comment or PR description Codex posts must start with a short italic attribution line on its own at the very top, before any heading or other content: `_Posted by Codex_`. This makes Codex's comments distinguishable from Ivan's direct comments and Claude Code's comments — all three post under the same GitHub account, and the attribution is the only way a future reader can tell them apart. Keep the line role-agnostic; Codex may act as implementer, reviewer, debugger, or planner depending on the task.
+- When review or implementation is bouncing between AI agents (like Codex, Gemini, Claude) and a human reviewer, use concise PR comments as the durable handoff log after meaningful review/fix rounds. Keep chat for decisions and status; keep the PR thread readable for the next agent or reviewer.
+- Every PR comment or PR description an AI agent posts must start with a short italic attribution line on its own at the very top, before any heading or other content, using its own name (e.g., `_Posted by Claude Code_`, `_Posted by Codex_`, or `_Posted by Gemini_`). This makes the AI's comments distinguishable from Ivan's direct comments — since they post under the same GitHub account, the attribution is the only way a future reader can tell them apart. Keep the line role-agnostic; the AI may act as implementer, reviewer, debugger, or planner depending on the task.
 - Keep the PR body validation matrix current after each meaningful review response, especially when new tests, manual checks, or known skipped checks are added.
 - After updating PR metadata through a connector or CLI, immediately verify important state such as draft/ready status, base branch, title, body, and issue-closing references. Tooling may normalize fields or change PR state as a side effect.
 - When creating or editing GitHub PR descriptions via `gh pr ...`, prefer plain Markdown with simple shell-safe quoting. Avoid unnecessary escaping of inline code or symbols; if the body is complex, write it to a temporary file and pass it with `--body-file` rather than packing heavily escaped Markdown into one shell argument.
@@ -399,7 +401,7 @@ This applies to both implementation work ("does this SDK accept that option?") a
 
 The same rule applies at **design and planning** time. When a slice's viability or shape depends on a specific tool capability — does this provider expose a non-mutating data source, does this action accept this input, does this CLI flag exist — verify against the source before building around an assumed answer. A design built on an SDK-behaviour guess produces multiple wasted rounds when the guess turns out wrong.
 
-**Negative claims need a higher verification bar.** Asserting that a feature, rule, or API *does not exist* in a third-party library is higher-stakes than asserting it does, because the recommendation that follows a negative claim is usually "remove this." If the rule that was disabled silently turns out to be real, removing it changes behavior. Before posting a "this doesn't exist, delete it" finding, verify the absence empirically — enumerate from the installed package, run the tool with the rule or flag explicitly enabled, grep the source — and record the verification step alongside the finding. This applies equally to Claude, Codex, and human reviewers.
+**Negative claims need a higher verification bar.** Asserting that a feature, rule, or API *does not exist* in a third-party library is higher-stakes than asserting it does, because the recommendation that follows a negative claim is usually "remove this." If the rule that was disabled silently turns out to be real, removing it changes behavior. Before posting a "this doesn't exist, delete it" finding, verify the absence empirically — enumerate from the installed package, run the tool with the rule or flag explicitly enabled, grep the source — and record the verification step alongside the finding. This applies equally to AI agents and human reviewers.
 
 ### Verifying Local Changes Before Claiming Green
 
