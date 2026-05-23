@@ -15,7 +15,7 @@ Each environment owns these artifacts:
 |---|---|---|
 | App/runtime config | `config/environments/<env>.xcconfig` | Committed. Source of truth for non-secret app, backend, CI-auth identity, analytics, and Terraform environment values. Host fields store hostnames only, with no `https://`, path, or trailing slash. Do not put secrets or private operator values here. |
 | Firebase iOS plist | `CatVox/Resources/Firebase/GoogleService-Info-<env>.plist` | Committed only after validation. The app loads the plist matching `CATVOX_ENVIRONMENT`. |
-| Terraform backend config | `terraform/backend/<env>.hcl` | Ignored. Contains the remote state bucket and prefix. Commit only `.example` files. |
+
 | Terraform variables | `terraform/env/<env>.tfvars` | Ignored. Contains only true secrets or deliberately private values: `app_check_debug_token` and `alert_email`. Commit only `.example` files. |
 | GitHub Environment | `<env>` | Stores environment-scoped Actions secrets only. Dev can be unprotected; future Prod must be explicitly protected. |
 | Bundle ID | Terraform + xcconfig | Dev currently uses `com.kathelix.catvox.dev`; future App Store Prod uses `com.kathelix.catvox`. |
@@ -104,7 +104,7 @@ The script:
 3. Enables Firebase on the project.
 4. Bootstraps the GCS Terraform state bucket with versioning.
 5. Creates the Cloud Functions Gen 2 source bucket so Terraform can manage its IAM before the first deploy.
-6. Creates ignored `terraform/backend/<env>.hcl` and secrets-only `terraform/env/<env>.tfvars` if they do not already exist.
+6. Creates secrets-only `terraform/env/<env>.tfvars` if it does not already exist.
 7. Runs Terraform init and plan.
 8. Optionally applies Terraform.
 9. Writes and validates `CatVox/Resources/Firebase/GoogleService-Info-<env>.plist`.
@@ -282,22 +282,15 @@ scan:
    ```
 2. Verify the GitHub Environment `dev` secrets point at the new Dev project.
 3. Recreate ignored legacy backend/tfvars files while the old state bucket still exists:
-   ```hcl
-   # terraform/backend/legacy-presplit.hcl
-   bucket = "catvox-tf-state-kathelix-catvox-prod"
-   prefix = "catvox/state"
-   ```
-4. Run an explicit old-project destroy using the legacy backend and tfvars:
+4. Run an explicit old-project destroy using the legacy tfvars (the Makefile will auto-inject the backend bucket args):
    ```bash
    CATVOX_ENVIRONMENT=legacy-presplit \
    GCP_PROJECT_ID=kathelix-catvox-prod \
-   CATVOX_TF_BACKEND_CONFIG=terraform/backend/legacy-presplit.hcl \
    CATVOX_TF_VARS_FILE=terraform/env/legacy-presplit.tfvars \
    make terraform-plan
 
    CATVOX_ENVIRONMENT=legacy-presplit \
    GCP_PROJECT_ID=kathelix-catvox-prod \
-   CATVOX_TF_BACKEND_CONFIG=terraform/backend/legacy-presplit.hcl \
    CATVOX_TF_VARS_FILE=terraform/env/legacy-presplit.tfvars \
    terraform -chdir=terraform destroy -var-file=env/legacy-presplit.tfvars
    ```

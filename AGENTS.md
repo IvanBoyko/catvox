@@ -74,7 +74,7 @@ catvox/
 │   ├── iam.tf                     # Service accounts and IAM bindings
 │   ├── variables.tf               # Input variables with defaults
 │   ├── outputs.tf                 # Output values
-│   ├── backend/dev.hcl.example    # Remote backend template
+
 │   ├── env/dev.tfvars.example     # Terraform private-values template
 │   ├── bootstrap_remote_state.sh  # Legacy helper; environment-create handles state bootstrap
 │   ├── bootstrap_wif.sh           # Legacy helper; WIF is now Terraform-managed per environment
@@ -83,7 +83,7 @@ catvox/
 │       ├── variables.tf
 │       ├── outputs.tf
 │       ├── README.md
-│       └── backend/dev.hcl.example
+
 ├── .github/workflows/
 │   ├── build.yml                  # Path-filtered iOS build check on push/PR
 │   ├── functions.yml              # Functions build/deploy/integration workflow
@@ -281,7 +281,7 @@ make terraform-plan   # connects to GCS backend and reviews planned changes
 make terraform-apply CONFIRM=apply
 ```
 
-`terraform/backend/*.hcl` and `terraform/env/*.tfvars` are gitignored. Copy from the matching `.example` files and fill in the remaining private values. Backend HCL still carries remote-state coordinates; tfvars is secrets-only for `app_check_debug_token` and `alert_email`.
+`terraform/env/*.tfvars` is gitignored. Copy from the matching `.example` files and fill in the remaining private values. The tfvars file is secrets-only for `app_check_debug_token` and `alert_email`. The Makefile injects the remote-state coordinates directly via inline `-backend-config` arguments.
 
 ### Service Accounts
 

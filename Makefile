@@ -59,7 +59,6 @@ CATVOX_FIREBASE_API_KEY ?= replace-with-dev-firebase-api-key
 CATVOX_IOS_BUNDLE_ID ?= $(CATVOX_PRODUCT_BUNDLE_IDENTIFIER)
 CATVOX_INTEGRATION_MUTATIONS_ALLOWED ?= 1
 CATVOX_INTEGRATION_SAFE_ENVIRONMENTS ?= dev
-CATVOX_TF_BACKEND_CONFIG ?= terraform/backend/$(CATVOX_ENVIRONMENT).hcl
 CATVOX_TF_VARS_FILE ?= terraform/env/$(CATVOX_ENVIRONMENT).tfvars
 CATVOX_TF_STATE_BUCKET ?= catvox-tf-state-$(GCP_PROJECT_ID)
 CATVOX_TF_STATE_PREFIX ?= catvox/state
@@ -75,22 +74,18 @@ CATVOX_FIREBASE_PLIST_OUTPUT ?= CatVox/Resources/Firebase/GoogleService-Info-$(C
 # PostHog API key. The CATVOX_POSTHOG_TF_VARS_FILE pointer is retained only so
 # future slices can opt back into a tfvars file if needed; it is unset by default.
 CATVOX_POSTHOG_API_HOST ?= $(if $(CATVOX_POSTHOG_API_HOST_NAME),https://$(CATVOX_POSTHOG_API_HOST_NAME),)
-CATVOX_POSTHOG_TF_BACKEND_CONFIG ?= terraform/posthog/backend/$(CATVOX_ENVIRONMENT).hcl
 CATVOX_POSTHOG_TF_VARS_FILE ?=
 CATVOX_POSTHOG_TF_STATE_BUCKET ?= $(CATVOX_TF_STATE_BUCKET)
 CATVOX_POSTHOG_TF_STATE_PREFIX ?= posthog/state
 CATVOX_POSTHOG_TF_INIT_FLAGS ?= -reconfigure
 
-catvox_tf_backend_rel = $(patsubst terraform/%,%,$(CATVOX_TF_BACKEND_CONFIG))
 catvox_tf_vars_rel = $(patsubst terraform/%,%,$(CATVOX_TF_VARS_FILE))
-# Local runs usually use ignored backend HCL files; CI supplies equivalent inline backend flags.
-catvox_tf_backend_args = $(if $(wildcard $(CATVOX_TF_BACKEND_CONFIG)),-backend-config="$(catvox_tf_backend_rel)",-backend-config="bucket=$(CATVOX_TF_STATE_BUCKET)" -backend-config="prefix=$(CATVOX_TF_STATE_PREFIX)")
+catvox_tf_backend_args = -backend-config="bucket=$(CATVOX_TF_STATE_BUCKET)" -backend-config="prefix=$(CATVOX_TF_STATE_PREFIX)"
 catvox_tf_var_file_arg = $(if $(wildcard $(CATVOX_TF_VARS_FILE)),-var-file="$(catvox_tf_vars_rel)",)
 catvox_tf_env_args = TF_VAR_environment_name="$(CATVOX_ENVIRONMENT)" TF_VAR_project_id="$(GCP_PROJECT_ID)" TF_VAR_region="$(CATVOX_FUNCTION_REGION)" TF_VAR_firestore_location="$(CATVOX_FIRESTORE_LOCATION)" TF_VAR_tf_state_bucket="$(CATVOX_TF_STATE_BUCKET)" TF_VAR_firebase_ios_bundle_id="$(CATVOX_IOS_BUNDLE_ID)" TF_VAR_firebase_ios_app_display_name="$(CATVOX_FIREBASE_IOS_APP_DISPLAY_NAME)" TF_VAR_firebase_ios_app_deletion_policy="$(CATVOX_FIREBASE_IOS_APP_DELETION_POLICY)" TF_VAR_firebase_apple_team_id="$(CATVOX_FIREBASE_APPLE_TEAM_ID)" TF_VAR_enable_app_check_debug_token="$(CATVOX_ENABLE_APP_CHECK_DEBUG_TOKEN)" TF_VAR_app_check_debug_token_display_name="$(CATVOX_APP_CHECK_DEBUG_TOKEN_DISPLAY_NAME)" TF_VAR_manage_gcf_sources_bucket_iam="$(CATVOX_MANAGE_GCF_SOURCES_BUCKET_IAM)"
 
-catvox_posthog_tf_backend_rel = $(patsubst terraform/posthog/%,%,$(CATVOX_POSTHOG_TF_BACKEND_CONFIG))
 catvox_posthog_tf_vars_rel = $(patsubst terraform/posthog/%,%,$(CATVOX_POSTHOG_TF_VARS_FILE))
-catvox_posthog_tf_backend_args = $(if $(wildcard $(CATVOX_POSTHOG_TF_BACKEND_CONFIG)),-backend-config="$(catvox_posthog_tf_backend_rel)",-backend-config="bucket=$(CATVOX_POSTHOG_TF_STATE_BUCKET)" -backend-config="prefix=$(CATVOX_POSTHOG_TF_STATE_PREFIX)")
+catvox_posthog_tf_backend_args = -backend-config="bucket=$(CATVOX_POSTHOG_TF_STATE_BUCKET)" -backend-config="prefix=$(CATVOX_POSTHOG_TF_STATE_PREFIX)"
 catvox_posthog_tf_var_file_arg = $(if $(and $(CATVOX_POSTHOG_TF_VARS_FILE),$(wildcard $(CATVOX_POSTHOG_TF_VARS_FILE))),-var-file="$(catvox_posthog_tf_vars_rel)",)
 catvox_posthog_tf_env_args = TF_VAR_environment_name="$(CATVOX_ENVIRONMENT)" TF_VAR_posthog_api_host="$(CATVOX_POSTHOG_API_HOST)" TF_VAR_posthog_project_id="$(CATVOX_POSTHOG_PROJECT_ID)" TF_VAR_posthog_organization_id="$(CATVOX_POSTHOG_ORGANIZATION_ID)"
 
@@ -158,13 +153,10 @@ help:
 		'  CATVOX_APP_CHECK_DEBUG_TOKEN_DISPLAY_NAME=... CATVOX_MANAGE_GCF_SOURCES_BUCKET_IAM=true|false' \
 		'  CATVOX_INTEGRATION_SAFE_ENVIRONMENTS=dev marks mutable-test environments' \
 		'  CATVOX_APP_CHECK_DEBUG_TOKEN=... make functions-integration' \
-		'  CATVOX_TF_BACKEND_CONFIG=terraform/backend/dev.hcl overrides Terraform backend config; basename must match CATVOX_ENVIRONMENT' \
-		'  CATVOX_TF_VARS_FILE=terraform/env/dev.tfvars overrides the secrets-only Terraform var file; basename must match CATVOX_ENVIRONMENT' \
 		'  CATVOX_TFVARS_PATH=... overrides the local tfvars fallback path for App Check debug tokens' \
 		'  CATVOX_POSTHOG_PROJECT_ID=... overrides the xcconfig PostHog project ID for terraform/posthog/' \
 		'  CATVOX_POSTHOG_ORGANIZATION_ID=... overrides the xcconfig PostHog organization ID for terraform/posthog/' \
 		'  CATVOX_POSTHOG_API_HOST_NAME=us.posthog.com overrides the xcconfig PostHog Terraform API host name' \
-		'  CATVOX_POSTHOG_TF_BACKEND_CONFIG=terraform/posthog/backend/dev.hcl overrides PostHog Terraform backend config; basename must match CATVOX_ENVIRONMENT' \
 		'  IOS_TEST_DESTINATION="platform=iOS Simulator,name=iPhone 16,OS=latest"' \
 		'  IOS_UI_TEST_DESTINATION="platform=iOS Simulator,name=iPhone 16,OS=latest"' \
 		'  DEVICE_ID=... make ios-device-launch' \
@@ -363,7 +355,6 @@ terraform-fmt-check:
 	@cd terraform && terraform fmt -check -recursive
 
 terraform-check-env-paths:
-	$(call catvox_require_env_path,CATVOX_TF_BACKEND_CONFIG,.hcl)
 	$(call catvox_require_env_path,CATVOX_TF_VARS_FILE,.tfvars)
 	@bash scripts/guard-terraform-tfvars-private-only.sh "$(CATVOX_TF_VARS_FILE)" "$(CATVOX_ENVIRONMENT)"
 
@@ -398,7 +389,6 @@ posthog-terraform-fmt-check:
 	@cd terraform/posthog && terraform fmt -check -recursive
 
 posthog-terraform-check-env-paths:
-	$(call catvox_require_env_path,CATVOX_POSTHOG_TF_BACKEND_CONFIG,.hcl)
 	$(call catvox_require_env_path,CATVOX_POSTHOG_TF_VARS_FILE,.tfvars)
 
 posthog-terraform-init: posthog-terraform-check-env-paths
@@ -450,7 +440,6 @@ environment-create:
 	 GCP_PROJECT_ID="$(GCP_PROJECT_ID)" \
 	 CATVOX_FUNCTION_REGION="$(CATVOX_FUNCTION_REGION)" \
 	 CATVOX_FIRESTORE_LOCATION="$(CATVOX_FIRESTORE_LOCATION)" \
-	 CATVOX_TF_BACKEND_CONFIG="$(CATVOX_TF_BACKEND_CONFIG)" \
 	 CATVOX_TF_VARS_FILE="$(CATVOX_TF_VARS_FILE)" \
 	 CATVOX_TF_STATE_BUCKET="$(CATVOX_TF_STATE_BUCKET)" \
 	 CATVOX_TF_STATE_PREFIX="$(CATVOX_TF_STATE_PREFIX)" \
