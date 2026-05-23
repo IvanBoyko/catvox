@@ -106,6 +106,18 @@ export function parseList(value: string): Set<string> {
   );
 }
 
+export function isIntegrationSafeEnvironment(
+  environmentName: string,
+  integrationSafeEnvironments: Set<string>
+): boolean {
+  const normalizedEnvironmentName = normalize(environmentName);
+  if (!normalizedEnvironmentName) {
+    return false;
+  }
+
+  return integrationSafeEnvironments.has(normalizedEnvironmentName);
+}
+
 export function normalize(value: string | undefined): string | undefined {
   if (value === undefined) {
     return undefined;
@@ -133,7 +145,7 @@ export function assertMutationGateAllowed(gate: MutationGate): void {
     );
   }
 
-  if (!gate.integrationSafeEnvironments.has(gate.environmentName)) {
+  if (!isIntegrationSafeEnvironment(gate.environmentName, gate.integrationSafeEnvironments)) {
     throw new Error(
       `Refusing to touch backend data for CATVOX_ENVIRONMENT=${gate.environmentName}. ` +
       'Add it to CATVOX_INTEGRATION_SAFE_ENVIRONMENTS only for environments that are safe for mutable tests.'

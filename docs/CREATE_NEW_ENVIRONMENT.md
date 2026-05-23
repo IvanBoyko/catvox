@@ -249,7 +249,8 @@ For future Prod:
 
 - Do not include Prod in `CATVOX_INTEGRATION_SAFE_ENVIRONMENTS`.
 - Do not run Firestore-mutating integration tests.
-- Use a protected manual smoke-test checklist only.
+- Use only the protected, non-invasive smoke path in
+  `docs/PROD_SMOKE_CHECKLIST.md`.
 - When creating real Prod in preserved `kathelix-catvox-prod`, start from
   `docs/archive/LEGACY_PRESPLIT_CLEANUP_REPORT_2026-05-16.md`: the Firebase iOS app
   for `com.kathelix.catvox` and the empty Firestore `(default)` database were

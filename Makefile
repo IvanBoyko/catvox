@@ -10,6 +10,10 @@ IOS_UI_TEST_DESTINATION := $(IOS_TEST_DESTINATION)
 
 CATVOX_ENVIRONMENT ?= dev
 CATVOX_ENV_CONFIG ?= config/environments/$(CATVOX_ENVIRONMENT).xcconfig
+ifneq ($(filter prod-smoke,$(MAKECMDGOALS)),)
+CATVOX_ENVIRONMENT := prod
+CATVOX_ENV_CONFIG := config/environments/prod.xcconfig
+endif
 CATVOX_ENV_CACHE_DIR ?= .make.d
 # Derive the cache filename from the full CATVOX_ENV_CONFIG path, not just
 # CATVOX_ENVIRONMENT, so callers that override the config path (e.g.
@@ -98,12 +102,12 @@ endef
 
 .PHONY: help doctor scripts-test \
 	ios-generate ios-build ios-build-only ios-test ios-test-only ios-ui-test ios-ui-test-only ios-ci ios-device-launch ios-device-console app-deploy \
-	ios-validate-env-config ios-validate-env-config-drift ios-analytics-guard \
+	ios-validate-env-config ios-validate-prod-env-config-structure ios-validate-env-config-drift ios-analytics-guard \
 	functions-install functions-build functions-test functions-deploy functions-integration functions-ci \
 	backend-build backend-deploy backend-integration \
 	terraform-check-env-paths terraform-fmt-check terraform-init terraform-validate terraform-test terraform-plan terraform-ci-plan terraform-apply terraform-ci-apply terraform-output-firebase-plist \
 	posthog-terraform-check-env-paths posthog-terraform-fmt-check posthog-terraform-init posthog-terraform-validate posthog-terraform-plan posthog-terraform-ci-plan posthog-terraform-apply posthog-terraform-ci-apply \
-	environment-create bootstrap-remote-state bootstrap-wif
+	prod-smoke environment-create bootstrap-remote-state bootstrap-wif
 
 help:
 	@printf '%s\n' \
@@ -115,6 +119,7 @@ help:
 		'  make ios-test               Generate project and run iOS unit tests' \
 		'  make ios-ui-test            Generate project and run iOS XCUITests' \
 		'  make ios-validate-env-config Validate selected Firebase plist and xcconfig values' \
+		'  make ios-validate-prod-env-config-structure Validate Prod xcconfig structure before plist lands' \
 		'  make ios-validate-env-config-drift Compare committed Firebase plist to Terraform output' \
 		'  make ios-analytics-guard    Verify PostHog SDK usage stays behind AnalyticsService' \
 		'  make ios-ci                 Generate, build, and test like CI' \
@@ -136,6 +141,7 @@ help:
 		'  make posthog-terraform-apply Plan, then interactively apply PostHog Terraform; requires CONFIRM=apply' \
 		'  make posthog-terraform-ci-apply CI-only auto-approved PostHog Terraform apply' \
 		'' \
+		'  make prod-smoke             Run non-invasive Prod smoke checks' \
 		'  make environment-create     Bootstrap a named GCP/Firebase environment' \
 		'  make bootstrap-remote-state Legacy helper for Terraform state bucket bootstrap' \
 		'  make bootstrap-wif          Legacy helper; WIF is Terraform-managed for new envs' \
@@ -201,6 +207,10 @@ ios-validate-env-config:
 	 CATVOX_FIREBASE_API_KEY="$(CATVOX_FIREBASE_API_KEY)" \
 	 CATVOX_IOS_BUNDLE_ID="$(CATVOX_IOS_BUNDLE_ID)" \
 	 node scripts/validate-firebase-ios-config.mjs
+
+ios-validate-prod-env-config-structure:
+	@CATVOX_ENV_CONFIG="config/environments/prod.xcconfig" \
+	 node scripts/validate-prod-environment-config.mjs
 
 ios-validate-env-config-drift:
 	@tmpdir="$$(mktemp -d)"; \
@@ -419,6 +429,11 @@ posthog-terraform-apply: posthog-terraform-check-env-paths
 
 posthog-terraform-ci-apply: posthog-terraform-check-env-paths
 	@cd terraform/posthog && $(catvox_posthog_tf_env_args) terraform apply -auto-approve -no-color $(catvox_posthog_tf_var_file_arg)
+
+prod-smoke:
+	@CATVOX_ENVIRONMENT=prod \
+	 CATVOX_ENV_CONFIG=config/environments/prod.xcconfig \
+	 node scripts/prod-smoke.mjs
 
 terraform-output-firebase-plist:
 	@mkdir -p "$$(dirname "$(CATVOX_FIREBASE_PLIST_OUTPUT)")"
