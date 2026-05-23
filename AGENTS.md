@@ -1,6 +1,6 @@
 # AGENTS.md — CatVox AI Developer Onboarding
 
-This file is read automatically by Codex at session start. It captures the work style, process decisions, and architectural context established during this project's development.
+This file is read automatically by AI agents at session start. It captures the work style, process decisions, and architectural context established during this project's development.
 
 ---
 
@@ -11,7 +11,7 @@ Read these documents in order before touching any code or infrastructure:
 | Document | Purpose |
 |---|---|
 | `docs/HLD.md` | High-level design decisions only — the stable "why". Feed to Gemini/ChatGPT for design ideation. |
-| `docs/TRD.md` | Full technical spec — the authoritative "what". Feed to Codex for implementation. |
+| `docs/TRD.md` | Full technical spec — the authoritative "what". Feed to AI for implementation. |
 | `docs/MVP_BACKLOG.md` | MVP backlog status — the source of truth for completed and pending MVP implementation items. |
 | `docs/adr/` | Architecture Decision Records — the "why a decision was made". Append-only log. |
 | `docs/systemInstruction.md` | The Gemini AI system prompt (the "Prompt Gate"). Do not modify without updating TRD §4. |
@@ -90,10 +90,14 @@ catvox/
 │   ├── markdownlint.yml           # Markdown lint for docs/ and README changes
 │   ├── terraform.yml              # GCP Terraform plan (PR) + apply (merge to main)
 │   └── posthog-terraform.yml      # PostHog Terraform plan (PR) + apply (merge to main)
-├── .codex/environments/
-│   └── environment.toml           # Codex app run actions; call Makefile targets
+├── .codex/
+│   ├── AGENTS.md                  # Codex-specific quirks (sandbox, identity)
+│   └── environments/
+│       └── environment.toml       # Codex app run actions; call Makefile targets
+├── .antigravityrules              # Antigravity (Gemini) agent-specific quirks
+├── CLAUDE.md                      # Claude Code-specific quirks
 ├── Makefile                       # Local/CI command facade for common automation
-└── AGENTS.md                      # Developer onboarding (read automatically by Codex)
+└── AGENTS.md                      # Developer onboarding (read automatically by AI agents)
 ```
 
 ---
@@ -225,8 +229,6 @@ make ios-test
 make ios-ui-test
 ```
 
-- In Codex, simulator builds may fail inside the sandbox because of `CoreSimulatorService` and `~/Library` access. If that happens, rerun the same `xcodebuild` command outside the sandbox instead of changing the build command.
-
 ### Key Implementation Details
 
 - **Video recording:** `CameraService.swift` — `sessionPreset = .hd1920x1080` caps at 1080p; HEVC codec enforced via `setOutputSettings` after `addOutput()`. Falls back to H.264 silently on pre-A10 devices.
@@ -353,10 +355,11 @@ Use `docs/CREATE_NEW_ENVIRONMENT.md` and `make environment-create` for new envir
 
 - Prefer the GitHub connector for creating PRs when available, but if it returns `403 Resource not accessible by integration`, do not retry the same connector path. Fall back to the authenticated `gh` CLI and mention the fallback in the final summary.
 - PR descriptions should capture the original user-visible bug report or feature request, root cause, implementation summary, validation performed, manual test status, and any notable review follow-up. If the user reported an error message or screenshot, preserve the relevant text in the PR body so the review has the original symptom in context.
+- Before posting any GitHub comment or PR description, scan for tokens GitHub auto-resolves: `#N` becomes a cross-reference to a PR/issue in this repo, `@user` notifies, bare GitHub URLs unfurl. Use distinct prefixes for review-finding labels across rounds (`F1`-`Fn` for initial findings, `T1`-`Tn` for test follow-ups, etc.) so inline references unambiguously target one round and don't collide with GitHub's `#N` syntax. If a comment already posted contains a collision, edit it in place via `gh api PATCH /repos/<owner>/<repo>/issues/comments/<id>` rather than reposting.
 - When a PR is one slice of a larger issue or epic, reference the parent issue in the PR body with non-closing language such as `Part of #NN` or `Refs #NN`. Use closing keywords such as `Closes #NN` only on the final PR that actually completes the issue. When available, also associate the PR with the issue in GitHub's Development metadata so the relationship is visible from both sides.
 - For parent issue slice checklists, do not mark an interim slice complete while its PR is still open. Leave the slice unchecked until the PR has merged and the relevant post-merge `main` CI has passed; use PR comments or the PR body for in-progress handoff notes.
-- When review or implementation is bouncing between Codex, Claude, and a human reviewer, use concise PR comments as the durable handoff log after meaningful review/fix rounds. Keep chat for decisions and status; keep the PR thread readable for the next agent or reviewer.
-- Every PR comment or PR description Codex posts must start with a short italic attribution line on its own at the very top, before any heading or other content: `_Posted by Codex_`. This makes Codex's comments distinguishable from Ivan's direct comments and Claude Code's comments — all three post under the same GitHub account, and the attribution is the only way a future reader can tell them apart. Keep the line role-agnostic; Codex may act as implementer, reviewer, debugger, or planner depending on the task.
+- When review or implementation is bouncing between AI agents (like Codex, Gemini, Claude) and a human reviewer, use concise PR comments as the durable handoff log after meaningful review/fix rounds. Keep chat for decisions and status; keep the PR thread readable for the next agent or reviewer.
+- Every PR comment or PR description an AI agent posts must start with a short italic attribution line on its own at the very top, before any heading or other content, using its own name (e.g., `_Posted by Claude Code_`, `_Posted by Codex_`, or `_Posted by Gemini_`). This makes the AI's comments distinguishable from Ivan's direct comments — since they post under the same GitHub account, the attribution is the only way a future reader can tell them apart. Keep the line role-agnostic; the AI may act as implementer, reviewer, debugger, or planner depending on the task.
 - Keep the PR body validation matrix current after each meaningful review response, especially when new tests, manual checks, or known skipped checks are added.
 - After updating PR metadata through a connector or CLI, immediately verify important state such as draft/ready status, base branch, title, body, and issue-closing references. Tooling may normalize fields or change PR state as a side effect.
 - When creating or editing GitHub PR descriptions via `gh pr ...`, prefer plain Markdown with simple shell-safe quoting. Avoid unnecessary escaping of inline code or symbols; if the body is complex, write it to a temporary file and pass it with `--body-file` rather than packing heavily escaped Markdown into one shell argument.
@@ -369,6 +372,7 @@ Use `docs/CREATE_NEW_ENVIRONMENT.md` and `make environment-create` for new envir
   # write body to "$tmpfile"
   gh pr create --body-file "$tmpfile" ...
   ```
+- Inline review threads on a PR cannot be resolved via REST. Use the GraphQL `resolveReviewThread` mutation with the thread's node ID (which is different from the comment ID returned by REST). Fetch IDs first with `gh api graphql -f query='query{ repository(owner:"<owner>",name:"<repo>"){ pullRequest(number:<n>){ reviewThreads(first:20){ nodes{ id isResolved comments(first:1){ nodes{ path body } } } } } } }'`, then resolve each with `gh api graphql -f query='mutation($id:ID!){ resolveReviewThread(input:{threadId:$id}){ thread{ isResolved } } }' -F id=<thread_node_id>`. Resolve only after the addressed fix is committed and pushed on the PR's head. For deferred items, post a brief reply on the thread before resolving that names where the deferred work was captured — silently resolving a deferred thread loses the audit trail for future readers landing on the PR.
 
 ### GitHub Actions Workflow Notes
 
@@ -397,7 +401,7 @@ This applies to both implementation work ("does this SDK accept that option?") a
 
 The same rule applies at **design and planning** time. When a slice's viability or shape depends on a specific tool capability — does this provider expose a non-mutating data source, does this action accept this input, does this CLI flag exist — verify against the source before building around an assumed answer. A design built on an SDK-behaviour guess produces multiple wasted rounds when the guess turns out wrong.
 
-**Negative claims need a higher verification bar.** Asserting that a feature, rule, or API *does not exist* in a third-party library is higher-stakes than asserting it does, because the recommendation that follows a negative claim is usually "remove this." If the rule that was disabled silently turns out to be real, removing it changes behavior. Before posting a "this doesn't exist, delete it" finding, verify the absence empirically — enumerate from the installed package, run the tool with the rule or flag explicitly enabled, grep the source — and record the verification step alongside the finding. This applies equally to Claude, Codex, and human reviewers.
+**Negative claims need a higher verification bar.** Asserting that a feature, rule, or API *does not exist* in a third-party library is higher-stakes than asserting it does, because the recommendation that follows a negative claim is usually "remove this." If the rule that was disabled silently turns out to be real, removing it changes behavior. Before posting a "this doesn't exist, delete it" finding, verify the absence empirically — enumerate from the installed package, run the tool with the rule or flag explicitly enabled, grep the source — and record the verification step alongside the finding. This applies equally to AI agents and human reviewers.
 
 ### Verifying Local Changes Before Claiming Green
 
@@ -462,13 +466,39 @@ Do not collapse distinct failure sources into one user message unless the recove
 
 When a feature expands materially beyond its original scope, update the PR title and description promptly so they match the actual branch contents.
 
+### PR Review Workflow
+
+Open every review with a one-sentence "is this PR right-sized for the bug it claims to fix?" check. Catching scope creep before drilling into findings saves review rounds, and the answer informs the depth of the rest of the review.
+
+When a review round prompts scope expansion that no longer matches the PR title, parent-issue link, or slice framing, ask explicitly whether to reframe — update the PR title, change the issue cross-reference, or retitle the slice. Right-sizing as observation is weaker than right-sizing as action; if the scope has genuinely shifted, the framing should shift with it.
+
+Use severity gating (High / Medium / Low / Observations) with explicit "block on" vs "nice to have" labels. Numbering every nit at Low severity inflates the punch list — cluster sub-low items under a single "Nits" heading rather than giving each its own ID. If a Low or Observation item needs hedging in the chat preview ("borderline", "arguably", "could go either way"), drop it instead of clustering — the clustering rule applies to nits you'd post unconditionally; hedged items add review noise without adding signal.
+
+When two docs, config files, or build settings name what looks like the same thing differently, trace each name to what it actually points to in code/config before drafting a "pick one" finding. In layered build systems (xcconfig keys, build-setting passthrough, Info.plist values, runtime env-var overrides), the same conceptual value often has multiple correct names at different layers — for example, an xcconfig key like `*_HOST_NAME` that stores hostname only, alongside a runtime env-var override like `*_HOST` that expects a full URL. The first move on a naming disagreement is reconstruction, not arbitration.
+
+When the developer's revision improves on your suggestion (for example, splitting one error case into two semantically distinct cases rather than the tagged-source variant you proposed), call it out explicitly in the next round. Credit the thinking, not just the diff.
+
+For substantive PR reviews, the PR comment thread is the source of truth — the next reviewer (Codex, Claude, Gemini, or human) picks up findings there. Post structured findings, verification tables, and follow-ups to `gh pr comment`, not chat. Chat is for the user's decisions and opinions; the chat reply after posting should be a one-line link to the PR comment, not a duplicate of the findings.
+
+When a review surfaces a safety, security, or auth boundary (mutation gates, env-aware checks, predicate functions), bundle a "make this unit-testable" structural suggestion into the same finding — typically: extract the gate as a pure function with explicit inputs. A boundary verifiable only by aiming at the production system is a boundary that won't be verified.
+
+When recommending a "fail loud" or stricter validation change, enumerate the failure modes you expect to be caught — empty, whitespace-only, scheme-only, wrong scheme, and so on — rather than naming one example. A reviewer who specifies only one example forces the developer to infer the rest; missed modes return as follow-up findings.
+
+When a PR introduces shared infrastructure (Terraform modules, library helpers, base config, abstractions designed to be reused across environments) that the immediate change uses for one environment but future changes will reuse for others, run a "Prod-safety regression risk" pass before settling on findings. Scan for defaults baked into shared code that are fine for the immediate use case (e.g. Dev) but unsafe in the broader use case the code will eventually serve (e.g. Prod). Default values, deletion policies, debug flags, error-recovery behavior, and "convenience" fallbacks are the usual culprits. The lens: if this code were used unchanged for the most stringent environment it's meant to serve, what would break?
+
+When posting verification of fixes, explicitly distinguish what was checked by reading code, by running tests, or by visual inspection, from what was trusted via the developer's claim. Status tables without this disclosure read as exhaustive when parts of the claim were not independently verified.
+
+When recommending test additions, include an explicit "not worth adding" list. Test-coverage prompts without an explicit non-goals list reliably trigger sprawl — call out what's already covered by integration tests, what's framework/platform behavior, and what's trivial composition the suite would re-verify for no gain.
+
+For iOS App Check, Firebase, or async/state-related findings, follow the failure-source classification and Release-leak audit documented earlier in this section (§ Product Feature Workflow) and in § Config / Infrastructure Change Workflow.
+
 ### PR Retrospective
 
 Every PR ends with a retrospective before merge. This is not gated on the user (Ivan) asking — by the time the PR is ready to merge, the agent driving the work runs the retrospective unprompted. If the user forgets to ask, the agent still runs it.
 
 **When.** After the current head's CI has a successful or expected status rollup and all open review findings are resolved, before the PR is merged. If the retrospective produces no commit, it can be the last step before the merge button. If it produces a commit, push it and wait for the new head's status rollup to be successful or expected before merging; the final merge gate is always the latest PR head, not the pre-retrospective verdict.
 
-**What.** Capture what worked, what didn't, and what to do differently — be specific, not vague. Findings that generalise into durable conventions land in the appropriate Markdown file in the same PR: `AGENTS.md` for cross-agent project conventions, `CLAUDE.md` for Claude-specific review/work craft, ADRs only when the finding is an architectural decision (not a process rule). Findings that don't generalise — one-off friction, personal preference, redundant with existing rules — are explicitly skipped in the summary with reasoning, so the durable docs do not bloat.
+**What.** Capture what worked, what didn't, and what to do differently — be specific, not vague. Findings that generalise into durable conventions land in the appropriate Markdown file in the same PR: `AGENTS.md` for cross-agent project conventions, `CLAUDE.md` for Claude-specific quirks, `.codex/AGENTS.md` for Codex-specific quirks, `.antigravityrules` for Antigravity (Gemini)-specific quirks, ADRs only when the finding is an architectural decision (not a process rule). Findings that don't generalise — one-off friction, personal preference, redundant with existing rules — are explicitly skipped in the summary with reasoning, so the durable docs do not bloat.
 
 **Same-PR rule.** The retrospective commit lands in the PR the lessons came from, not a separate follow-up. This is intentional and deliberately contradicts the usual "keep PR scope tight" convention. Rationale: a future reader who lands on the PR sees both the change and the lessons it produced in one place, with the linkage intact. Reviewers should not flag retrospective commits as scope creep. Sequence: write the retrospective in chat → edit the relevant Markdown files → commit with a `Capture PR #N retrospective lessons in <FILES>` subject → push → post a short PR comment disclosing what the commit contains so a re-reviewer is not surprised → verify the latest-head PR status rollup before merge. The closing review's merge verdict is not re-litigated by a doc-only retrospective commit, but the post-retrospective head must still have successful or expected checks.
 
