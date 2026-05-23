@@ -8,18 +8,14 @@ if [[ -z "$file" || -z "$key" || ! -f "$file" ]]; then
   exit 0
 fi
 
-value="$(awk -F '=' -v key="$key" '
-  $1 ~ "^[[:space:]]*" key "[[:space:]]*$" {
-    value = $2
-    sub(/^[[:space:]]+/, "", value)
-    sub(/[[:space:]]+$/, "", value)
-    print value
-    exit
-  }
-' "$file")"
+script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=scripts/lib/xcconfig-validate.sh
+. "${script_dir}/xcconfig-validate.sh"
 
-if [[ "$key" =~ (_HOST|_HOST_NAME)$ && "$value" == *"://"* ]]; then
-  printf 'error: %s in %s must be a hostname only, got %s\n' "$key" "$file" "$value" >&2
+value="$(awk -f "${script_dir}/xcconfig-parse.awk" -v mode=single -v key="$key" "$file")"
+
+if ! err="$(xcconfig_validate_value "$file" "$key" "$value")"; then
+  printf '%s\n' "$err" >&2
   exit 2
 fi
 

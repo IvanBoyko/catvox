@@ -399,6 +399,14 @@ The same rule applies at **design and planning** time. When a slice's viability 
 
 **Negative claims need a higher verification bar.** Asserting that a feature, rule, or API *does not exist* in a third-party library is higher-stakes than asserting it does, because the recommendation that follows a negative claim is usually "remove this." If the rule that was disabled silently turns out to be real, removing it changes behavior. Before posting a "this doesn't exist, delete it" finding, verify the absence empirically — enumerate from the installed package, run the tool with the rule or flag explicitly enabled, grep the source — and record the verification step alongside the finding. This applies equally to Claude, Codex, and human reviewers.
 
+### Verifying Local Changes Before Claiming Green
+
+Local-host green is not CI green when the change touches a split-personality CLI utility — one that exists on both BSD (macOS) and GNU (Linux) but does something different. Examples: `stat` (`-f` means filesystem-info on GNU and BSD-format on macOS, with overlapping format specifiers that look right but aren't), `date -r` (BSD only), `sed -i ''` vs `sed -i` (BSD requires the empty suffix; GNU rejects it), `readlink -f` (GNU only on older macOS), `mktemp` templates (`mktemp` vs `mktemp -t`), `grep -P`, `awk` regex extensions, `tar --transform`. The naive defensive idiom `bsd_form || gnu_form` does not save you when both invocations exit 0 with different output, which is the common case.
+
+The rule: when a script or test uses any of those utilities, branch on `uname` (or `$OSTYPE`) up front and pick the right invocation explicitly, or run the script on both platforms before claiming green. A `bsd || gnu` fallback chain is a code smell — it implies that one form will fail loudly on the other host, which is rarely true.
+
+When posting a verification table for a change that includes shell scripts or shell-based tests, name the host the verification ran on (e.g. "macOS local" or "Linux runner") so reviewers know whether the green is host-specific or platform-portable. A row that says `make scripts-test: pass` without naming the host overstates what was checked.
+
 ### Config / Infrastructure Change Workflow
 
 For infra, environment, secrets, build-setting, or runtime-configuration changes, do a small negative-test pass before review. Check missing config, malformed config, unsafe environment names, Release fail-loud behavior, and production-mutation rejection where relevant. Prefer automated tests for safety properties; manual live checks should supplement them, not be the only proof.

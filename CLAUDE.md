@@ -38,6 +38,8 @@ For iOS App Check, Firebase, or async/state-related findings, follow the failure
 
 See `AGENTS.md` § Verifying SDK and Tool Behavior — the rules apply to Claude exactly as written. Verify library behavior against the pinned source before asserting; treat negative claims ("this rule doesn't exist," "this flag isn't supported") as needing empirical verification before they become "remove this" recommendations.
 
+For BSD/GNU CLI portability when verifying local changes (`stat`, `sed -i`, `date -r`, etc.) before claiming green, see `AGENTS.md` § Verifying Local Changes Before Claiming Green.
+
 ## Posting review content to GitHub
 
 For review writeups, retrospectives, and manual-test plans, use the `gh pr comment` plus temporary-file pattern documented in `AGENTS.md` § GitHub PR Publishing Notes. Do not commit review artifacts to the repo root; keep PR discussion inside the PR so the next reader has the full thread in one place.

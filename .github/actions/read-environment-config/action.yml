@@ -35,35 +35,29 @@ runs:
 
         config="config/environments/${CATVOX_ACTION_ENVIRONMENT}.xcconfig"
 
-        read_value() {
-          scripts/lib/read-xcconfig-value.sh "$config" "$1"
-        }
+        # One parse for the whole xcconfig, then source the resulting fragment
+        # so every key becomes a shell variable. The emitter validates the
+        # _HOST/_HOST_NAME scheme rule for every key in the file before
+        # writing any output, so a malformed value aborts the action loudly
+        # rather than producing a partial sourceable fragment.
+        fragment="$(mktemp)"
+        trap 'rm -f "$fragment"' EXIT
+        scripts/lib/emit-xcconfig-env.sh --format=sh "$config" > "$fragment"
+        # shellcheck source=/dev/null
+        . "$fragment"
 
-        gcp_project_id="$(read_value GCP_PROJECT_ID)"
-        gcp_service_account="$(read_value CATVOX_GCP_CI_SERVICE_ACCOUNT)"
-        gcp_wif_provider="$(read_value CATVOX_GCP_WIF_PROVIDER)"
-
-        if [[ -z "$gcp_project_id" ]]; then
-          echo "GCP_PROJECT_ID must be set in $config" >&2
-          exit 1
-        fi
-        if [[ -z "$gcp_service_account" ]]; then
-          echo "CATVOX_GCP_CI_SERVICE_ACCOUNT must be set in $config" >&2
-          exit 1
-        fi
-        if [[ -z "$gcp_wif_provider" ]]; then
-          echo "CATVOX_GCP_WIF_PROVIDER must be set in $config" >&2
-          exit 1
-        fi
+        : "${GCP_PROJECT_ID:?GCP_PROJECT_ID must be set in $config}"
+        : "${CATVOX_GCP_CI_SERVICE_ACCOUNT:?CATVOX_GCP_CI_SERVICE_ACCOUNT must be set in $config}"
+        : "${CATVOX_GCP_WIF_PROVIDER:?CATVOX_GCP_WIF_PROVIDER must be set in $config}"
 
         {
-          printf 'gcp_project_id=%s\n' "$gcp_project_id"
-          printf 'gcp_service_account=%s\n' "$gcp_service_account"
-          printf 'gcp_wif_provider=%s\n' "$gcp_wif_provider"
+          printf 'gcp_project_id=%s\n' "$GCP_PROJECT_ID"
+          printf 'gcp_service_account=%s\n' "$CATVOX_GCP_CI_SERVICE_ACCOUNT"
+          printf 'gcp_wif_provider=%s\n' "$CATVOX_GCP_WIF_PROVIDER"
         } >> "$GITHUB_OUTPUT"
 
         {
-          printf 'GCP_PROJECT_ID=%s\n' "$gcp_project_id"
-          printf 'CATVOX_GCP_CI_SERVICE_ACCOUNT=%s\n' "$gcp_service_account"
-          printf 'CATVOX_GCP_WIF_PROVIDER=%s\n' "$gcp_wif_provider"
+          printf 'GCP_PROJECT_ID=%s\n' "$GCP_PROJECT_ID"
+          printf 'CATVOX_GCP_CI_SERVICE_ACCOUNT=%s\n' "$CATVOX_GCP_CI_SERVICE_ACCOUNT"
+          printf 'CATVOX_GCP_WIF_PROVIDER=%s\n' "$CATVOX_GCP_WIF_PROVIDER"
         } >> "$GITHUB_ENV"

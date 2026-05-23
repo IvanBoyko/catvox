@@ -75,5 +75,10 @@ terraform/backend/*.hcl
 !terraform/backend/*.hcl.example
 .env
 
+# Generated Makefile fragments — see scripts/lib/emit-xcconfig-env.sh and the
+# $(CATVOX_ENV_CACHE) rule in Makefile. Rebuilt automatically from the
+# matching config/environments/<env>.xcconfig.
+.make.d/
+
 # Codex
 .agents/
