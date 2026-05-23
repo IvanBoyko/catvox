@@ -11,7 +11,11 @@ IOS_UI_TEST_DESTINATION := $(IOS_TEST_DESTINATION)
 CATVOX_ENVIRONMENT ?= dev
 CATVOX_ENV_CONFIG ?= config/environments/$(CATVOX_ENVIRONMENT).xcconfig
 CATVOX_ENV_CACHE_DIR ?= .make.d
-CATVOX_ENV_CACHE ?= $(CATVOX_ENV_CACHE_DIR)/$(CATVOX_ENVIRONMENT).env.mk
+# Derive the cache filename from the full CATVOX_ENV_CONFIG path, not just
+# CATVOX_ENVIRONMENT, so callers that override the config path (e.g.
+# `make CATVOX_ENV_CONFIG=/tmp/staging.xcconfig`) get a distinct cache and
+# never read stale values from a previous run that used the default path.
+CATVOX_ENV_CACHE ?= $(CATVOX_ENV_CACHE_DIR)/$(subst /,__,$(CATVOX_ENV_CONFIG)).env.mk
 
 # Parse <env>.xcconfig once per environment and cache the resulting `KEY ?= VALUE`
 # lines as a Makefile fragment. Standard prerequisite mtime tracking handles
@@ -193,6 +197,7 @@ doctor:
 
 scripts-test:
 	@bash scripts/test/emit-xcconfig-env.test.sh
+	@bash scripts/test/makefile-env-cache.test.sh
 
 ios-generate:
 	@xcodegen generate
