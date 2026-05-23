@@ -273,7 +273,8 @@ scan:
      --glob '!scripts/cleanup-legacy-presplit-project.sh'
    ```
 2. Verify the GitHub Environment `dev` secrets point at the new Dev project.
-3. Recreate ignored legacy backend/tfvars files while the old state bucket still exists:
+3. Confirm the ignored legacy tfvars file exists while the old state bucket still exists:
+   `terraform/env/legacy-presplit.tfvars`.
 4. Run an explicit old-project destroy using the legacy tfvars (the Makefile will auto-inject the backend bucket args):
    ```bash
    CATVOX_ENVIRONMENT=legacy-presplit \
