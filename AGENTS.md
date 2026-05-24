@@ -19,6 +19,18 @@ Read these documents in order before touching any code or infrastructure:
 
 **The pipeline is:** HLD → TRD → MVP Backlog → Code. Never let code get ahead of TRD. When you implement something, update `docs/MVP_BACKLOG.md` to mark it done.
 
+### Agent-Specific Overlays
+
+`AGENTS.md` is the shared baseline for all AI agents working in this repository. After reading it, each agent must also read its own overlay file:
+
+| Agent | Overlay |
+|---|---|
+| Codex | `.codex/AGENTS.md` |
+| Claude Code | `CLAUDE.md` |
+| Antigravity / Gemini | `.antigravityrules` |
+
+Overlay files are additive. They may override identity, tool, UI, or runtime-specific guidance for that agent, but they do not override shared project rules in this file unless they say so explicitly.
+
 ### ADR Workflow
 
 Create a new ADR in `docs/adr/` for any decision that is architectural, security-relevant, infrastructure-relevant, costly to reverse, or likely to need explanation later. See `docs/adr/README.md` for the full convention.

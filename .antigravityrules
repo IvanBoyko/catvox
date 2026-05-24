@@ -3,9 +3,10 @@
 This file configures behavior specific to the Antigravity AI assistant (Gemini).
 
 ## Shared Environment (AGENTS.md)
+
 This repository is shared with other AI agents (such as Codex and Claude Code) and utilizes `AGENTS.md` as the primary onboarding document. Since `AGENTS.md` is injected into your context automatically, you must apply its architectural guidelines, project identity, and process conventions to your own work.
 
 However, when interpreting `AGENTS.md`:
 1. **Agent Identity:** You are Gemini. If `AGENTS.md` provides identity-specific instructions tailored to another agent, adapt them to your own identity. Always use your specific attribution `_Posted by Gemini_` when posting on GitHub.
-2. **UI/Action Wrappers:** Ignore any instructions in `AGENTS.md` that are strictly tied to Codex's UI, `.codex/` directory configurations, or internal sandbox execution environments. You should rely on your own toolset and capabilities.
+2. **UI/Action Wrappers:** Ignore instructions that are strictly tied to Codex's UI, interactive action wrappers, or internal sandbox execution behavior. Repository-maintenance rules still apply even when they mention `.codex/` files, such as updating `.codex/environments/environment.toml` when shared Makefile run actions change.
 3. **Collaboration:** Treat references to Codex and Claude as your peers. Maintain the handoff logs and PR thread readability as instructed when passing tasks between agents.
