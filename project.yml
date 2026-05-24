@@ -59,7 +59,7 @@ targets:
           node "${SRCROOT}/scripts/validate-firebase-ios-config.mjs"
     settings:
       base:
-        PRODUCT_BUNDLE_IDENTIFIER: $(CATVOX_PRODUCT_BUNDLE_IDENTIFIER)
+        PRODUCT_BUNDLE_IDENTIFIER: $(CATVOX_IOS_BUNDLE_ID)
         DEVELOPMENT_TEAM: QYT76L5836
         CODE_SIGN_ENTITLEMENTS: CatVox/CatVox.entitlements
         SWIFT_VERSION: "5.0"

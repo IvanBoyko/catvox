@@ -12,7 +12,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 
 ENVIRONMENT="${CATVOX_ENVIRONMENT:-}"
-PROJECT_ID="${GCP_PROJECT_ID:-}"
+PROJECT_ID="${CATVOX_PROJECT_ID:-}"
 PROJECT_DISPLAY_NAME="${PROJECT_DISPLAY_NAME:-}"
 REGION="${CATVOX_FUNCTION_REGION:-}"
 FIRESTORE_LOCATION="${CATVOX_FIRESTORE_LOCATION:-}"
@@ -68,7 +68,7 @@ quote_tf_string() {
 }
 
 require_value CATVOX_ENVIRONMENT "${ENVIRONMENT}"
-require_value GCP_PROJECT_ID "${PROJECT_ID}"
+require_value CATVOX_PROJECT_ID "${PROJECT_ID}"
 require_value PROJECT_DISPLAY_NAME "${PROJECT_DISPLAY_NAME}"
 require_value CATVOX_FUNCTION_REGION "${REGION}"
 require_value CATVOX_FIRESTORE_LOCATION "${FIRESTORE_LOCATION}"
@@ -169,8 +169,7 @@ else
 fi
 
 export CATVOX_ENVIRONMENT="${ENVIRONMENT}"
-export GCP_PROJECT_ID="${PROJECT_ID}"
-export FIREBASE_PROJECT="${PROJECT_ID}"
+export CATVOX_PROJECT_ID="${PROJECT_ID}"
 export CATVOX_FUNCTION_REGION="${REGION}"
 export CATVOX_FIRESTORE_LOCATION="${FIRESTORE_LOCATION}"
 export CATVOX_TF_STATE_BUCKET="${STATE_BUCKET}"
@@ -184,23 +183,23 @@ export CATVOX_MANAGE_GCF_SOURCES_BUCKET_IAM="${MANAGE_GCF_SOURCES_BUCKET_IAM}"
 
 make terraform-init \
   CATVOX_ENVIRONMENT="${ENVIRONMENT}" \
-  GCP_PROJECT_ID="${PROJECT_ID}" \
+  CATVOX_PROJECT_ID="${PROJECT_ID}" \
   CATVOX_TF_VARS_FILE="${TFVARS_FILE}"
 
 make terraform-plan \
   CATVOX_ENVIRONMENT="${ENVIRONMENT}" \
-  GCP_PROJECT_ID="${PROJECT_ID}" \
+  CATVOX_PROJECT_ID="${PROJECT_ID}" \
   CATVOX_TF_VARS_FILE="${TFVARS_FILE}"
 
 if [[ "${RUN_TERRAFORM_APPLY}" == "1" ]]; then
   make terraform-ci-apply \
     CATVOX_ENVIRONMENT="${ENVIRONMENT}" \
-    GCP_PROJECT_ID="${PROJECT_ID}" \
+    CATVOX_PROJECT_ID="${PROJECT_ID}" \
     CATVOX_TF_VARS_FILE="${TFVARS_FILE}"
 
   make terraform-output-firebase-plist \
     CATVOX_ENVIRONMENT="${ENVIRONMENT}" \
-    GCP_PROJECT_ID="${PROJECT_ID}" \
+    CATVOX_PROJECT_ID="${PROJECT_ID}" \
     CATVOX_TF_VARS_FILE="${TFVARS_FILE}"
 else
   echo "RUN_TERRAFORM_APPLY is not 1; skipped terraform apply and plist export."
@@ -216,8 +215,7 @@ if [[ "${RUN_FUNCTIONS_DEPLOY}" == "1" ]]; then
 
   make functions-deploy \
     CATVOX_ENVIRONMENT="${ENVIRONMENT}" \
-    FIREBASE_PROJECT="${PROJECT_ID}" \
-    GCP_PROJECT_ID="${PROJECT_ID}"
+    CATVOX_PROJECT_ID="${PROJECT_ID}"
 else
   echo "RUN_FUNCTIONS_DEPLOY is not 1; skipped Functions deploy."
 fi
@@ -229,8 +227,6 @@ Remaining secrets to add to the GitHub Environment named '${ENVIRONMENT}':
   TF_VAR_APP_CHECK_DEBUG_TOKEN=<Dev only; same UUID used in ${TFVARS_FILE}>
 
 After Terraform apply and Functions deploy, update config/environments/${ENVIRONMENT}.xcconfig with:
-  GCP_PROJECT_ID=${PROJECT_ID}
-  FIREBASE_PROJECT=${PROJECT_ID}
   CATVOX_PROJECT_ID=${PROJECT_ID}
   CATVOX_ENVIRONMENT=${ENVIRONMENT}
   CATVOX_FUNCTION_REGION=${REGION}
@@ -238,7 +234,6 @@ After Terraform apply and Functions deploy, update config/environments/${ENVIRON
   CATVOX_TF_STATE_BUCKET=${STATE_BUCKET}
   CATVOX_GCP_CI_SERVICE_ACCOUNT=catvox-ci-sa@${PROJECT_ID}.iam.gserviceaccount.com
   CATVOX_GCP_WIF_PROVIDER=projects/${PROJECT_NUMBER}/locations/global/workloadIdentityPools/github-actions-pool/providers/github-actions-provider
-  CATVOX_PRODUCT_BUNDLE_IDENTIFIER=${IOS_BUNDLE_ID}
   CATVOX_IOS_BUNDLE_ID=${IOS_BUNDLE_ID}
   CATVOX_FIREBASE_IOS_APP_DISPLAY_NAME=${IOS_APP_DISPLAY_NAME}
   CATVOX_FIREBASE_IOS_APP_DELETION_POLICY=${IOS_APP_DELETION_POLICY}

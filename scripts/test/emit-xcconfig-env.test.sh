@@ -168,15 +168,19 @@ case_single_quote_round_trip() {
   assert_eq "$got" "it's a trap" "sourced QUOTED" || return 1
 }
 
-# Alias keys: both names emitted so the Makefile's post-include
-# `CATVOX_IOS_BUNDLE_ID ?= $(CATVOX_PRODUCT_BUNDLE_IDENTIFIER)` fallback works.
-case_alias_keys_both_emitted() {
+# Retired duplicate aliases must fail so config cannot silently split again.
+case_retired_alias_keys_rejected() {
   local cfg="${tmpdir}/alias.xcconfig"
-  printf 'CATVOX_IOS_BUNDLE_ID = a\nCATVOX_PRODUCT_BUNDLE_IDENTIFIER = b\n' > "$cfg"
-  local out
-  out="$("$emit" --format=make "$cfg")" || return 1
-  assert_contains "$out" 'CATVOX_IOS_BUNDLE_ID ?= a' "make output" || return 1
-  assert_contains "$out" 'CATVOX_PRODUCT_BUNDLE_IDENTIFIER ?= b' "make output" || return 1
+  cat > "$cfg" <<'EOF'
+CATVOX_PROJECT_ID = catvox-dev
+GCP_PROJECT_ID = catvox-dev
+FIREBASE_PROJECT = catvox-dev
+CATVOX_IOS_BUNDLE_ID = com.kathelix.catvox.dev
+CATVOX_PRODUCT_BUNDLE_IDENTIFIER = com.kathelix.catvox.dev
+EOF
+  local rc=0
+  "$emit" --format=make "$cfg" >/dev/null 2>&1 || rc=$?
+  [[ "$rc" -ne 0 ]]
 }
 
 # Unknown --format and missing argument are usage errors.
@@ -224,7 +228,7 @@ run_case missing_file_silent
 run_case empty_value_omitted
 run_case dollar_escaped_for_make
 run_case single_quote_round_trip
-run_case alias_keys_both_emitted
+run_case retired_alias_keys_rejected
 run_case usage_errors
 run_case comments_and_blanks_ignored
 

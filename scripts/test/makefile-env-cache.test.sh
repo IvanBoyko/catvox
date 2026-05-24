@@ -16,7 +16,7 @@ snapshot_mk="${tmpdir}/snapshot-vars.mk"
 cat > "$snapshot_mk" <<'EOF'
 .PHONY: snapshot
 snapshot:
-	@printf 'GCP_PROJECT_ID=%s\n' '$(GCP_PROJECT_ID)'
+	@printf 'CATVOX_PROJECT_ID=%s\n' '$(CATVOX_PROJECT_ID)'
 	@printf 'CATVOX_FUNCTION_REGION=%s\n' '$(CATVOX_FUNCTION_REGION)'
 EOF
 
@@ -72,7 +72,7 @@ case_distinct_cache_per_config_path() {
   # Step 2: prepare a deliberately wrong override config with an older mtime
   # so a mtime-only check would mistakenly think the cache is fresh enough.
   local override="${tmpdir}/staging-fake.xcconfig"
-  printf 'GCP_PROJECT_ID = wrong-project-id\nCATVOX_FUNCTION_REGION = europe-west1\n' > "$override"
+  printf 'CATVOX_PROJECT_ID = wrong-project-id\nCATVOX_FUNCTION_REGION = europe-west1\n' > "$override"
   touch -t 202001010000 "$override"
 
   # Step 3: invoke with the override.
@@ -80,7 +80,7 @@ case_distinct_cache_per_config_path() {
   out="$(make -f Makefile -f "$snapshot_mk" "CATVOX_ENV_CONFIG=$override" snapshot 2>/dev/null)" || return 1
 
   # Step 4: assert the override values won, not the dev cache.
-  if [[ "$out" != *"GCP_PROJECT_ID=wrong-project-id"* ]]; then
+  if [[ "$out" != *"CATVOX_PROJECT_ID=wrong-project-id"* ]]; then
     note "override config was ignored; got:"
     note "$out"
     return 1
@@ -139,11 +139,44 @@ case_cache_invalidates_on_xcconfig_touch() {
   fi
 }
 
+# Fresh environment bootstrap has no xcconfig yet, so CATVOX_PROJECT_ID must be
+# supplied explicitly instead of falling through to a placeholder project ID.
+case_missing_config_requires_explicit_project_id() {
+  local missing_config="${tmpdir}/missing-env.xcconfig"
+  local cache_dir="${tmpdir}/missing-cache"
+  local out rc=0
+
+  out="$(make -f Makefile \
+    CATVOX_ENVIRONMENT=fresh \
+    "CATVOX_ENV_CONFIG=${missing_config}" \
+    "CATVOX_ENV_CACHE_DIR=${cache_dir}" \
+    environment-create 2>&1)" || rc=$?
+
+  if [[ "$rc" -eq 0 ]]; then
+    note "expected environment-create to fail without CATVOX_PROJECT_ID"
+    note "$out"
+    return 1
+  fi
+
+  if [[ "$out" != *"CATVOX_PROJECT_ID is required."* ]]; then
+    note "expected missing CATVOX_PROJECT_ID failure, got:"
+    note "$out"
+    return 1
+  fi
+
+  if [[ "$out" == *"replace-with-dev-project-id"* ]]; then
+    note "unexpected placeholder project ID leaked into output:"
+    note "$out"
+    return 1
+  fi
+}
+
 printf 'makefile env-cache tests\n'
 run_case cache_filename_encodes_default_path
 run_case distinct_cache_per_config_path
 run_case cache_hit_on_repeat
 run_case cache_invalidates_on_xcconfig_touch
+run_case missing_config_requires_explicit_project_id
 
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 if [[ "$fail" -ne 0 ]]; then

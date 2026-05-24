@@ -46,7 +46,7 @@ Pick explicit values before running the script:
 | Variable | Example | Required |
 |---|---|---|
 | `CATVOX_ENVIRONMENT` | `dev` | Yes |
-| `GCP_PROJECT_ID` | `kathelix-catvox-dev` | Yes |
+| `CATVOX_PROJECT_ID` | `kathelix-catvox-dev` | Yes |
 | `PROJECT_DISPLAY_NAME` | `Kathelix CatVox Dev` | Yes |
 | `ORGANIZATION_ID` or `FOLDER_ID` | `1032067916665` | Optional, but usually needed for new projects |
 | `BILLING_ACCOUNT_ID` | billing account ID | Optional; if omitted, link billing manually before deploy |
@@ -70,7 +70,7 @@ From the repository root:
 
 ```bash
 CATVOX_ENVIRONMENT=<env> \
-GCP_PROJECT_ID=<project-id> \
+CATVOX_PROJECT_ID=<project-id> \
 PROJECT_DISPLAY_NAME="Kathelix CatVox <Env>" \
 ORGANIZATION_ID=<org-id> \
 BILLING_ACCOUNT_ID=<billing-account-id> \
@@ -140,8 +140,6 @@ After Terraform apply and Functions deploy, update
 `config/environments/<env>.xcconfig` with the environment's non-secret values:
 
 ```xcconfig
-GCP_PROJECT_ID = <project-id>
-FIREBASE_PROJECT = <project-id>
 CATVOX_PROJECT_ID = <project-id>
 CATVOX_ENVIRONMENT = <env>
 CATVOX_FUNCTION_REGION = <region>
@@ -149,7 +147,6 @@ CATVOX_FIRESTORE_LOCATION = <firestore-location>
 CATVOX_TF_STATE_BUCKET = catvox-tf-state-<project-id>
 CATVOX_GCP_CI_SERVICE_ACCOUNT = <terraform output -raw ci_service_account_email>
 CATVOX_GCP_WIF_PROVIDER = <terraform output -raw github_actions_wif_provider>
-CATVOX_PRODUCT_BUNDLE_IDENTIFIER = <bundle-id>
 CATVOX_IOS_BUNDLE_ID = <bundle-id>
 CATVOX_FIREBASE_IOS_APP_DISPLAY_NAME = <display-name>
 CATVOX_FIREBASE_IOS_APP_DELETION_POLICY = ABANDON
@@ -279,12 +276,12 @@ scan:
 4. Run an explicit old-project destroy using the legacy tfvars (the Makefile will auto-inject the backend bucket args):
    ```bash
    CATVOX_ENVIRONMENT=legacy-presplit \
-   GCP_PROJECT_ID=kathelix-catvox-prod \
+   CATVOX_PROJECT_ID=kathelix-catvox-prod \
    CATVOX_TF_VARS_FILE=terraform/env/legacy-presplit.tfvars \
    make terraform-plan
 
    CATVOX_ENVIRONMENT=legacy-presplit \
-   GCP_PROJECT_ID=kathelix-catvox-prod \
+   CATVOX_PROJECT_ID=kathelix-catvox-prod \
    CATVOX_TF_VARS_FILE=terraform/env/legacy-presplit.tfvars \
    terraform -chdir=terraform destroy -var-file=env/legacy-presplit.tfvars
    ```

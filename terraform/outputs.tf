@@ -28,11 +28,6 @@ output "firestore_database_name" {
   value       = google_firestore_database.default.name
 }
 
-output "gcp_project_id_secret_id" {
-  description = "Secret Manager secret ID for GCP_PROJECT_ID."
-  value       = google_secret_manager_secret.gcp_project_id.secret_id
-}
-
 output "app_check_debug_token_secret_id" {
   description = "Secret Manager secret ID for APP_CHECK_DEBUG_TOKEN."
   value       = try(google_secret_manager_secret.app_check_debug_token[0].secret_id, null)

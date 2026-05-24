@@ -4,7 +4,9 @@
 - Date: 2026-05-22
 - Owners: Kathelix / CatVox
 - Supersedes: the ADR-0018 implementation note that Terraform environment input values stay broadly in `terraform/env/<env>.tfvars`
+- Superseded by: ADR-0022 for the canonical project-ID key name
 - Amended: 2026-05-23: `enable_app_check_debug_token` and `app_check_debug_token_display_name` have been removed in favor of token presence driving registration (PR #60).
+- Amended: 2026-05-24: ADR-0022 retired the `GCP_PROJECT_ID` and `FIREBASE_PROJECT` environment keys in favor of `CATVOX_PROJECT_ID`.
 - Related docs: `docs/HLD.md`, `docs/TRD.md`, `docs/CREATE_NEW_ENVIRONMENT.md`, `docs/CI_BOOTSTRAP.md`, `docs/adr/0018-create-dedicated-dev-environment.md`, `docs/adr/0020-bind-posthog-projects-to-catvox-environments.md`, GitHub issue #38
 
 ## Context
@@ -42,7 +44,8 @@ only true secrets or deliberately private values.
 For the current Dev environment this means:
 
 - `GCP_PROJECT_ID` remains in xcconfig and is no longer required as a GitHub
-  Environment secret.
+  Environment secret. This key-name detail is superseded by ADR-0022, which
+  retires `GCP_PROJECT_ID` in favor of `CATVOX_PROJECT_ID`.
 - `CATVOX_GCP_CI_SERVICE_ACCOUNT` stores the full CI service account email.
 - `CATVOX_GCP_WIF_PROVIDER` stores the full WIF provider resource name.
 - GCP Terraform non-secret inputs move to xcconfig, including region, Firestore

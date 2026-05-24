@@ -199,21 +199,8 @@ data "google_firebase_apple_app_config" "ios" {
 }
 
 # ── Secret Manager ────────────────────────────────────────────────────────────
-# TRD §6.1 — zero hardcoded identifiers; all resolved at Cloud Function
-# startup via Secret Manager. Values are never stored in source control.
-
-resource "google_secret_manager_secret" "gcp_project_id" {
-  secret_id = "GCP_PROJECT_ID"
-  replication {
-    auto {}
-  }
-  depends_on = [google_project_service.apis]
-}
-
-resource "google_secret_manager_secret_version" "gcp_project_id" {
-  secret      = google_secret_manager_secret.gcp_project_id.id
-  secret_data = var.project_id
-}
+# Dev-only App Check debug token storage. Project identity is non-secret
+# environment config and is not mirrored into Secret Manager.
 
 resource "google_secret_manager_secret" "app_check_debug_token" {
   count     = local.register_app_check_debug_token ? 1 : 0

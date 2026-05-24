@@ -74,7 +74,7 @@ if gcloud artifacts repositories describe catvox-functions \
     --quiet || true
 fi
 
-for secret in APP_CHECK_DEBUG_TOKEN GCP_PROJECT_ID; do
+for secret in APP_CHECK_DEBUG_TOKEN; do
   if gcloud secrets describe "${secret}" --project="${PROJECT_ID}" >/dev/null 2>&1; then
     gcloud secrets delete "${secret}" --project="${PROJECT_ID}" --quiet || true
   fi

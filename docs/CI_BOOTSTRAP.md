@@ -44,9 +44,9 @@ Required secrets per environment:
 | `POSTHOG_API_KEY` | PostHog scoped personal API key for this environment's PostHog project. |
 
 Non-secret environment values are committed in
-`config/environments/<env>.xcconfig`. This includes `GCP_PROJECT_ID`,
+`config/environments/<env>.xcconfig`. This includes `CATVOX_PROJECT_ID`,
 `CATVOX_GCP_WIF_PROVIDER`, and `CATVOX_GCP_CI_SERVICE_ACCOUNT`; workflows read
-those values before WIF authentication. See ADR-0021.
+those values before WIF authentication. See ADR-0021 and ADR-0022.
 
 ## WIF Trust Model
 

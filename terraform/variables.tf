@@ -17,12 +17,12 @@ variable "environment_name" {
 }
 
 variable "project_id" {
-  description = "GCP project ID for this CatVox environment. Sourced from GCP_PROJECT_ID in config/environments/<env>.xcconfig."
+  description = "GCP/Firebase project ID for this CatVox environment. Sourced from CATVOX_PROJECT_ID in config/environments/<env>.xcconfig."
   type        = string
 
   validation {
     condition     = length(var.project_id) > 0
-    error_message = "project_id must not be empty. Set GCP_PROJECT_ID in the matching xcconfig."
+    error_message = "project_id must not be empty. Set CATVOX_PROJECT_ID in the matching xcconfig."
   }
 }
 
@@ -134,14 +134,14 @@ variable "github_repo" {
 }
 
 variable "tf_state_bucket" {
-  description = "GCS bucket name for Terraform remote state. Created before first terraform init. Derived by the Makefile from CATVOX_TF_STATE_BUCKET or GCP_PROJECT_ID in config/environments/<env>.xcconfig."
+  description = "GCS bucket name for Terraform remote state. Created before first terraform init. Derived by the Makefile from CATVOX_TF_STATE_BUCKET or CATVOX_PROJECT_ID in config/environments/<env>.xcconfig."
   type        = string
   default     = null
   nullable    = true
 
   validation {
     condition     = var.tf_state_bucket == null || length(var.tf_state_bucket) > 0
-    error_message = "tf_state_bucket must be null or non-empty. Set CATVOX_TF_STATE_BUCKET in the matching xcconfig or let the Makefile derive it from GCP_PROJECT_ID."
+    error_message = "tf_state_bucket must be null or non-empty. Set CATVOX_TF_STATE_BUCKET in the matching xcconfig or let the Makefile derive it from CATVOX_PROJECT_ID."
   }
 }
 

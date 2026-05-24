@@ -43,7 +43,7 @@ resource "google_project_iam_member" "datastore_user" {
   member  = "serviceAccount:${google_service_account.backend_sa.email}"
 }
 
-# Secret Manager — resolve GCP_PROJECT_ID and APP_CHECK_DEBUG_TOKEN at runtime.
+# Secret Manager — retained for runtime secrets if later adopted.
 resource "google_project_iam_member" "secretmanager_accessor" {
   project = var.project_id
   role    = "roles/secretmanager.secretAccessor"

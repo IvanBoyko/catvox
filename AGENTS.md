@@ -144,8 +144,8 @@ For environment-specific runs, override variables at invocation time, for exampl
 
 ```bash
 CATVOX_ENVIRONMENT=dev make functions-integration
-GCP_PROJECT_ID=kathelix-catvox-dev make terraform-plan
-FIREBASE_PROJECT=kathelix-catvox-dev make functions-deploy
+CATVOX_PROJECT_ID=kathelix-catvox-dev make terraform-plan
+CATVOX_PROJECT_ID=kathelix-catvox-dev make functions-deploy
 DEVICE_ID=<device-udid> make ios-device-launch
 ```
 
@@ -340,7 +340,7 @@ Use `docs/CREATE_NEW_ENVIRONMENT.md` and `make environment-create` for new envir
 | `TF_VAR_APP_CHECK_DEBUG_TOKEN` | Dev Firebase App Check debug token |
 | `POSTHOG_API_KEY` | PostHog scoped personal API key for the `CatVox Dev` project |
 
-`GCP_PROJECT_ID`, `CATVOX_GCP_CI_SERVICE_ACCOUNT`, and
+`CATVOX_PROJECT_ID`, `CATVOX_GCP_CI_SERVICE_ACCOUNT`, and
 `CATVOX_GCP_WIF_PROVIDER` are non-secret values in
 `config/environments/dev.xcconfig`; CI reads them before WIF authentication.
 

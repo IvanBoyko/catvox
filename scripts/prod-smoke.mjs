@@ -127,7 +127,7 @@ async function runFirestoreDescribe() {
     'databases',
     'describe',
     '--database=(default)',
-    `--project=${requiredValue('GCP_PROJECT_ID')}`,
+    `--project=${requiredValue('CATVOX_PROJECT_ID')}`,
     '--format=value(name)',
   ]);
   console.log('ok: Firestore default database is readable');
@@ -175,9 +175,9 @@ function requiredValue(key) {
 function terraformEnvironment() {
   return {
     ...process.env,
-    GOOGLE_CLOUD_QUOTA_PROJECT: requiredValue('GCP_PROJECT_ID'),
+    GOOGLE_CLOUD_QUOTA_PROJECT: requiredValue('CATVOX_PROJECT_ID'),
     TF_VAR_environment_name: 'prod',
-    TF_VAR_project_id: requiredValue('GCP_PROJECT_ID'),
+    TF_VAR_project_id: requiredValue('CATVOX_PROJECT_ID'),
     TF_VAR_region: requiredValue('CATVOX_FUNCTION_REGION'),
     TF_VAR_firestore_location: requiredValue('CATVOX_FIRESTORE_LOCATION'),
     TF_VAR_tf_state_bucket: requiredValue('CATVOX_TF_STATE_BUCKET'),
