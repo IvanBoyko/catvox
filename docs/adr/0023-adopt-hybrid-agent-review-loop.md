@@ -34,9 +34,12 @@ noise to the PR. Option A also expands the security surface because CI-hosted
 agents would consume PR-controlled text and diffs while using provider secrets.
 
 Option B better matches the current pain: keep the exploratory loop local and
-fast, then publish a cleaner PR for durable review. Option C may become useful
-later, but it adds a framework and persistence model before the simpler local
-state machine has proven insufficient.
+fast, then publish a cleaner PR for durable review. "Cleaner PR" means avoiding
+scattered AI-to-AI PR comments, not hiding the loop history. For the MVP, the
+local loop should consolidate that history into one structured, reviewable
+Markdown artifact in the PR diff. Option C may become useful later, but it adds
+a framework and persistence model before the simpler local state machine has
+proven insufficient.
 
 ## Decision
 
@@ -71,10 +74,16 @@ blocking product, architecture, security, scope, or implementation decisions.
 When clarification is needed, the loop stops and asks all independent blocking
 questions together. The human answer resumes the local loop.
 
-Detailed AI-to-AI discussion is local by default. The final PR should carry a
-concise summary of the important decisions, implementation, validation, and
-remaining risks. A detailed loop log may be committed only when explicitly
-useful for traceability; it must not be automatic PR noise.
+Detailed AI-to-AI discussion stays out of PR comments by default. The local loop
+writes a single append-only Markdown communication file at
+`docs/ai-loop/pr-XXXX.md`, and that file is committed as part of the PR for the
+current MVP. This file is intentional traceability, not accidental PR noise. The
+final PR body should still carry a concise human-readable summary of the
+important decisions, implementation, validation, and remaining risks.
+
+A later ADR may change this retention policy after real usage. Possible future
+alternatives include local-only detailed logs, a final-summary-only committed
+artifact, or external artifact storage.
 
 Option A, when implemented later, must be opt-in, for example by label. It is a
 reviewer augmentation layer, not the primary exploratory design channel. It must
@@ -85,8 +94,12 @@ PR-controlled input.
 ## Consequences
 
 - Early architectural discussion and human clarification stay fast and local.
-- PRs should become cleaner because the PR thread is no longer the scratchpad
-  for the whole AI-to-AI iteration loop.
+- PRs include one AI loop communication file under `docs/ai-loop/`, so reviewers
+  can inspect the full local agent conversation when needed.
+- PRs should become cleaner because the PR comment thread is no longer the
+  scratchpad for the whole AI-to-AI iteration loop.
+- The committed loop file increases the PR diff size, but it avoids scattered
+  comment-thread noise and keeps the local agent handoff trail reviewable.
 - The local loop has more setup cost than a pure GitHub Actions workflow. New
   developers must run an explicit setup command and have the required local AI
   CLIs authenticated.
