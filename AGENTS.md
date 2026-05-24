@@ -380,6 +380,8 @@ Use `docs/CREATE_NEW_ENVIRONMENT.md` and `make environment-create` for new envir
 - When creating or editing GitHub PR descriptions via `gh pr ...`, prefer plain Markdown with simple shell-safe quoting. Avoid unnecessary escaping of inline code or symbols; if the body is complex, write it to a temporary file and pass it with `--body-file` rather than packing heavily escaped Markdown into one shell argument.
 - When scripting in the default `zsh` shell, avoid reserved or read-only variable names such as `status`. Use names such as `rc` or `exit_code` for command exit codes.
 - When watching a known workflow run, prefer `gh run watch <run-id> --exit-status` or `gh run view <run-id> --json ...` over `gh pr checks --watch`, which can lag or show stale pending states. Use `gh pr checks` at the end for the final PR rollup.
+- When Ivan asks an agent to merge a PR, default to squash-and-merge unless he explicitly requests a different merge strategy. Do not ask which merge type to use when no alternative is specified.
+- After a successful PR merge, clean up the local checkout by switching to `main`, pulling the latest main, and deleting the former PR branch: `git switch main`, `git pull --ff-only`, then `git branch -D <OLD_BRANCH_NAME>`. Use the PR head branch as `<OLD_BRANCH_NAME>`. If that local branch is already absent, mention it rather than treating it as a failure. Do not delete the remote branch unless Ivan explicitly asks for that too.
 - For temporary PR body files, prefer:
   ```bash
   tmpfile=$(mktemp)
