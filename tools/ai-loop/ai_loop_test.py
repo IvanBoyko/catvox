@@ -138,6 +138,44 @@ class GitIntegrationTests(unittest.TestCase):
             commit_message = run(["git", "log", "-1", "--format=%B"], repo)
             self.assertIn("[ai-loop] Human: start", commit_message.stdout)
 
+    def test_hook_dry_run_uses_real_git_dir_in_linked_worktree(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            repo = root / "repo"
+            linked = root / "linked"
+            repo.mkdir()
+
+            run(["git", "init"], repo)
+            run(["git", "config", "user.name", "AI Loop Test"], repo)
+            run(["git", "config", "user.email", "ai-loop-test@example.com"], repo)
+
+            shutil.copytree(TOOL_DIR, repo / "tools/ai-loop")
+            run(["git", "add", "tools/ai-loop"], repo)
+            run(["git", "commit", "-m", "Initial tools"], repo)
+            run([sys.executable, str(repo / "tools/ai-loop/ai_loop.py"), "setup"], repo)
+            run(["git", "worktree", "add", "-b", "feature/linked", str(linked)], repo)
+
+            linked_script = linked / "tools/ai-loop/ai_loop.py"
+            start = run(
+                [
+                    sys.executable,
+                    str(linked_script),
+                    "start",
+                    "--branch",
+                    "feature/ai-loop-linked-start",
+                    "--prompt",
+                    "Implement linked worktree workflow",
+                ],
+                linked,
+            )
+            start_output = start.stdout + start.stderr
+            self.assertIn("ai-loop dry-run (post-commit): would dispatch developer agent: codex", start_output)
+            self.assertNotIn("lock exists, skipping", start_output)
+
+            git_dir = run(["git", "rev-parse", "--git-dir"], linked).stdout.strip()
+            self.assertNotEqual(git_dir, ".git")
+            self.assertTrue(git_dir)
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
