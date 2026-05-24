@@ -65,7 +65,6 @@ fastlane/test_output
 # Terraform — GCP root. The PostHog root carries its own .gitignore at
 # terraform/posthog/.gitignore so each root owns its local-files rules.
 terraform/.terraform/
-terraform/.terraform.lock.hcl
 terraform/*.tfstate
 terraform/*.tfstate.backup
 terraform/terraform.tfvars

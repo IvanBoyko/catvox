@@ -14,6 +14,25 @@ points at `kathelix-catvox-dev`; future Prod will use a separate state/config
 set for the preserved `kathelix-catvox-prod` project. See ADR-0017, ADR-0018,
 ADR-0020, and `docs/CREATE_NEW_ENVIRONMENT.md`.
 
+## Provider Lock Files
+
+Both Terraform roots commit their provider lock files:
+
+- `terraform/.terraform.lock.hcl`
+- `terraform/posthog/.terraform.lock.hcl`
+
+When provider constraints change, regenerate the affected root's lock file with
+the platforms used by local development and CI:
+
+```bash
+terraform -chdir=<root> providers lock \
+  -platform=linux_amd64 \
+  -platform=darwin_amd64 \
+  -platform=darwin_arm64
+```
+
+Do not use `terraform init -upgrade` unless the provider upgrade is intentional.
+
 ## GCP root (`terraform/`)
 
 Named environments use explicit files keyed by environment name:
