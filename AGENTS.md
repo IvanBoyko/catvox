@@ -523,6 +523,7 @@ Every PR ends with a retrospective before merge. This is not gated on the user (
 Before merging a feature PR, verify all of the following:
 
 - the PR description matches the final implementation
+- PR issue linkage has been reconciled with GitHub metadata: the PR body uses closing vs non-closing references accurately, Development/sidebar association is present when required, and any no-issue claim has been checked against linked/closing issue metadata
 - acceptance criteria / test checklist is current
 - all PR bot / AI review findings have been reviewed and explicitly resolved, rejected with reasoning, or consciously deferred
 - GitHub inline review threads for addressed findings are resolved, or left open with an explicit note explaining why they remain open
