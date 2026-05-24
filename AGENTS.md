@@ -29,7 +29,7 @@ Read these documents in order before touching any code or infrastructure:
 | Claude Code | `CLAUDE.md` |
 | Antigravity / Gemini | `.antigravityrules` |
 
-Overlay files are additive. They may override identity, tool, UI, or runtime-specific guidance for that agent, but they do not override shared project rules in this file unless they say so explicitly.
+Overlay files supplement this baseline. They may specialize identity, tool, UI, or runtime-specific guidance for that agent, but shared project rules in this file continue to apply unless an overlay says otherwise explicitly.
 
 ### ADR Workflow
 
