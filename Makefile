@@ -44,23 +44,22 @@ else
 endif
 
 # Post-include defaults: apply only when the xcconfig did not set the key.
-# Environment-supplied values (`GCP_PROJECT_ID=foo make ...`) and command-line
-# overrides (`make GCP_PROJECT_ID=foo ...`) still win because `?=` is a no-op on
-# already-defined variables.
-FIREBASE_PROJECT ?= $(GCP_PROJECT_ID)
-CATVOX_PROJECT_ID ?= $(GCP_PROJECT_ID)
-CATVOX_BACKEND_SERVICE_ACCOUNT ?= catvox-backend-sa@$(FIREBASE_PROJECT).iam.gserviceaccount.com
+# Environment-supplied values (`CATVOX_PROJECT_ID=foo make ...`) and
+# command-line overrides (`make CATVOX_PROJECT_ID=foo ...`) still win because
+# `?=` is a no-op on already-defined variables.
+CATVOX_PROJECT_ID ?= replace-with-dev-project-id
+CATVOX_BACKEND_SERVICE_ACCOUNT ?= catvox-backend-sa@$(CATVOX_PROJECT_ID).iam.gserviceaccount.com
 CATVOX_SIGNED_UPLOAD_URL_HOST ?= replace-with-dev-signed-upload-host
 CATVOX_ANALYSE_VIDEO_HOST ?= replace-with-dev-analyse-video-host
 CATVOX_SIGNED_UPLOAD_URL_ENDPOINT ?= https://$(CATVOX_SIGNED_UPLOAD_URL_HOST)
 CATVOX_ANALYSE_VIDEO_ENDPOINT ?= https://$(CATVOX_ANALYSE_VIDEO_HOST)
 CATVOX_FIREBASE_APP_ID ?= replace-with-dev-firebase-app-id
 CATVOX_FIREBASE_API_KEY ?= replace-with-dev-firebase-api-key
-CATVOX_IOS_BUNDLE_ID ?= $(CATVOX_PRODUCT_BUNDLE_IDENTIFIER)
+CATVOX_IOS_BUNDLE_ID ?= replace-with-dev-bundle-id
 CATVOX_INTEGRATION_MUTATIONS_ALLOWED ?= 1
 CATVOX_INTEGRATION_SAFE_ENVIRONMENTS ?= dev
 CATVOX_TF_VARS_FILE ?= terraform/env/$(CATVOX_ENVIRONMENT).tfvars
-CATVOX_TF_STATE_BUCKET ?= catvox-tf-state-$(GCP_PROJECT_ID)
+CATVOX_TF_STATE_BUCKET ?= catvox-tf-state-$(CATVOX_PROJECT_ID)
 CATVOX_TF_STATE_PREFIX ?= catvox/state
 CATVOX_TF_INIT_FLAGS ?= -reconfigure
 # Backward-compatible alias used by App Check token resolution helpers.
@@ -82,7 +81,7 @@ CATVOX_POSTHOG_TF_INIT_FLAGS ?= -reconfigure
 catvox_tf_vars_rel = $(patsubst terraform/%,%,$(CATVOX_TF_VARS_FILE))
 catvox_tf_backend_args = -backend-config="bucket=$(CATVOX_TF_STATE_BUCKET)" -backend-config="prefix=$(CATVOX_TF_STATE_PREFIX)"
 catvox_tf_var_file_arg = $(if $(wildcard $(CATVOX_TF_VARS_FILE)),-var-file="$(catvox_tf_vars_rel)",)
-catvox_tf_env_args = TF_VAR_environment_name="$(CATVOX_ENVIRONMENT)" TF_VAR_project_id="$(GCP_PROJECT_ID)" TF_VAR_region="$(CATVOX_FUNCTION_REGION)" TF_VAR_firestore_location="$(CATVOX_FIRESTORE_LOCATION)" TF_VAR_tf_state_bucket="$(CATVOX_TF_STATE_BUCKET)" TF_VAR_firebase_ios_bundle_id="$(CATVOX_IOS_BUNDLE_ID)" TF_VAR_firebase_ios_app_display_name="$(CATVOX_FIREBASE_IOS_APP_DISPLAY_NAME)" TF_VAR_firebase_ios_app_deletion_policy="$(CATVOX_FIREBASE_IOS_APP_DELETION_POLICY)" TF_VAR_firebase_apple_team_id="$(CATVOX_FIREBASE_APPLE_TEAM_ID)" TF_VAR_manage_gcf_sources_bucket_iam="$(CATVOX_MANAGE_GCF_SOURCES_BUCKET_IAM)"
+catvox_tf_env_args = TF_VAR_environment_name="$(CATVOX_ENVIRONMENT)" TF_VAR_project_id="$(CATVOX_PROJECT_ID)" TF_VAR_region="$(CATVOX_FUNCTION_REGION)" TF_VAR_firestore_location="$(CATVOX_FIRESTORE_LOCATION)" TF_VAR_tf_state_bucket="$(CATVOX_TF_STATE_BUCKET)" TF_VAR_firebase_ios_bundle_id="$(CATVOX_IOS_BUNDLE_ID)" TF_VAR_firebase_ios_app_display_name="$(CATVOX_FIREBASE_IOS_APP_DISPLAY_NAME)" TF_VAR_firebase_ios_app_deletion_policy="$(CATVOX_FIREBASE_IOS_APP_DELETION_POLICY)" TF_VAR_firebase_apple_team_id="$(CATVOX_FIREBASE_APPLE_TEAM_ID)" TF_VAR_manage_gcf_sources_bucket_iam="$(CATVOX_MANAGE_GCF_SOURCES_BUCKET_IAM)"
 
 catvox_posthog_tf_vars_rel = $(patsubst terraform/posthog/%,%,$(CATVOX_POSTHOG_TF_VARS_FILE))
 catvox_posthog_tf_backend_args = -backend-config="bucket=$(CATVOX_POSTHOG_TF_STATE_BUCKET)" -backend-config="prefix=$(CATVOX_POSTHOG_TF_STATE_PREFIX)"
@@ -144,7 +143,7 @@ help:
 		'' \
 		'Environment overrides:' \
 		'  CATVOX_ENVIRONMENT=dev selects config/environments/dev.xcconfig plus matching Terraform tfvars basename' \
-		'  GCP_PROJECT_ID=... FIREBASE_PROJECT=... CATVOX_PROJECT_ID=...' \
+		'  CATVOX_PROJECT_ID=...' \
 		'  CATVOX_FUNCTION_REGION=... CATVOX_FIRESTORE_LOCATION=...' \
 		'  CATVOX_GCP_CI_SERVICE_ACCOUNT=... CATVOX_GCP_WIF_PROVIDER=...' \
 		'  CATVOX_SIGNED_UPLOAD_URL_HOST=... CATVOX_ANALYSE_VIDEO_HOST=...' \
@@ -327,10 +326,10 @@ functions-test:
 
 functions-deploy: functions-build
 	@CATVOX_ENVIRONMENT="$(CATVOX_ENVIRONMENT)" \
-	 CATVOX_PROJECT_ID="$(FIREBASE_PROJECT)" \
+	 CATVOX_PROJECT_ID="$(CATVOX_PROJECT_ID)" \
 	 CATVOX_FUNCTION_REGION="$(CATVOX_FUNCTION_REGION)" \
 	 CATVOX_BACKEND_SERVICE_ACCOUNT="$(CATVOX_BACKEND_SERVICE_ACCOUNT)" \
-	 firebase deploy --only functions --project "$(FIREBASE_PROJECT)"
+	 firebase deploy --only functions --project "$(CATVOX_PROJECT_ID)"
 
 functions-integration:
 	@app_check_token="$$(CATVOX_TFVARS_PATH="$(CATVOX_TFVARS_PATH)"; export CATVOX_TFVARS_PATH; source scripts/lib/app-check-debug-token.sh; read_catvox_app_check_debug_token)"; \
@@ -373,25 +372,25 @@ terraform-test: terraform-check-env-paths
 	@cd terraform && terraform test
 
 terraform-plan: terraform-check-env-paths
-	@cd terraform && $(catvox_tf_env_args) GOOGLE_CLOUD_QUOTA_PROJECT="$(GCP_PROJECT_ID)" terraform fmt -check -recursive
-	@cd terraform && $(catvox_tf_env_args) GOOGLE_CLOUD_QUOTA_PROJECT="$(GCP_PROJECT_ID)" terraform init $(CATVOX_TF_INIT_FLAGS) $(catvox_tf_backend_args)
-	@cd terraform && $(catvox_tf_env_args) GOOGLE_CLOUD_QUOTA_PROJECT="$(GCP_PROJECT_ID)" terraform validate -no-color
-	@cd terraform && $(catvox_tf_env_args) GOOGLE_CLOUD_QUOTA_PROJECT="$(GCP_PROJECT_ID)" terraform plan -no-color $(catvox_tf_var_file_arg)
+	@cd terraform && $(catvox_tf_env_args) GOOGLE_CLOUD_QUOTA_PROJECT="$(CATVOX_PROJECT_ID)" terraform fmt -check -recursive
+	@cd terraform && $(catvox_tf_env_args) GOOGLE_CLOUD_QUOTA_PROJECT="$(CATVOX_PROJECT_ID)" terraform init $(CATVOX_TF_INIT_FLAGS) $(catvox_tf_backend_args)
+	@cd terraform && $(catvox_tf_env_args) GOOGLE_CLOUD_QUOTA_PROJECT="$(CATVOX_PROJECT_ID)" terraform validate -no-color
+	@cd terraform && $(catvox_tf_env_args) GOOGLE_CLOUD_QUOTA_PROJECT="$(CATVOX_PROJECT_ID)" terraform plan -no-color $(catvox_tf_var_file_arg)
 
 terraform-ci-plan: terraform-check-env-paths
-	@cd terraform && $(catvox_tf_env_args) GOOGLE_CLOUD_QUOTA_PROJECT="$(GCP_PROJECT_ID)" terraform plan -no-color $(catvox_tf_var_file_arg)
+	@cd terraform && $(catvox_tf_env_args) GOOGLE_CLOUD_QUOTA_PROJECT="$(CATVOX_PROJECT_ID)" terraform plan -no-color $(catvox_tf_var_file_arg)
 
 terraform-apply: terraform-check-env-paths
 	@if [[ "$(CONFIRM)" != "apply" ]]; then \
 		printf 'Refusing to run Terraform apply. Re-run as: make terraform-apply CONFIRM=apply\n' >&2; \
 		exit 1; \
 	fi
-	@cd terraform && $(catvox_tf_env_args) GOOGLE_CLOUD_QUOTA_PROJECT="$(GCP_PROJECT_ID)" terraform init $(CATVOX_TF_INIT_FLAGS) $(catvox_tf_backend_args)
-	@cd terraform && $(catvox_tf_env_args) GOOGLE_CLOUD_QUOTA_PROJECT="$(GCP_PROJECT_ID)" terraform plan -no-color $(catvox_tf_var_file_arg)
-	@cd terraform && $(catvox_tf_env_args) GOOGLE_CLOUD_QUOTA_PROJECT="$(GCP_PROJECT_ID)" terraform apply -no-color $(catvox_tf_var_file_arg)
+	@cd terraform && $(catvox_tf_env_args) GOOGLE_CLOUD_QUOTA_PROJECT="$(CATVOX_PROJECT_ID)" terraform init $(CATVOX_TF_INIT_FLAGS) $(catvox_tf_backend_args)
+	@cd terraform && $(catvox_tf_env_args) GOOGLE_CLOUD_QUOTA_PROJECT="$(CATVOX_PROJECT_ID)" terraform plan -no-color $(catvox_tf_var_file_arg)
+	@cd terraform && $(catvox_tf_env_args) GOOGLE_CLOUD_QUOTA_PROJECT="$(CATVOX_PROJECT_ID)" terraform apply -no-color $(catvox_tf_var_file_arg)
 
 terraform-ci-apply: terraform-check-env-paths
-	@cd terraform && $(catvox_tf_env_args) GOOGLE_CLOUD_QUOTA_PROJECT="$(GCP_PROJECT_ID)" terraform apply -auto-approve -no-color $(catvox_tf_var_file_arg)
+	@cd terraform && $(catvox_tf_env_args) GOOGLE_CLOUD_QUOTA_PROJECT="$(CATVOX_PROJECT_ID)" terraform apply -auto-approve -no-color $(catvox_tf_var_file_arg)
 
 posthog-terraform-fmt-check:
 	@cd terraform/posthog && terraform fmt -check -recursive
@@ -443,14 +442,14 @@ terraform-output-firebase-plist:
 	 node scripts/validate-firebase-ios-config.mjs
 
 bootstrap-remote-state:
-	@PROJECT_ID="$(GCP_PROJECT_ID)" ./terraform/bootstrap_remote_state.sh
+	@PROJECT_ID="$(CATVOX_PROJECT_ID)" ./terraform/bootstrap_remote_state.sh
 
 bootstrap-wif:
-	@PROJECT_ID="$(GCP_PROJECT_ID)" ./terraform/bootstrap_wif.sh
+	@PROJECT_ID="$(CATVOX_PROJECT_ID)" ./terraform/bootstrap_wif.sh
 
 environment-create:
 	@CATVOX_ENVIRONMENT="$(CATVOX_ENVIRONMENT)" \
-	 GCP_PROJECT_ID="$(GCP_PROJECT_ID)" \
+	 CATVOX_PROJECT_ID="$(CATVOX_PROJECT_ID)" \
 	 CATVOX_FUNCTION_REGION="$(CATVOX_FUNCTION_REGION)" \
 	 CATVOX_FIRESTORE_LOCATION="$(CATVOX_FIRESTORE_LOCATION)" \
 	 CATVOX_TF_VARS_FILE="$(CATVOX_TF_VARS_FILE)" \

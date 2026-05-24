@@ -16,7 +16,7 @@ snapshot_mk="${tmpdir}/snapshot-vars.mk"
 cat > "$snapshot_mk" <<'EOF'
 .PHONY: snapshot
 snapshot:
-	@printf 'GCP_PROJECT_ID=%s\n' '$(GCP_PROJECT_ID)'
+	@printf 'CATVOX_PROJECT_ID=%s\n' '$(CATVOX_PROJECT_ID)'
 	@printf 'CATVOX_FUNCTION_REGION=%s\n' '$(CATVOX_FUNCTION_REGION)'
 EOF
 
@@ -72,7 +72,7 @@ case_distinct_cache_per_config_path() {
   # Step 2: prepare a deliberately wrong override config with an older mtime
   # so a mtime-only check would mistakenly think the cache is fresh enough.
   local override="${tmpdir}/staging-fake.xcconfig"
-  printf 'GCP_PROJECT_ID = wrong-project-id\nCATVOX_FUNCTION_REGION = europe-west1\n' > "$override"
+  printf 'CATVOX_PROJECT_ID = wrong-project-id\nCATVOX_FUNCTION_REGION = europe-west1\n' > "$override"
   touch -t 202001010000 "$override"
 
   # Step 3: invoke with the override.
@@ -80,7 +80,7 @@ case_distinct_cache_per_config_path() {
   out="$(make -f Makefile -f "$snapshot_mk" "CATVOX_ENV_CONFIG=$override" snapshot 2>/dev/null)" || return 1
 
   # Step 4: assert the override values won, not the dev cache.
-  if [[ "$out" != *"GCP_PROJECT_ID=wrong-project-id"* ]]; then
+  if [[ "$out" != *"CATVOX_PROJECT_ID=wrong-project-id"* ]]; then
     note "override config was ignored; got:"
     note "$out"
     return 1

@@ -67,7 +67,8 @@ Each ADR should usually contain:
 | 0018 | Create Dedicated Dev Environment | Accepted |
 | 0019 | Use Separate PostHog Projects per Environment | Accepted (updated by ADR-0020) |
 | 0020 | Bind PostHog Projects 1:1 to CatVox Environments | Accepted |
-| 0021 | Store Non-Secret Environment Values in xcconfig | Accepted |
+| 0021 | Store Non-Secret Environment Values in xcconfig | Accepted (updated by ADR-0022) |
+| 0022 | Use CATVOX_PROJECT_ID as Canonical Project ID | Accepted |
 
 ## Workflow
 

@@ -7,9 +7,9 @@ inputs:
     required: true
 
 outputs:
-  gcp_project_id:
-    description: GCP project ID for the selected CatVox environment.
-    value: ${{ steps.read.outputs.gcp_project_id }}
+  catvox_project_id:
+    description: CatVox project ID for the selected environment.
+    value: ${{ steps.read.outputs.catvox_project_id }}
   gcp_service_account:
     description: CI service account email for Workload Identity Federation.
     value: ${{ steps.read.outputs.gcp_service_account }}
@@ -46,18 +46,18 @@ runs:
         # shellcheck source=/dev/null
         . "$fragment"
 
-        : "${GCP_PROJECT_ID:?GCP_PROJECT_ID must be set in $config}"
+        : "${CATVOX_PROJECT_ID:?CATVOX_PROJECT_ID must be set in $config}"
         : "${CATVOX_GCP_CI_SERVICE_ACCOUNT:?CATVOX_GCP_CI_SERVICE_ACCOUNT must be set in $config}"
         : "${CATVOX_GCP_WIF_PROVIDER:?CATVOX_GCP_WIF_PROVIDER must be set in $config}"
 
         {
-          printf 'gcp_project_id=%s\n' "$GCP_PROJECT_ID"
+          printf 'catvox_project_id=%s\n' "$CATVOX_PROJECT_ID"
           printf 'gcp_service_account=%s\n' "$CATVOX_GCP_CI_SERVICE_ACCOUNT"
           printf 'gcp_wif_provider=%s\n' "$CATVOX_GCP_WIF_PROVIDER"
         } >> "$GITHUB_OUTPUT"
 
         {
-          printf 'GCP_PROJECT_ID=%s\n' "$GCP_PROJECT_ID"
+          printf 'CATVOX_PROJECT_ID=%s\n' "$CATVOX_PROJECT_ID"
           printf 'CATVOX_GCP_CI_SERVICE_ACCOUNT=%s\n' "$CATVOX_GCP_CI_SERVICE_ACCOUNT"
           printf 'CATVOX_GCP_WIF_PROVIDER=%s\n' "$CATVOX_GCP_WIF_PROVIDER"
         } >> "$GITHUB_ENV"

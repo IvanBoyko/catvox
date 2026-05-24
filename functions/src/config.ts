@@ -4,14 +4,14 @@ const DEFAULT_BACKEND_SERVICE_ACCOUNT_NAME = 'catvox-backend-sa';
 type Environment = NodeJS.ProcessEnv;
 
 export function configuredProjectId(env: Environment = process.env): string | undefined {
-  return firstValue(env.CATVOX_PROJECT_ID, env.GCP_PROJECT_ID, env.GCLOUD_PROJECT);
+  return firstValue(env.CATVOX_PROJECT_ID, firebaseConfigProjectId(env));
 }
 
 export function requiredProjectId(env: Environment = process.env): string {
   const projectId = configuredProjectId(env);
   if (!projectId) {
     throw new Error(
-      'Project ID is not configured. Set CATVOX_PROJECT_ID, GCP_PROJECT_ID, or GCLOUD_PROJECT.'
+      'Project ID is not configured. Set CATVOX_PROJECT_ID or deploy with Firebase project metadata.'
     );
   }
 
@@ -61,9 +61,23 @@ export function backendServiceAccountOption(
 
   throw new Error(
     'Backend service account is not configured. Set CATVOX_BACKEND_SERVICE_ACCOUNT, ' +
-    'CATVOX_PROJECT_ID, GCP_PROJECT_ID, or GCLOUD_PROJECT. To intentionally use the ' +
+    'CATVOX_PROJECT_ID, or Firebase project metadata. To intentionally use the ' +
     'platform default service account, set CATVOX_ALLOW_DEFAULT_SERVICE_ACCOUNT=1.'
   );
+}
+
+function firebaseConfigProjectId(env: Environment): string | undefined {
+  const rawConfig = firstValue(env.FIREBASE_CONFIG);
+  if (!rawConfig) {
+    return undefined;
+  }
+
+  try {
+    const parsed = JSON.parse(rawConfig) as { projectId?: unknown };
+    return typeof parsed.projectId === 'string' ? parsed.projectId : undefined;
+  } catch {
+    return undefined;
+  }
 }
 
 function firstValue(...values: Array<string | undefined>): string | undefined {

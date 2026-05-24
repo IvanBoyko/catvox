@@ -17,8 +17,6 @@ export const deferredProdKeys = new Set([
 ]);
 
 const requiredProdKeys = [
-  'GCP_PROJECT_ID',
-  'FIREBASE_PROJECT',
   'CATVOX_PROJECT_ID',
   'CATVOX_ENVIRONMENT',
   'CATVOX_FUNCTION_REGION',
@@ -26,7 +24,6 @@ const requiredProdKeys = [
   'CATVOX_TF_STATE_BUCKET',
   'CATVOX_GCP_CI_SERVICE_ACCOUNT',
   'CATVOX_GCP_WIF_PROVIDER',
-  'CATVOX_PRODUCT_BUNDLE_IDENTIFIER',
   'CATVOX_IOS_BUNDLE_ID',
   'CATVOX_FIREBASE_IOS_APP_DISPLAY_NAME',
   'CATVOX_FIREBASE_IOS_APP_DELETION_POLICY',
@@ -44,8 +41,6 @@ const requiredProdKeys = [
 ];
 
 const exactProdValues = new Map([
-  ['GCP_PROJECT_ID', 'kathelix-catvox-prod'],
-  ['FIREBASE_PROJECT', 'kathelix-catvox-prod'],
   ['CATVOX_PROJECT_ID', 'kathelix-catvox-prod'],
   ['CATVOX_ENVIRONMENT', 'prod'],
   ['CATVOX_FUNCTION_REGION', 'us-central1'],
@@ -56,7 +51,6 @@ const exactProdValues = new Map([
     'CATVOX_GCP_WIF_PROVIDER',
     'projects/953500951129/locations/global/workloadIdentityPools/github-actions-pool/providers/github-actions-provider',
   ],
-  ['CATVOX_PRODUCT_BUNDLE_IDENTIFIER', 'com.kathelix.catvox'],
   ['CATVOX_IOS_BUNDLE_ID', 'com.kathelix.catvox'],
   ['CATVOX_FIREBASE_IOS_APP_DISPLAY_NAME', 'CatVox Prod iOS'],
   ['CATVOX_FIREBASE_IOS_APP_DELETION_POLICY', 'ABANDON'],

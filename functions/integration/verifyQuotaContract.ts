@@ -74,9 +74,7 @@ const integrationSafeEnvironments = parseList(
 );
 const projectId = requiredConfigValue(
   process.env,
-  'CATVOX_PROJECT_ID',
-  'GCP_PROJECT_ID',
-  'GCLOUD_PROJECT'
+  'CATVOX_PROJECT_ID'
 );
 const signedUrlEndpoint = requiredConfigValue(
   process.env,

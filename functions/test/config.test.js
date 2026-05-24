@@ -14,10 +14,18 @@ test('configuredProjectId prefers CatVox-specific environment key', () => {
   assert.equal(
     configuredProjectId({
       CATVOX_PROJECT_ID: 'catvox-dev',
-      GCP_PROJECT_ID: 'catvox-gcp',
-      GCLOUD_PROJECT: 'catvox-cloud',
+      FIREBASE_CONFIG: JSON.stringify({ projectId: 'firebase-platform' }),
     }),
     'catvox-dev'
+  );
+});
+
+test('configuredProjectId can read Firebase platform project metadata', () => {
+  assert.equal(
+    configuredProjectId({
+      FIREBASE_CONFIG: JSON.stringify({ projectId: 'firebase-platform' }),
+    }),
+    'firebase-platform'
   );
 });
 
