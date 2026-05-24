@@ -60,6 +60,28 @@ next_agent: codex
 
 Current state is derived from the latest `ai-loop-event` block.
 
+## Future Agent Invocation Context
+
+Future slices that invoke real agents must compose prompts with the repository
+instruction files explicitly. Do not rely only on each CLI's automatic discovery
+behavior.
+
+Required context for every agent:
+
+- `AGENTS.md`
+- `tools/ai-loop/prompts/common.md`
+- the current AI loop log
+- current Git status and relevant diff context
+
+Required extra context by role:
+
+- Codex developer: `.codex/AGENTS.md` and `tools/ai-loop/prompts/developer.md`
+- Claude reviewer: `CLAUDE.md` and `tools/ai-loop/prompts/reviewer.md`
+
+If a future CLI invocation cannot include those files reliably, the orchestrator
+must stop before dispatching the agent rather than run with incomplete process
+instructions.
+
 ## Slice 1 Limitations
 
 - No real agent invocation.

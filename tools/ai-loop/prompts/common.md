@@ -4,6 +4,9 @@ You are participating in the CatVox local AI implementation/review loop.
 
 ## Shared Rules
 
+- Follow the repository instructions that the orchestrator provides with each
+  invocation. At minimum this must include `AGENTS.md`, the relevant
+  agent-specific overlay, and the relevant `tools/ai-loop/prompts/*.md` files.
 - Read the current AI loop Markdown file before acting.
 - Treat the file as append-only. Do not rewrite previous entries.
 - Each event you append must end with an `ai-loop-event` HTML comment block.
