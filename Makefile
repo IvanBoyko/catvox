@@ -47,7 +47,8 @@ endif
 # Environment-supplied values (`CATVOX_PROJECT_ID=foo make ...`) and
 # command-line overrides (`make CATVOX_PROJECT_ID=foo ...`) still win because
 # `?=` is a no-op on already-defined variables.
-CATVOX_PROJECT_ID ?= replace-with-dev-project-id
+# CATVOX_PROJECT_ID intentionally has no placeholder fallback. Fresh
+# environment bootstrap must fail fast unless the caller supplies a real project.
 CATVOX_BACKEND_SERVICE_ACCOUNT ?= catvox-backend-sa@$(CATVOX_PROJECT_ID).iam.gserviceaccount.com
 CATVOX_SIGNED_UPLOAD_URL_HOST ?= replace-with-dev-signed-upload-host
 CATVOX_ANALYSE_VIDEO_HOST ?= replace-with-dev-analyse-video-host

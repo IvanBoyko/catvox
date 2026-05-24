@@ -139,11 +139,44 @@ case_cache_invalidates_on_xcconfig_touch() {
   fi
 }
 
+# Fresh environment bootstrap has no xcconfig yet, so CATVOX_PROJECT_ID must be
+# supplied explicitly instead of falling through to a placeholder project ID.
+case_missing_config_requires_explicit_project_id() {
+  local missing_config="${tmpdir}/missing-env.xcconfig"
+  local cache_dir="${tmpdir}/missing-cache"
+  local out rc=0
+
+  out="$(make -f Makefile \
+    CATVOX_ENVIRONMENT=fresh \
+    "CATVOX_ENV_CONFIG=${missing_config}" \
+    "CATVOX_ENV_CACHE_DIR=${cache_dir}" \
+    environment-create 2>&1)" || rc=$?
+
+  if [[ "$rc" -eq 0 ]]; then
+    note "expected environment-create to fail without CATVOX_PROJECT_ID"
+    note "$out"
+    return 1
+  fi
+
+  if [[ "$out" != *"CATVOX_PROJECT_ID is required."* ]]; then
+    note "expected missing CATVOX_PROJECT_ID failure, got:"
+    note "$out"
+    return 1
+  fi
+
+  if [[ "$out" == *"replace-with-dev-project-id"* ]]; then
+    note "unexpected placeholder project ID leaked into output:"
+    note "$out"
+    return 1
+  fi
+}
+
 printf 'makefile env-cache tests\n'
 run_case cache_filename_encodes_default_path
 run_case distinct_cache_per_config_path
 run_case cache_hit_on_repeat
 run_case cache_invalidates_on_xcconfig_touch
+run_case missing_config_requires_explicit_project_id
 
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 if [[ "$fail" -ne 0 ]]; then
