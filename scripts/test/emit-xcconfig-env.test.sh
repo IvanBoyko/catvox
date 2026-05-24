@@ -80,6 +80,15 @@ case_host_scheme_rejection() {
   fi
 }
 
+# _HOST containing a path or trailing slash must reject as well.
+case_host_path_rejection() {
+  local cfg="${tmpdir}/bad-host-path.xcconfig"
+  printf 'CATVOX_BAD_HOST = example.com/path\n' > "$cfg"
+  local rc=0
+  "$emit" --format=make "$cfg" >/dev/null 2>&1 || rc=$?
+  [[ "$rc" -ne 0 ]]
+}
+
 # _HOST_NAME (longer suffix) is also rejected.
 case_host_name_scheme_rejection() {
   local cfg="${tmpdir}/bad-hostname.xcconfig"
@@ -208,6 +217,7 @@ EOF
 printf 'emit-xcconfig-env tests\n'
 run_case normal_value
 run_case host_scheme_rejection
+run_case host_path_rejection
 run_case host_name_scheme_rejection
 run_case two_phase_no_partial_output
 run_case missing_file_silent

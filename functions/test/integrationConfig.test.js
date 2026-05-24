@@ -8,6 +8,7 @@ const {
   argValue,
   assertMutationGateAllowed,
   configValue,
+  isIntegrationSafeEnvironment,
   isPlaceholder,
   loadEnvFile,
   normalize,
@@ -85,6 +86,31 @@ test('parseList trims entries and drops empty items', () => {
   assert.deepEqual(sorted(parseList(' dev , staging ')), ['dev', 'staging']);
   assert.deepEqual(sorted(parseList('dev,,staging')), ['dev', 'staging']);
   assert.deepEqual(sorted(parseList('')), []);
+});
+
+test('integration-safe predicate accepts environments present in the allowlist', () => {
+  assert.equal(isIntegrationSafeEnvironment('dev', parseList('dev,staging')), true);
+});
+
+test('integration-safe predicate rejects environments outside the allowlist', () => {
+  assert.equal(isIntegrationSafeEnvironment('prod', parseList('dev,staging')), false);
+});
+
+test('integration-safe predicate trims environment names before matching', () => {
+  assert.equal(isIntegrationSafeEnvironment(' dev ', parseList('dev')), true);
+});
+
+test('integration-safe predicate rejects empty allowlists', () => {
+  assert.equal(isIntegrationSafeEnvironment('dev', parseList('')), false);
+});
+
+test('integration-safe predicate accepts comma-separated allowlists with surrounding whitespace', () => {
+  assert.equal(isIntegrationSafeEnvironment('staging', parseList(' dev , staging ')), true);
+});
+
+test('integration-safe predicate keeps environment matching case-sensitive', () => {
+  assert.equal(isIntegrationSafeEnvironment('Dev', parseList('dev')), false);
+  assert.equal(isIntegrationSafeEnvironment('dev', parseList('Dev')), false);
 });
 
 test('loadEnvFile reads simple values without overwriting existing env', () => {
