@@ -9,6 +9,7 @@ on:
       - 'AGENTS.md'
       - 'CLAUDE.md'
       - 'docs/**'
+      - 'tools/ai-loop/**/*.md'
       - '.markdownlint.jsonc'
       - '.github/workflows/markdownlint.yml'
   pull_request:
@@ -19,6 +20,7 @@ on:
       - 'AGENTS.md'
       - 'CLAUDE.md'
       - 'docs/**'
+      - 'tools/ai-loop/**/*.md'
       - '.markdownlint.jsonc'
       - '.github/workflows/markdownlint.yml'
   workflow_dispatch:
@@ -49,3 +51,4 @@ jobs:
             AGENTS.md
             CLAUDE.md
             docs/**/*.md
+            tools/ai-loop/**/*.md

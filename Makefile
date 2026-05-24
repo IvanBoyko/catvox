@@ -97,6 +97,7 @@ define catvox_require_env_path
 endef
 
 .PHONY: help doctor scripts-test \
+	setup-local-ai-loop ai-loop-start \
 	ios-generate ios-build ios-build-only ios-test ios-test-only ios-ui-test ios-ui-test-only ios-ci ios-device-launch ios-device-console app-deploy \
 	ios-validate-env-config ios-validate-prod-env-config-structure ios-validate-env-config-drift ios-analytics-guard \
 	functions-install functions-build functions-test functions-deploy functions-integration functions-ci \
@@ -110,6 +111,8 @@ help:
 		'CatVox local automation targets:' \
 		'' \
 		'  make doctor                 Check core local CLI prerequisites' \
+		'  make setup-local-ai-loop    Configure local AI loop Git hook and prerequisites' \
+		'  make ai-loop-start          Start local AI loop with AI_LOOP_BRANCH and AI_LOOP_PROMPT' \
 		'' \
 		'  make ios-build              Generate project and build simulator app' \
 		'  make ios-test               Generate project and run iOS unit tests' \
@@ -191,6 +194,13 @@ doctor:
 scripts-test:
 	@bash scripts/test/emit-xcconfig-env.test.sh
 	@bash scripts/test/makefile-env-cache.test.sh
+	@python3 tools/ai-loop/ai_loop_test.py
+
+setup-local-ai-loop:
+	@python3 tools/ai-loop/ai_loop.py setup
+
+ai-loop-start:
+	@python3 tools/ai-loop/ai_loop.py start --branch "$(AI_LOOP_BRANCH)" --prompt "$(AI_LOOP_PROMPT)"
 
 ios-generate:
 	@xcodegen generate

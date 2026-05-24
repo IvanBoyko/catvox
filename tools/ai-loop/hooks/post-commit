@@ -1,0 +1,21 @@
+#!/usr/bin/env bash
+set -uo pipefail
+
+repo_root="$(git rev-parse --show-toplevel 2>/dev/null)" || exit 0
+commit_message="$(git log -1 --format=%B 2>/dev/null)" || exit 0
+
+case "$commit_message" in
+  *"[ai-loop]"*) ;;
+  *) exit 0 ;;
+esac
+
+lock_dir="${repo_root}/.git/ai-loop.lock"
+if ! mkdir "$lock_dir" 2>/dev/null; then
+  printf 'ai-loop: lock exists, skipping dry-run continuation\n' >&2
+  exit 0
+fi
+trap 'rmdir "$lock_dir" 2>/dev/null || true' EXIT
+
+if ! python3 "${repo_root}/tools/ai-loop/ai_loop.py" continue --trigger post-commit; then
+  printf 'ai-loop: dry-run continuation failed; commit was left intact\n' >&2
+fi
