@@ -200,7 +200,7 @@ setup-local-ai-loop:
 	@python3 tools/ai-loop/ai_loop.py setup
 
 ai-loop-start:
-	@python3 tools/ai-loop/ai_loop.py start --branch "$(AI_LOOP_BRANCH)" --prompt "$(AI_LOOP_PROMPT)"
+	@python3 tools/ai-loop/ai_loop.py start
 
 ios-generate:
 	@xcodegen generate
