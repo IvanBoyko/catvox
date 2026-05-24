@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import importlib.util
+import os
 import shutil
 import subprocess
 import sys
@@ -25,8 +26,38 @@ sys.modules["ai_loop"] = ai_loop
 spec.loader.exec_module(ai_loop)
 
 
-def run(cmd: list[str], cwd: Path, *, check: bool = True) -> subprocess.CompletedProcess[str]:
-    return subprocess.run(cmd, cwd=cwd, check=check, text=True, capture_output=True)
+def run(
+    cmd: list[str],
+    cwd: Path,
+    *,
+    check: bool = True,
+    env: dict[str, str] | None = None,
+) -> subprocess.CompletedProcess[str]:
+    return subprocess.run(
+        cmd,
+        cwd=cwd,
+        check=check,
+        text=True,
+        capture_output=True,
+        env=env,
+    )
+
+
+def write_minimal_instruction_files(repo: Path) -> None:
+    (repo / ".codex").mkdir()
+    (repo / "AGENTS.md").write_text("root agent instructions\n", encoding="utf-8")
+    (repo / ".codex/AGENTS.md").write_text("codex instructions\n", encoding="utf-8")
+    (repo / "CLAUDE.md").write_text("claude instructions\n", encoding="utf-8")
+
+
+def init_repo_with_ai_loop_tooling(repo: Path) -> None:
+    run(["git", "init"], repo)
+    run(["git", "config", "user.name", "AI Loop Test"], repo)
+    run(["git", "config", "user.email", "ai-loop-test@example.com"], repo)
+    write_minimal_instruction_files(repo)
+    shutil.copytree(TOOL_DIR, repo / "tools/ai-loop")
+    run(["git", "add", "."], repo)
+    run(["git", "commit", "-m", "Initial tools"], repo)
 
 
 class MetadataParsingTests(unittest.TestCase):
@@ -91,6 +122,143 @@ next_agent: claude-code
         self.assertEqual(parsed.init["run_id"], "local-20260524-120000")
         self.assertEqual(parsed.latest_event["status"], "needs_developer")
         self.assertEqual(parsed.latest_event["next_agent"], "codex")
+
+
+class PromptCompositionTests(unittest.TestCase):
+    def test_developer_prompt_puts_codex_instructions_before_task_context(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            repo = Path(tmp)
+            init_repo_with_ai_loop_tooling(repo)
+            log_path = repo / "docs/ai-loop/local-20260524-120000.md"
+            log_path.parent.mkdir(parents=True)
+            log_path.write_text(
+                """# AI Loop
+
+<!-- ai-loop-event
+agent: human
+role: owner
+cycle: 0
+status: needs_developer
+next_agent: codex
+-->
+""",
+                encoding="utf-8",
+            )
+
+            prompt = ai_loop.compose_agent_prompt(
+                repo=repo,
+                log_path=log_path,
+                role="developer",
+                agent="codex",
+            )
+            task_context_index = prompt.index("<task_context>")
+
+            for marker in [
+                '<file path="AGENTS.md">',
+                '<file path=".codex/AGENTS.md">',
+                '<file path="tools/ai-loop/prompts/common.md">',
+                '<file path="tools/ai-loop/prompts/developer.md">',
+            ]:
+                with self.subTest(marker=marker):
+                    self.assertLess(prompt.index(marker), task_context_index)
+            self.assertNotIn('<file path="CLAUDE.md">', prompt)
+
+    def test_reviewer_prompt_puts_claude_instructions_before_task_context(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            repo = Path(tmp)
+            init_repo_with_ai_loop_tooling(repo)
+            log_path = repo / "docs/ai-loop/local-20260524-120000.md"
+            log_path.parent.mkdir(parents=True)
+            log_path.write_text(
+                """# AI Loop
+
+<!-- ai-loop-event
+agent: codex
+role: developer
+cycle: 1
+status: needs_review
+next_agent: claude-code
+-->
+""",
+                encoding="utf-8",
+            )
+
+            prompt = ai_loop.compose_agent_prompt(
+                repo=repo,
+                log_path=log_path,
+                role="reviewer",
+                agent="claude-code",
+            )
+            task_context_index = prompt.index("<task_context>")
+
+            for marker in [
+                '<file path="AGENTS.md">',
+                '<file path="CLAUDE.md">',
+                '<file path="tools/ai-loop/prompts/common.md">',
+                '<file path="tools/ai-loop/prompts/reviewer.md">',
+            ]:
+                with self.subTest(marker=marker):
+                    self.assertLess(prompt.index(marker), task_context_index)
+            self.assertNotIn('<file path=".codex/AGENTS.md">', prompt)
+
+
+class AgentDispatchTests(unittest.TestCase):
+    def test_continue_can_invoke_reviewer_with_composed_prompt_on_stdin(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            repo = root / "repo"
+            repo.mkdir()
+            init_repo_with_ai_loop_tooling(repo)
+
+            log_path = repo / "docs/ai-loop/local-20260524-120000.md"
+            log_path.parent.mkdir(parents=True)
+            log_path.write_text(
+                """# AI Loop
+
+<!-- ai-loop-event
+agent: codex
+role: developer
+cycle: 1
+status: needs_review
+next_agent: claude-code
+-->
+""",
+                encoding="utf-8",
+            )
+            run(["git", "add", "docs/ai-loop/local-20260524-120000.md"], repo)
+            run(["git", "commit", "-m", "[ai-loop] Codex: ready for review"], repo)
+
+            fake_agent = root / "fake_agent.py"
+            captured_prompt = root / "captured_prompt.txt"
+            fake_agent.write_text(
+                "import pathlib, sys\n"
+                "pathlib.Path(sys.argv[1]).write_text(sys.stdin.read(), encoding='utf-8')\n",
+                encoding="utf-8",
+            )
+            env = os.environ.copy()
+            env["AI_LOOP_CLAUDE_COMMAND"] = f"{sys.executable} {fake_agent} {captured_prompt}"
+
+            script = repo / "tools/ai-loop/ai_loop.py"
+            result = run(
+                [
+                    sys.executable,
+                    str(script),
+                    "continue",
+                    "--trigger",
+                    "test",
+                    "--log",
+                    str(log_path),
+                    "--invoke",
+                ],
+                repo,
+                env=env,
+            )
+
+            self.assertIn("dispatching reviewer agent claude-code", result.stdout)
+            prompt = captured_prompt.read_text(encoding="utf-8")
+            self.assertLess(prompt.index('<file path="AGENTS.md">'), prompt.index("<task_context>"))
+            self.assertLess(prompt.index('<file path="CLAUDE.md">'), prompt.index("<task_context>"))
+            self.assertIn("status: needs_review", prompt)
 
 
 class GitIntegrationTests(unittest.TestCase):

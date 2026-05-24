@@ -1,8 +1,11 @@
 # CatVox Local AI Loop
 
-This directory contains the local AI loop scaffold for Option B from ADR-0023.
-Slice 1 creates committed loop logs and dry-run routing only. It does not invoke
-Codex, Claude Code, Gemini, or any other agent.
+This directory contains the local AI loop for Option B from ADR-0023.
+
+Slice 1 created committed loop logs and dry-run routing. Slice 2 adds
+role-aware prompt composition and optional local agent invocation for Codex and
+Claude Code. Invocation remains opt-in so developers can validate routing
+without spending tokens or giving a local CLI write access by accident.
 
 ## Setup
 
@@ -28,7 +31,7 @@ make ai-loop-start \
   AI_LOOP_PROMPT="Implement the requested change"
 ```
 
-Slice 1 creates or switches to `AI_LOOP_BRANCH`, writes a committed bootstrap log
+This creates or switches to `AI_LOOP_BRANCH`, writes a committed bootstrap log
 under:
 
 ```text
@@ -42,7 +45,33 @@ and commits it with:
 ```
 
 The `post-commit` hook then wakes the controller and prints a dry-run routing
-decision.
+decision. To let the hook dispatch the routed local agent, opt in explicitly:
+
+```bash
+AI_LOOP_INVOKE_AGENTS=1 make ai-loop-start \
+  AI_LOOP_BRANCH=feature/example \
+  AI_LOOP_PROMPT="Implement the requested change"
+```
+
+You can also enable invocation for this clone:
+
+```bash
+git config ai-loop.invokeAgents true
+```
+
+Disable it with:
+
+```bash
+git config --unset ai-loop.invokeAgents
+```
+
+Manual dispatch for the latest `[ai-loop]` commit is also available:
+
+```bash
+python3 tools/ai-loop/ai_loop.py continue --invoke --trigger manual
+```
+
+Use `--dry-run` to force observe-only routing even when invocation is enabled.
 
 ## Metadata Format
 
@@ -60,11 +89,10 @@ next_agent: codex
 
 Current state is derived from the latest `ai-loop-event` block.
 
-## Future Agent Invocation Context
+## Agent Invocation Context
 
-Future slices that invoke real agents must compose prompts with the repository
-instruction files explicitly. Do not rely only on each CLI's automatic discovery
-behavior.
+Agent prompts are composed with the repository instruction files explicitly. Do
+not rely only on each CLI's automatic discovery behavior.
 
 Required context for every agent:
 
@@ -78,17 +106,44 @@ Required extra context by role:
 - Codex developer: `.codex/AGENTS.md` and `tools/ai-loop/prompts/developer.md`
 - Claude reviewer: `CLAUDE.md` and `tools/ai-loop/prompts/reviewer.md`
 
-If a future CLI invocation cannot include those files reliably, the orchestrator
-must stop before dispatching the agent rather than run with incomplete process
+The prompt order is:
+
+1. shared repository instructions (`AGENTS.md`)
+2. the role-specific agent overlay (`.codex/AGENTS.md` or `CLAUDE.md`)
+3. common and role-specific AI loop prompt files
+4. task context: current loop log, Git status, and branch diff
+
+If a CLI invocation cannot include those files reliably, the orchestrator must
+stop before dispatching the agent rather than run with incomplete process
 instructions.
 
-## Slice 1 Limitations
+To inspect a prompt without invoking an agent:
 
-- No real agent invocation.
+```bash
+python3 tools/ai-loop/ai_loop.py compose-prompt \
+  --role reviewer \
+  --log docs/ai-loop/local-YYYYMMDD-HHMMSS.md
+```
+
+Default local commands:
+
+```text
+Codex developer:  codex exec --cd <repo> -
+Claude reviewer:  claude --print --input-format text
+```
+
+Both commands receive the composed prompt on stdin. For local experimentation,
+override them with `AI_LOOP_CODEX_COMMAND` or `AI_LOOP_CLAUDE_COMMAND`.
+
+## Slice 2 Limitations
+
+- Agent invocation is opt-in; default hook behavior remains dry-run.
+- The controller dispatches only the single routed agent for the latest event.
+  Full automatic multi-cycle developer/reviewer looping is deferred.
 - No draft PR creation.
 - No `docs/ai-loop/pr-XXXX.md` bootstrap yet.
 - No human answer command yet.
 
-ADR-0023 requires committed PR-numbered loop logs for the MVP. Slice 1 uses a
-local run ID first so the parser, hook, and dry-run routing can be validated
-before the PR-number bootstrap is added.
+ADR-0023 requires committed PR-numbered loop logs for the MVP. The current
+implementation still uses a local run ID first so parser, hook, routing, and
+invocation behavior can be validated before PR-number bootstrap is added.

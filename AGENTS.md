@@ -108,6 +108,7 @@ catvox/
 │       └── environment.toml       # Codex app run actions; call Makefile targets
 ├── .antigravityrules              # Antigravity (Gemini) agent-specific quirks
 ├── CLAUDE.md                      # Claude Code-specific quirks
+├── tools/ai-loop/                 # Local Option B agent review loop controller
 ├── Makefile                       # Local/CI command facade for common automation
 └── AGENTS.md                      # Developer onboarding (read automatically by AI agents)
 ```
@@ -125,6 +126,8 @@ Useful targets:
 ```bash
 make help
 make doctor
+make setup-local-ai-loop
+make ai-loop-start AI_LOOP_BRANCH=<branch> AI_LOOP_PROMPT="<task>"
 make ios-build
 make ios-test
 make ios-ui-test
@@ -148,6 +151,12 @@ CATVOX_PROJECT_ID=kathelix-catvox-dev make terraform-plan
 CATVOX_PROJECT_ID=kathelix-catvox-dev make functions-deploy
 DEVICE_ID=<device-udid> make ios-device-launch
 ```
+
+The local Option B AI loop lives under `tools/ai-loop/` (see ADR-0023). Run
+`make setup-local-ai-loop` once per clone to configure repo-controlled hooks.
+`make ai-loop-start` bootstraps a local run and defaults to dry-run routing;
+agent invocation is opt-in via `AI_LOOP_INVOKE_AGENTS=1` or local Git config
+`ai-loop.invokeAgents=true`.
 
 Environment-dependent app/backend/CI/Terraform non-secret values are parameterized through generic
 `CATVOX_*` variables such as `CATVOX_ENVIRONMENT`,
