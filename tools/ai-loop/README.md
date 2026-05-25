@@ -9,8 +9,11 @@ developer invocation commits a `needs_review` event, the controller dispatches
 the reviewer once and then stops. Slice 4 adds human clarification answers:
 when an agent stops with `awaiting_human`, `make ai-loop-answer` appends a
 structured `clarified` event and wakes the controller to resume the asking
-agent. Invocation remains opt-in so developers can validate routing without
-spending tokens or giving a local CLI write access by accident.
+agent. Slice 5 adds the full bounded two-agent loop: the controller now routes
+`needs_review` to the reviewer, `needs_fix` back to the developer, `clarified`
+to the named supported agent, and stops on clean, blocked, failed, paused, or
+cycle-cap states. Invocation remains opt-in so developers can validate routing
+without spending tokens or giving a local CLI write access by accident.
 
 ## Setup
 
@@ -79,9 +82,13 @@ python3 tools/ai-loop/ai_loop.py continue --invoke --trigger manual
 Use `--dry-run` to force observe-only routing even when invocation is enabled.
 
 When a developer-routed agent commits a `needs_review` event, that event is
-handed to Claude Code immediately. The reviewer may commit `clean`, `needs_fix`,
-`awaiting_human`, or another stop-state event. The controller does not yet
-dispatch the developer again after reviewer findings.
+handed to Claude Code immediately. When the reviewer commits `needs_fix`, the
+controller dispatches Codex again. The loop repeats until the reviewer commits
+`clean`, an agent asks for human clarification, a failure or pause state is
+committed, or the configured max cycle count is reached. If cycle 3 is the
+configured cap and the reviewer still commits `needs_fix`, the controller
+commits a `max_cycles_reached` event instead of dispatching another developer
+turn.
 
 ## Answer Clarification
 
@@ -276,12 +283,8 @@ starting the subprocess so terminal and CI logs stay in causal order.
 ## Current Limitations
 
 - Agent invocation is opt-in; default hook behavior remains dry-run.
-- The controller supports only the first developer-to-reviewer handoff. Full
-  automatic multi-cycle developer/reviewer looping is deferred.
 - No draft PR creation.
 - No `docs/ai-loop/pr-XXXX.md` bootstrap yet.
-- Human answers resume the asking agent, but broader multi-cycle routing after
-  reviewer findings is still deferred.
 
 ADR-0023 requires committed PR-numbered loop logs for the MVP. The current
 implementation still uses a local run ID first so parser, hook, routing, and

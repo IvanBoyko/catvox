@@ -106,6 +106,7 @@ INITIAL_PROMPT_RE = re.compile(
     re.DOTALL,
 )
 TRUTHY = {"1", "true", "yes", "on"}
+DEFAULT_MAX_CYCLES = 3
 
 
 class AILoopError(RuntimeError):
@@ -338,6 +339,53 @@ Latest event metadata:
 
 Read the full AI loop log from disk before appending to it or when prior
 conversation details are needed."""
+
+
+def max_cycles_for_log(parsed: ParsedLog) -> int:
+    raw_value = (parsed.init or {}).get("max_cycles", "").strip()
+    if not raw_value:
+        return DEFAULT_MAX_CYCLES
+    try:
+        max_cycles = int(raw_value)
+    except ValueError as exc:
+        raise AILoopError(f"invalid max_cycles value: {raw_value!r}") from exc
+    if max_cycles < 1:
+        raise AILoopError(f"max_cycles must be at least 1; found {max_cycles}")
+    return max_cycles
+
+
+def cycle_for_event(event: dict[str, str]) -> int:
+    raw_value = event.get("cycle", "0").strip() or "0"
+    try:
+        cycle = int(raw_value)
+    except ValueError as exc:
+        raise AILoopError(f"invalid cycle value: {raw_value!r}") from exc
+    if cycle < 0:
+        raise AILoopError(f"cycle must be non-negative; found {cycle}")
+    return cycle
+
+
+def should_stop_for_cycle_cap(
+    parsed: ParsedLog,
+    event: dict[str, str],
+    route: Route | None,
+) -> bool:
+    if not route or route.role != "developer":
+        return False
+    if event.get("status") != "needs_fix":
+        return False
+    return cycle_for_event(event) >= max_cycles_for_log(parsed)
+
+
+def routing_decision_for_log(
+    router: "StateRouter",
+    parsed: ParsedLog,
+    event: dict[str, str],
+) -> str:
+    route = router.route_for_event(event)
+    if should_stop_for_cycle_cap(parsed, event, route):
+        return "stop: cycle cap reached"
+    return router.routing_decision(event)
 
 
 @dataclass(frozen=True)
@@ -685,6 +733,36 @@ Result:
 """
 
 
+def render_max_cycles_reached_event(
+    *,
+    cycle: str,
+    max_cycles: int,
+    stopped_at: str,
+) -> str:
+    display_time = display_now_local()
+    metadata = {
+        "agent": "controller",
+        "role": "orchestrator",
+        "cycle": cycle,
+        "status": "max_cycles_reached",
+        "stopped_at": stopped_at,
+    }
+    return f"""
+## {display_time} - Controller - Max Cycles Reached
+
+The controller stopped before dispatching another developer turn because cycle
+{cycle} reached the configured limit of {max_cycles}.
+
+Result:
+- status: max_cycles_reached
+- cycle: {cycle}
+
+<!-- ai-loop-event
+{render_event_metadata(metadata)}
+-->
+"""
+
+
 def verify_tool(name: str, *, required: bool) -> str:
     path = shutil.which(name)
     if path:
@@ -842,21 +920,22 @@ def command_continue(args: argparse.Namespace) -> int:
         return 0
 
     if not dispatcher.should_invoke(args):
-        print(f"ai-loop dry-run ({args.trigger}): {router.routing_decision(latest)}")
+        print(
+            f"ai-loop dry-run ({args.trigger}): "
+            f"{routing_decision_for_log(router, parsed, latest)}"
+        )
         return 0
 
     git.ensure_dispatch_safe_worktree()
     profile = dispatcher.selected_profile(args)
-    head_before_dispatch = git.required_output(["rev-parse", "HEAD"])
-    invoke_route(dispatcher, log_path, route, profile)
-    if route.role == "developer":
-        maybe_handoff_to_reviewer(
-            git=git,
-            router=router,
-            dispatcher=dispatcher,
-            profile=profile,
-            previous_head=head_before_dispatch,
-        )
+    run_agent_loop(
+        git=git,
+        router=router,
+        dispatcher=dispatcher,
+        log_path=log_path,
+        profile=profile,
+        trigger=args.trigger,
+    )
     return 0
 
 
@@ -874,38 +953,87 @@ def invoke_route(
         )
 
 
-def maybe_handoff_to_reviewer(
+def run_agent_loop(
     *,
     git: GitContext,
     router: StateRouter,
     dispatcher: AgentDispatcher,
+    log_path: Path,
     profile: str,
-    previous_head: str,
+    trigger: str,
 ) -> None:
-    current_head = git.required_output(["rev-parse", "HEAD"])
-    if current_head == previous_head:
-        raise AILoopError(
-            "developer agent exited without committing an AI loop event; "
-            "reviewer handoff stopped"
-        )
+    has_dispatched = False
+    while True:
+        parsed = parse_log_file(log_path)
+        latest = parsed.latest_event
+        if not latest:
+            raise AILoopError(f"no ai-loop-event blocks found in {log_path}")
 
+        route = router.route_for_event(latest)
+        decision = routing_decision_for_log(router, parsed, latest)
+        if not route:
+            print_stop_decision(trigger, decision, has_dispatched)
+            return
+
+        if should_stop_for_cycle_cap(parsed, latest, route):
+            print_stop_decision(trigger, decision, has_dispatched)
+            append_max_cycles_reached_event(
+                git=git,
+                log_path=log_path,
+                latest=latest,
+                max_cycles=max_cycles_for_log(parsed),
+            )
+            return
+
+        if has_dispatched:
+            print(
+                f"ai-loop handoff: dispatching {route.role} agent: {route.agent}",
+                flush=True,
+            )
+
+        previous_head = git.required_output(["rev-parse", "HEAD"])
+        invoke_route(dispatcher, log_path, route, profile)
+        current_head = git.required_output(["rev-parse", "HEAD"])
+        if current_head == previous_head:
+            raise AILoopError(
+                f"{route.role} agent exited without committing an AI loop event; "
+                "loop stopped"
+            )
+
+        git.ensure_dispatch_safe_worktree()
+        log_path = git.latest_ai_loop_log_from_head()
+        has_dispatched = True
+
+
+def print_stop_decision(trigger: str, decision: str, has_dispatched: bool) -> None:
+    if has_dispatched:
+        print(f"ai-loop handoff: {decision}", flush=True)
+    else:
+        print(f"ai-loop ({trigger}): {decision}", flush=True)
+
+
+def append_max_cycles_reached_event(
+    *,
+    git: GitContext,
+    log_path: Path,
+    latest: dict[str, str],
+    max_cycles: int,
+) -> None:
     git.ensure_dispatch_safe_worktree()
-    next_log_path = git.latest_ai_loop_log_from_head()
-    parsed = parse_log_file(next_log_path)
-    latest = parsed.latest_event
-    if not latest:
-        raise AILoopError(f"no ai-loop-event blocks found in {next_log_path}")
-
-    next_route = router.route_for_event(latest)
-    if not next_route or next_route.role != "reviewer":
-        print(f"ai-loop handoff: {router.routing_decision(latest)}", flush=True)
-        return
-
-    print(
-        f"ai-loop handoff: dispatching {next_route.role} agent: {next_route.agent}",
-        flush=True,
+    rel_log_path = repo_relative_path(git.repo, log_path)
+    event = render_max_cycles_reached_event(
+        cycle=str(cycle_for_event(latest)),
+        max_cycles=max_cycles,
+        stopped_at=iso_now_local(),
     )
-    invoke_route(dispatcher, next_log_path, next_route, profile)
+    with log_path.open("a", encoding="utf-8") as handle:
+        handle.write(event)
+
+    git.run(["add", rel_log_path], capture_output=True)
+    git.run(
+        ["commit", "-m", "[ai-loop] Controller: max cycles reached"],
+        capture_output=False,
+    )
 
 
 def command_compose_prompt(args: argparse.Namespace) -> int:
