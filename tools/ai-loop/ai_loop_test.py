@@ -61,19 +61,25 @@ def init_repo_with_ai_loop_tooling(repo: Path) -> None:
     run(["git", "commit", "-m", "Initial tools"], repo)
 
 
-def write_fake_handoff_agent(script_path: Path) -> None:
+def write_fake_sequence_agent(script_path: Path) -> None:
     script_path.write_text(
         """from pathlib import Path
 import re
 import subprocess
 import sys
 
+AGENT_FOR_ROLE = {
+    "developer": "codex",
+    "reviewer": "claude-code",
+}
+
 role = sys.argv[1]
 calls_path = Path(sys.argv[2])
+sequence_path = Path(sys.argv[3])
 prompt = sys.stdin.read()
 
-if len(sys.argv) >= 4:
-    log_path = Path(sys.argv[3])
+if len(sys.argv) >= 5:
+    log_path = Path(sys.argv[4])
 else:
     match = re.search(r"^AI loop log: (?P<path>.+)$", prompt, re.MULTILINE)
     if not match:
@@ -83,39 +89,45 @@ else:
         log_path = Path.cwd() / log_path
 
 if calls_path.exists():
-    calls = calls_path.read_text(encoding="utf-8")
+    calls = calls_path.read_text(encoding="utf-8").splitlines()
 else:
-    calls = ""
-calls_path.write_text(calls + role + "\\n", encoding="utf-8")
+    calls = []
 
-if role == "developer":
-    event = '''
-## Fake developer event
+sequence = [
+    line.strip()
+    for line in sequence_path.read_text(encoding="utf-8").splitlines()
+    if line.strip()
+]
+index = len(calls)
+if index >= len(sequence):
+    raise SystemExit("fake agent sequence exhausted")
 
-<!-- ai-loop-event
-agent: codex
-role: developer
-cycle: 1
-status: needs_review
-next_agent: claude-code
--->
-'''
-    message = "[ai-loop] Codex: ready for review"
-elif role == "reviewer":
-    event = '''
-## Fake reviewer event
+parts = sequence[index].split("|")
+while len(parts) < 4:
+    parts.append("")
+expected_role, cycle, status, next_agent = parts[:4]
+if expected_role != role:
+    raise SystemExit(f"expected role {expected_role}, got {role}")
 
-<!-- ai-loop-event
-agent: claude-code
-role: reviewer
-cycle: 1
-status: needs_fix
-next_agent: codex
--->
-'''
-    message = "[ai-loop] Claude: needs fix"
-else:
-    raise SystemExit(f"unknown role: {role}")
+calls_path.write_text("\\n".join([*calls, role]) + "\\n", encoding="utf-8")
+
+agent = AGENT_FOR_ROLE[role]
+metadata = [
+    f"agent: {agent}",
+    f"role: {role}",
+    f"cycle: {cycle}",
+    f"status: {status}",
+]
+if next_agent:
+    metadata.append(f"next_agent: {next_agent}")
+
+event = (
+    f"\\n## Fake {role} event {index + 1}\\n\\n"
+    "<!-- ai-loop-event\\n"
+    + "\\n".join(metadata)
+    + "\\n-->\\n"
+)
+message = f"[ai-loop] {agent}: {status}"
 
 with log_path.open("a", encoding="utf-8") as handle:
     handle.write(event)
@@ -136,6 +148,20 @@ def prompt_composer(repo: Path) -> ai_loop.PromptComposer:
 
 def agent_dispatcher(repo: Path) -> ai_loop.AgentDispatcher:
     return ai_loop.AgentDispatcher(git_context(repo))
+
+
+def write_committed_log(
+    repo: Path,
+    text: str,
+    *,
+    message: str = "[ai-loop] Test event",
+) -> Path:
+    log_path = repo / "docs/ai-loop/local-20260524-120000.md"
+    log_path.parent.mkdir(parents=True, exist_ok=True)
+    log_path.write_text(text, encoding="utf-8")
+    run(["git", "add", "docs/ai-loop/local-20260524-120000.md"], repo)
+    run(["git", "commit", "-m", message], repo)
+    return log_path
 
 
 class MetadataParsingTests(unittest.TestCase):
@@ -217,6 +243,26 @@ next_agent: claude-code
         self.assertEqual(parsed.init["run_id"], "local-20260524-120000")
         self.assertEqual(parsed.latest_event["status"], "needs_developer")
         self.assertEqual(parsed.latest_event["next_agent"], "codex")
+
+    def test_max_cycles_defaults_to_three_when_missing(self) -> None:
+        parsed = ai_loop.parse_log_text(
+            """# AI Loop
+
+<!-- ai-loop-event
+agent: claude-code
+role: reviewer
+cycle: 3
+status: needs_fix
+next_agent: codex
+-->
+"""
+        )
+        latest = parsed.latest_event
+        assert latest is not None
+        route = ai_loop.StateRouter().route_for_event(latest)
+
+        self.assertEqual(ai_loop.max_cycles_for_log(parsed), 3)
+        self.assertTrue(ai_loop.should_stop_for_cycle_cap(parsed, latest, route))
 
 
 class GitContextTests(unittest.TestCase):
@@ -466,6 +512,29 @@ class CommandProfileTests(unittest.TestCase):
                 profile = agent_dispatcher(repo).selected_profile(args)
         self.assertEqual(profile, "smoke")
 
+    def test_agent_timeout_can_come_from_env(self) -> None:
+        repo = Path("/tmp/repo")
+        with patch.dict(os.environ, {"AI_LOOP_AGENT_TIMEOUT_SECONDS": "12.5"}):
+            timeout = agent_dispatcher(repo).selected_timeout_seconds()
+
+        self.assertEqual(timeout, 12.5)
+
+    def test_agent_timeout_can_come_from_git_config(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            repo = Path(tmp)
+            init_repo_with_ai_loop_tooling(repo)
+            run(["git", "config", "ai-loop.agentTimeoutSeconds", "7"], repo)
+            with patch.dict(os.environ, {}, clear=True):
+                timeout = agent_dispatcher(repo).selected_timeout_seconds()
+
+        self.assertEqual(timeout, 7.0)
+
+    def test_reject_invalid_agent_timeout(self) -> None:
+        repo = Path("/tmp/repo")
+        with patch.dict(os.environ, {"AI_LOOP_AGENT_TIMEOUT_SECONDS": "0"}):
+            with self.assertRaises(ai_loop.AILoopError):
+                agent_dispatcher(repo).selected_timeout_seconds()
+
 
 class AgentDispatchTests(unittest.TestCase):
     def test_continue_can_invoke_reviewer_with_composed_prompt_on_stdin(self) -> None:
@@ -496,8 +565,24 @@ next_agent: claude-code
             fake_agent = root / "fake_agent.py"
             captured_prompt = root / "captured_prompt.txt"
             fake_agent.write_text(
-                "import pathlib, sys\n"
-                "pathlib.Path(sys.argv[1]).write_text(sys.stdin.read(), encoding='utf-8')\n",
+                "from pathlib import Path\n"
+                "import re\n"
+                "import subprocess\n"
+                "import sys\n"
+                "prompt = sys.stdin.read()\n"
+                "Path(sys.argv[1]).write_text(prompt, encoding='utf-8')\n"
+                "match = re.search(r'^AI loop log: (?P<path>.+)$', prompt, re.MULTILINE)\n"
+                "if not match:\n"
+                "    raise SystemExit('AI loop log path not found in prompt')\n"
+                "log_path = Path(match.group('path').strip())\n"
+                "if not log_path.is_absolute():\n"
+                "    log_path = Path.cwd() / log_path\n"
+                "with log_path.open('a', encoding='utf-8') as handle:\n"
+                "    handle.write('\\n## Fake reviewer event\\n\\n<!-- ai-loop-event\\n')\n"
+                "    handle.write('agent: claude-code\\nrole: reviewer\\ncycle: 1\\nstatus: clean\\n')\n"
+                "    handle.write('-->\\n')\n"
+                "subprocess.run(['git', 'add', str(log_path)], check=True)\n"
+                "subprocess.run(['git', 'commit', '-m', '[ai-loop] claude-code: clean'], check=True)\n",
                 encoding="utf-8",
             )
             env = os.environ.copy()
@@ -525,7 +610,109 @@ next_agent: claude-code
             self.assertLess(prompt.index('path="CLAUDE.md"'), prompt.index("<task_context>"))
             self.assertIn("status: needs_review", prompt)
 
-    def test_developer_dispatch_hands_off_to_reviewer_once(self) -> None:
+    def test_invoked_agent_must_commit_ai_loop_event(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            repo = root / "repo"
+            repo.mkdir()
+            init_repo_with_ai_loop_tooling(repo)
+            log_path = write_committed_log(
+                repo,
+                """# AI Loop
+
+<!-- ai-loop-event
+agent: codex
+role: developer
+cycle: 1
+status: needs_review
+next_agent: claude-code
+-->
+""",
+            )
+
+            fake_agent = root / "fake_agent.py"
+            fake_agent.write_text("import sys\nsys.stdin.read()\n", encoding="utf-8")
+            env = os.environ.copy()
+            env["AI_LOOP_CLAUDE_COMMAND"] = f"{sys.executable} {fake_agent}"
+
+            script = repo / "tools/ai-loop/ai_loop.py"
+            result = run(
+                [
+                    sys.executable,
+                    str(script),
+                    "continue",
+                    "--trigger",
+                    "test",
+                    "--log",
+                    str(log_path),
+                    "--invoke",
+                ],
+                repo,
+                check=False,
+                env=env,
+            )
+
+            self.assertEqual(result.returncode, 1)
+            self.assertIn(
+                "reviewer agent exited without committing an AI loop event",
+                result.stderr,
+            )
+
+    def test_invoked_agent_timeout_stops_loop(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            repo = root / "repo"
+            repo.mkdir()
+            init_repo_with_ai_loop_tooling(repo)
+            log_path = write_committed_log(
+                repo,
+                """# AI Loop
+
+<!-- ai-loop-event
+agent: codex
+role: developer
+cycle: 1
+status: needs_review
+next_agent: claude-code
+-->
+""",
+            )
+
+            fake_agent = root / "fake_agent.py"
+            fake_agent.write_text(
+                "import sys, time\nsys.stdin.read()\ntime.sleep(5)\n",
+                encoding="utf-8",
+            )
+            env = os.environ.copy()
+            env["AI_LOOP_CLAUDE_COMMAND"] = f"{sys.executable} {fake_agent}"
+            env["AI_LOOP_AGENT_TIMEOUT_SECONDS"] = "0.1"
+
+            script = repo / "tools/ai-loop/ai_loop.py"
+            result = run(
+                [
+                    sys.executable,
+                    str(script),
+                    "continue",
+                    "--trigger",
+                    "test",
+                    "--log",
+                    str(log_path),
+                    "--invoke",
+                ],
+                repo,
+                check=False,
+                env=env,
+            )
+
+            self.assertEqual(result.returncode, 1)
+            self.assertIn(
+                "claude-code exceeded timeout of 0.1s; loop stopped",
+                result.stderr,
+            )
+            parsed = ai_loop.parse_log_file(log_path)
+            self.assertEqual(parsed.latest_event["status"], "needs_review")
+
+    def test_dispatch_loop_runs_until_reviewer_clean(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             repo = root / "repo"
@@ -552,14 +739,29 @@ next_agent: codex
 
             fake_agent = root / "fake_agent.py"
             calls_path = root / "agent_calls.txt"
-            write_fake_handoff_agent(fake_agent)
+            sequence_path = root / "agent_sequence.txt"
+            sequence_path.write_text(
+                "\n".join(
+                    [
+                        "developer|1|needs_review|claude-code",
+                        "reviewer|1|needs_fix|codex",
+                        "developer|2|needs_review|claude-code",
+                        "reviewer|2|clean|",
+                    ]
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+            write_fake_sequence_agent(fake_agent)
 
             env = os.environ.copy()
             env["AI_LOOP_CODEX_COMMAND"] = (
-                f"{sys.executable} {fake_agent} developer {calls_path} {log_path}"
+                f"{sys.executable} {fake_agent} developer {calls_path} "
+                f"{sequence_path} {log_path}"
             )
             env["AI_LOOP_CLAUDE_COMMAND"] = (
-                f"{sys.executable} {fake_agent} reviewer {calls_path} {log_path}"
+                f"{sys.executable} {fake_agent} reviewer {calls_path} "
+                f"{sequence_path} {log_path}"
             )
 
             script = repo / "tools/ai-loop/ai_loop.py"
@@ -583,16 +785,262 @@ next_agent: codex
                 "ai-loop handoff: dispatching reviewer agent: claude-code",
                 result.stdout,
             )
+            self.assertIn(
+                "ai-loop handoff: dispatching developer agent: codex",
+                result.stdout,
+            )
             self.assertIn("dispatching reviewer agent claude-code", result.stdout)
-            self.assertEqual(calls_path.read_text(encoding="utf-8").splitlines(), [
-                "developer",
-                "reviewer",
-            ])
+            self.assertIn("ai-loop handoff: stop: review is clean", result.stdout)
+            self.assertEqual(
+                calls_path.read_text(encoding="utf-8").splitlines(),
+                ["developer", "reviewer", "developer", "reviewer"],
+            )
             parsed = ai_loop.parse_log_file(log_path)
-            self.assertEqual(parsed.latest_event["status"], "needs_fix")
-            self.assertEqual(parsed.latest_event["next_agent"], "codex")
+            self.assertEqual(parsed.latest_event["status"], "clean")
             status = run(["git", "status", "--porcelain"], repo)
             self.assertEqual(status.stdout, "")
+
+    def test_cycle_cap_stops_without_invoking_developer_and_commits_event(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            repo = root / "repo"
+            repo.mkdir()
+            init_repo_with_ai_loop_tooling(repo)
+            log_path = write_committed_log(
+                repo,
+                """# AI Loop
+
+<!-- ai-loop-init
+run_id: local-20260524-120000
+max_cycles: 3
+-->
+
+<!-- ai-loop-event
+agent: claude-code
+role: reviewer
+cycle: 3
+status: needs_fix
+next_agent: codex
+-->
+""",
+            )
+
+            fail_agent = root / "fail_agent.py"
+            calls_path = root / "unexpected_call.txt"
+            fail_agent.write_text(
+                "from pathlib import Path\n"
+                "import sys\n"
+                "Path(sys.argv[1]).write_text('called', encoding='utf-8')\n"
+                "raise SystemExit(17)\n",
+                encoding="utf-8",
+            )
+            env = os.environ.copy()
+            env["AI_LOOP_CODEX_COMMAND"] = f"{sys.executable} {fail_agent} {calls_path}"
+
+            script = repo / "tools/ai-loop/ai_loop.py"
+            result = run(
+                [
+                    sys.executable,
+                    str(script),
+                    "continue",
+                    "--trigger",
+                    "test",
+                    "--log",
+                    str(log_path),
+                    "--invoke",
+                ],
+                repo,
+                env=env,
+            )
+
+            self.assertIn("ai-loop (test): stop: cycle cap reached", result.stdout)
+            self.assertFalse(calls_path.exists())
+            parsed = ai_loop.parse_log_file(log_path)
+            self.assertEqual(parsed.latest_event["agent"], "controller")
+            self.assertEqual(parsed.latest_event["role"], "orchestrator")
+            self.assertEqual(parsed.latest_event["cycle"], "3")
+            self.assertEqual(parsed.latest_event["status"], "max_cycles_reached")
+            self.assertIn("stopped_at", parsed.latest_event)
+            commit_message = run(["git", "log", "-1", "--format=%B"], repo)
+            self.assertIn("[ai-loop] Controller: max cycles reached", commit_message.stdout)
+            status = run(["git", "status", "--porcelain"], repo)
+            self.assertEqual(status.stdout, "")
+
+    def test_cycle_cap_dry_run_does_not_commit(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            repo = Path(tmp)
+            init_repo_with_ai_loop_tooling(repo)
+            log_path = write_committed_log(
+                repo,
+                """# AI Loop
+
+<!-- ai-loop-init
+run_id: local-20260524-120000
+max_cycles: 3
+-->
+
+<!-- ai-loop-event
+agent: claude-code
+role: reviewer
+cycle: 3
+status: needs_fix
+next_agent: codex
+-->
+""",
+            )
+            head_before = run(["git", "rev-parse", "HEAD"], repo).stdout.strip()
+            log_before = log_path.read_text(encoding="utf-8")
+
+            script = repo / "tools/ai-loop/ai_loop.py"
+            result = run(
+                [
+                    sys.executable,
+                    str(script),
+                    "continue",
+                    "--trigger",
+                    "test",
+                    "--log",
+                    str(log_path),
+                ],
+                repo,
+            )
+
+            self.assertIn(
+                "ai-loop dry-run (test): stop: cycle cap reached",
+                result.stdout,
+            )
+            head_after = run(["git", "rev-parse", "HEAD"], repo).stdout.strip()
+            self.assertEqual(head_after, head_before)
+            self.assertEqual(log_path.read_text(encoding="utf-8"), log_before)
+            parsed = ai_loop.parse_log_file(log_path)
+            self.assertEqual(parsed.latest_event["status"], "needs_fix")
+
+    def test_clarified_event_resumes_named_agent_and_continues(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            repo = root / "repo"
+            repo.mkdir()
+            init_repo_with_ai_loop_tooling(repo)
+            log_path = write_committed_log(
+                repo,
+                """# AI Loop
+
+<!-- ai-loop-init
+run_id: local-20260524-120000
+max_cycles: 3
+-->
+
+<!-- ai-loop-event
+agent: human
+role: owner
+cycle: 1
+status: clarified
+next_agent: codex
+questions: q1
+-->
+""",
+            )
+
+            fake_agent = root / "fake_agent.py"
+            calls_path = root / "agent_calls.txt"
+            sequence_path = root / "agent_sequence.txt"
+            sequence_path.write_text(
+                "\n".join(
+                    [
+                        "developer|2|needs_review|claude-code",
+                        "reviewer|2|clean|",
+                    ]
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+            write_fake_sequence_agent(fake_agent)
+
+            env = os.environ.copy()
+            env["AI_LOOP_CODEX_COMMAND"] = (
+                f"{sys.executable} {fake_agent} developer {calls_path} "
+                f"{sequence_path} {log_path}"
+            )
+            env["AI_LOOP_CLAUDE_COMMAND"] = (
+                f"{sys.executable} {fake_agent} reviewer {calls_path} "
+                f"{sequence_path} {log_path}"
+            )
+
+            script = repo / "tools/ai-loop/ai_loop.py"
+            result = run(
+                [
+                    sys.executable,
+                    str(script),
+                    "continue",
+                    "--trigger",
+                    "test",
+                    "--log",
+                    str(log_path),
+                    "--invoke",
+                ],
+                repo,
+                env=env,
+            )
+
+            self.assertIn("dispatching developer agent codex", result.stdout)
+            self.assertIn(
+                "ai-loop handoff: dispatching reviewer agent: claude-code",
+                result.stdout,
+            )
+            self.assertEqual(
+                calls_path.read_text(encoding="utf-8").splitlines(),
+                ["developer", "reviewer"],
+            )
+            parsed = ai_loop.parse_log_file(log_path)
+            self.assertEqual(parsed.latest_event["status"], "clean")
+
+    def test_stop_statuses_do_not_dispatch(self) -> None:
+        cases = {
+            "clean": "stop: review is clean",
+            "awaiting_human": "stop: awaiting human clarification",
+            "failed": "stop: loop is failed",
+            "paused": "stop: loop is paused",
+            "max_cycles_reached": "stop: cycle cap reached",
+            "mystery": "stop: unknown status 'mystery'",
+        }
+        for status, expected in cases.items():
+            with self.subTest(status=status):
+                with tempfile.TemporaryDirectory() as tmp:
+                    repo = Path(tmp)
+                    init_repo_with_ai_loop_tooling(repo)
+                    log_path = write_committed_log(
+                        repo,
+                        f"""# AI Loop
+
+<!-- ai-loop-event
+agent: claude-code
+role: reviewer
+cycle: 1
+status: {status}
+-->
+""",
+                    )
+
+                    script = repo / "tools/ai-loop/ai_loop.py"
+                    result = run(
+                        [
+                            sys.executable,
+                            str(script),
+                            "continue",
+                            "--trigger",
+                            "test",
+                            "--log",
+                            str(log_path),
+                            "--invoke",
+                        ],
+                        repo,
+                    )
+
+                    self.assertIn(f"ai-loop (test): {expected}", result.stdout)
+                    self.assertEqual(
+                        run(["git", "status", "--porcelain"], repo).stdout,
+                        "",
+                    )
 
 
 class GitIntegrationTests(unittest.TestCase):
@@ -652,15 +1100,28 @@ class GitIntegrationTests(unittest.TestCase):
 
             fake_agent = root / "fake_agent.py"
             calls_path = root / "agent_calls.txt"
-            write_fake_handoff_agent(fake_agent)
+            sequence_path = root / "agent_sequence.txt"
+            sequence_path.write_text(
+                "\n".join(
+                    [
+                        "developer|1|needs_review|claude-code",
+                        "reviewer|1|needs_fix|codex",
+                        "developer|2|needs_review|claude-code",
+                        "reviewer|2|clean|",
+                    ]
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+            write_fake_sequence_agent(fake_agent)
 
             env = os.environ.copy()
             env["AI_LOOP_INVOKE_AGENTS"] = "1"
             env["AI_LOOP_CODEX_COMMAND"] = (
-                f"{sys.executable} {fake_agent} developer {calls_path}"
+                f"{sys.executable} {fake_agent} developer {calls_path} {sequence_path}"
             )
             env["AI_LOOP_CLAUDE_COMMAND"] = (
-                f"{sys.executable} {fake_agent} reviewer {calls_path}"
+                f"{sys.executable} {fake_agent} reviewer {calls_path} {sequence_path}"
             )
 
             start = run(
@@ -683,18 +1144,22 @@ class GitIntegrationTests(unittest.TestCase):
                 "ai-loop handoff: dispatching reviewer agent: claude-code",
                 start_output,
             )
+            self.assertIn(
+                "ai-loop handoff: dispatching developer agent: codex",
+                start_output,
+            )
             self.assertIn("dispatching reviewer agent claude-code", start_output)
+            self.assertIn("ai-loop handoff: stop: review is clean", start_output)
             self.assertIn("ai-loop: lock exists, skipping continuation", start_output)
-            self.assertEqual(calls_path.read_text(encoding="utf-8").splitlines(), [
-                "developer",
-                "reviewer",
-            ])
+            self.assertEqual(
+                calls_path.read_text(encoding="utf-8").splitlines(),
+                ["developer", "reviewer", "developer", "reviewer"],
+            )
 
             logs = sorted((repo / "docs/ai-loop").glob("local-*.md"))
             self.assertEqual(len(logs), 1)
             parsed = ai_loop.parse_log_file(logs[0])
-            self.assertEqual(parsed.latest_event["status"], "needs_fix")
-            self.assertEqual(parsed.latest_event["next_agent"], "codex")
+            self.assertEqual(parsed.latest_event["status"], "clean")
             status = run(["git", "status", "--porcelain"], repo)
             self.assertEqual(status.stdout, "")
 
