@@ -734,13 +734,65 @@ def command_continue(args: argparse.Namespace) -> int:
 
     git.ensure_dispatch_safe_worktree()
     profile = dispatcher.selected_profile(args)
+    head_before_dispatch = git.required_output(["rev-parse", "HEAD"])
+    invoke_route(dispatcher, log_path, route, profile)
+    if route.role == "developer":
+        maybe_handoff_to_reviewer(
+            git=git,
+            router=router,
+            dispatcher=dispatcher,
+            profile=profile,
+            previous_head=head_before_dispatch,
+        )
+    return 0
+
+
+def invoke_route(
+    dispatcher: AgentDispatcher,
+    log_path: Path,
+    route: Route,
+    profile: str,
+) -> None:
     invocation = dispatcher.build_invocation(log_path, route, profile)
     return_code = dispatcher.run_invocation(invocation)
     if return_code != 0:
         raise AILoopError(
             f"{invocation.agent} exited with status {return_code}; loop stopped"
         )
-    return 0
+
+
+def maybe_handoff_to_reviewer(
+    *,
+    git: GitContext,
+    router: StateRouter,
+    dispatcher: AgentDispatcher,
+    profile: str,
+    previous_head: str,
+) -> None:
+    current_head = git.required_output(["rev-parse", "HEAD"])
+    if current_head == previous_head:
+        raise AILoopError(
+            "developer agent exited without committing an AI loop event; "
+            "reviewer handoff stopped"
+        )
+
+    git.ensure_dispatch_safe_worktree()
+    next_log_path = git.latest_ai_loop_log_from_head()
+    parsed = parse_log_file(next_log_path)
+    latest = parsed.latest_event
+    if not latest:
+        raise AILoopError(f"no ai-loop-event blocks found in {next_log_path}")
+
+    next_route = router.route_for_event(latest)
+    if not next_route or next_route.role != "reviewer":
+        print(f"ai-loop handoff: {router.routing_decision(latest)}", flush=True)
+        return
+
+    print(
+        f"ai-loop handoff: dispatching {next_route.role} agent: {next_route.agent}",
+        flush=True,
+    )
+    invoke_route(dispatcher, next_log_path, next_route, profile)
 
 
 def command_compose_prompt(args: argparse.Namespace) -> int:

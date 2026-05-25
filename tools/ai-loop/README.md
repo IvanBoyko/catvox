@@ -2,10 +2,13 @@
 
 This directory contains the local AI loop for Option B from ADR-0023.
 
-Slice 1 created committed loop logs and dry-run routing. Slice 2 adds
+Slice 1 created committed loop logs and dry-run routing. Slice 2 added
 role-aware prompt composition and optional local agent invocation for Codex and
-Claude Code. Invocation remains opt-in so developers can validate routing
-without spending tokens or giving a local CLI write access by accident.
+Claude Code. Slice 3 adds the first automatic reviewer handoff: when a
+developer invocation commits a `needs_review` event, the controller dispatches
+the reviewer once and then stops. Invocation remains opt-in so developers can
+validate routing without spending tokens or giving a local CLI write access by
+accident.
 
 ## Setup
 
@@ -72,6 +75,11 @@ python3 tools/ai-loop/ai_loop.py continue --invoke --trigger manual
 ```
 
 Use `--dry-run` to force observe-only routing even when invocation is enabled.
+
+When a developer-routed agent commits a `needs_review` event, that event is
+handed to Claude Code immediately. The reviewer may commit `clean`, `needs_fix`,
+`awaiting_human`, or another stop-state event. The controller does not yet
+dispatch the developer again after reviewer findings.
 
 ## Agent Profiles
 
@@ -221,11 +229,25 @@ Both commands receive the composed prompt on stdin. For local experimentation,
 override them with profile-specific command variables or the legacy
 `AI_LOOP_CODEX_COMMAND` / `AI_LOOP_CLAUDE_COMMAND` variables.
 
-## Slice 2 Limitations
+## Extending Dispatch Chaining
+
+The `post-commit` hook is a wake-up trigger, not the loop engine. While the
+controller is running, it holds the `ai-loop.lock` directory. If a dispatched
+agent commits another `[ai-loop]` event, the hook fires again but exits on that
+lock. Any same-turn chaining must therefore happen in the still-running
+controller process: verify `HEAD` advanced, verify the worktree is clean, read
+the latest committed event, and dispatch the next role deliberately before
+releasing the lock.
+
+Keep dispatch output explicit. Dry-run routing may say `would dispatch`, but a
+real chained handoff should print a flushed `dispatching ...` banner before
+starting the subprocess so terminal and CI logs stay in causal order.
+
+## Current Limitations
 
 - Agent invocation is opt-in; default hook behavior remains dry-run.
-- The controller dispatches only the single routed agent for the latest event.
-  Full automatic multi-cycle developer/reviewer looping is deferred.
+- The controller supports only the first developer-to-reviewer handoff. Full
+  automatic multi-cycle developer/reviewer looping is deferred.
 - No draft PR creation.
 - No `docs/ai-loop/pr-XXXX.md` bootstrap yet.
 - No human answer command yet.
