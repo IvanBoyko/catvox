@@ -375,6 +375,11 @@ Use `docs/CREATE_NEW_ENVIRONMENT.md` and `make environment-create` for new envir
 - When updating repeated Markdown status blocks such as audit findings, patch with heading-specific context or line-number-anchored inspection. Do not rely on replacing the first identical `Status` / `Resolution` block. Always review the focused diff before committing.
 - Keep large review artifacts, reviewer reports, and temporary analysis notes in PR comments or attached PR files unless they are intended to become durable repository documentation. Do not commit ad hoc review files from the repo root just because they were useful during review.
 
+### Refactoring Notes
+
+- When refactoring internal code, do not keep pass-through compatibility wrappers, re-export aliases, or renamed-unused shims solely to avoid updating in-repo tests. If there is no documented external or runtime caller for the old API, delete the old surface and migrate tests and local callers to the new structure directly.
+- When a refactor moves parsing, normalization, or matching logic for external-shaped values such as Git remote URLs, environment names, config keys, tool arguments, or CI patterns, add a focused input matrix around the moved behavior before claiming behavior is unchanged. Cover the common forms and at least the nearest failure variant.
+
 ### GitHub PR Publishing Notes
 
 - Prefer the GitHub connector for creating PRs when available, but if it returns `403 Resource not accessible by integration`, do not retry the same connector path. Fall back to the authenticated `gh` CLI and mention the fallback in the final summary.
