@@ -356,7 +356,8 @@ def run_agent_invocation(repo: Path, invocation: AgentInvocation) -> int:
     print(
         "ai-loop invoke: "
         f"dispatching {invocation.role} agent {invocation.agent}: "
-        f"{shlex.join(invocation.command)}"
+        f"{shlex.join(invocation.command)}",
+        flush=True,
     )
     try:
         completed = subprocess.run(
