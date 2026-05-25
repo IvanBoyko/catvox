@@ -172,7 +172,7 @@ class GitContext:
         status = self.run(["status", "--porcelain"]).stdout.strip()
         if status:
             raise AILoopError(
-                "working tree must be clean before ai-loop-start creates the bootstrap commit"
+                "working tree must be clean before committing an AI loop event"
             )
 
     def ensure_dispatch_safe_worktree(self) -> None:
