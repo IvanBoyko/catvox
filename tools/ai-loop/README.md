@@ -229,6 +229,20 @@ Both commands receive the composed prompt on stdin. For local experimentation,
 override them with profile-specific command variables or the legacy
 `AI_LOOP_CODEX_COMMAND` / `AI_LOOP_CLAUDE_COMMAND` variables.
 
+## Extending Dispatch Chaining
+
+The `post-commit` hook is a wake-up trigger, not the loop engine. While the
+controller is running, it holds the `ai-loop.lock` directory. If a dispatched
+agent commits another `[ai-loop]` event, the hook fires again but exits on that
+lock. Any same-turn chaining must therefore happen in the still-running
+controller process: verify `HEAD` advanced, verify the worktree is clean, read
+the latest committed event, and dispatch the next role deliberately before
+releasing the lock.
+
+Keep dispatch output explicit. Dry-run routing may say `would dispatch`, but a
+real chained handoff should print a flushed `dispatching ...` banner before
+starting the subprocess so terminal and CI logs stay in causal order.
+
 ## Current Limitations
 
 - Agent invocation is opt-in; default hook behavior remains dry-run.
