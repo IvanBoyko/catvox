@@ -1,0 +1,39 @@
+version: 2
+
+updates:
+  # Firebase Cloud Functions npm dependencies (Node 22 runtime).
+  - package-ecosystem: npm
+    directory: /functions
+    schedule:
+      interval: weekly
+      day: monday
+      time: "09:00"
+      timezone: Etc/UTC
+    open-pull-requests-limit: 10
+    labels:
+      - maintenance
+    groups:
+      # Group minor/patch updates of the tightly-coupled Google/Firebase SDK
+      # stack so they ship as one PR; majors remain individual PRs so each
+      # breaking-change bump (e.g. firebase-admin v13, firestore v8,
+      # @google/genai v2) gets isolated review and validation.
+      google-stack:
+        applies-to: version-updates
+        update-types:
+          - minor
+          - patch
+        patterns:
+          - "@google-cloud/*"
+          - "@google/genai"
+          - "firebase-*"
+
+  # GitHub Actions workflow versions (uses: refs across .github/workflows).
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+      time: "09:00"
+      timezone: Etc/UTC
+    labels:
+      - maintenance
