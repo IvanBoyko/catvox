@@ -17,6 +17,11 @@ You are participating in the CatVox local AI implementation/review loop.
 - If clarification is needed, ask all independent blocking questions in one
   event and set `status: awaiting_human` and `next_agent: human`.
 - Respect the configured cycle limit.
+- Developer events start or advance a cycle when handing work to the reviewer.
+  Reviewer events use the same cycle number as the developer event they
+  reviewed.
+- Commit AI loop log updates with `[ai-loop]` in the commit message so the hook
+  can wake the controller.
 
 ## Event Footer Shape
 
@@ -29,5 +34,3 @@ status: needs_review
 next_agent: claude-code
 -->
 ```
-
-Slice 1 only creates and parses this format. Real agent invocation is deferred.

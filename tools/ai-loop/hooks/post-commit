@@ -17,11 +17,11 @@ esac
 
 lock_dir="${git_dir}/ai-loop.lock"
 if ! mkdir "$lock_dir" 2>/dev/null; then
-  printf 'ai-loop: lock exists, skipping dry-run continuation\n' >&2
+  printf 'ai-loop: lock exists, skipping continuation\n' >&2
   exit 0
 fi
 trap 'rmdir "$lock_dir" 2>/dev/null || true' EXIT
 
 if ! python3 "${repo_root}/tools/ai-loop/ai_loop.py" continue --trigger post-commit; then
-  printf 'ai-loop: dry-run continuation failed; commit was left intact\n' >&2
+  printf 'ai-loop: continuation failed; commit was left intact\n' >&2
 fi

@@ -1,15 +1,12 @@
 #!/usr/bin/env python3
-"""Local AI loop controller for CatVox.
-
-Slice 1 intentionally stops at setup, bootstrap log creation, event parsing, and
-dry-run routing. It does not invoke Codex, Claude, or any other agent.
-"""
+"""Local AI loop controller for CatVox."""
 
 from __future__ import annotations
 
 import argparse
 import os
 import re
+import shlex
 import shutil
 import subprocess
 import sys
@@ -38,10 +35,74 @@ AGENT_FOR_ROLE = {
     "reviewer": "claude-code",
 }
 
+PROMPT_FILES_FOR_ROLE = {
+    "developer": [
+        "AGENTS.md",
+        ".codex/AGENTS.md",
+        "tools/ai-loop/prompts/common.md",
+        "tools/ai-loop/prompts/developer.md",
+    ],
+    "reviewer": [
+        "AGENTS.md",
+        "CLAUDE.md",
+        "tools/ai-loop/prompts/common.md",
+        "tools/ai-loop/prompts/reviewer.md",
+    ],
+}
+
+COMMAND_ENV_FOR_AGENT = {
+    "codex": "AI_LOOP_CODEX_COMMAND",
+    "claude-code": "AI_LOOP_CLAUDE_COMMAND",
+}
+
+AGENT_PROFILES = ("real", "smoke")
+DEFAULT_AGENT_PROFILE = "real"
+AGENT_PROFILE_ENV = "AI_LOOP_AGENT_PROFILE"
+
+PROFILE_COMMAND_ENV_FOR_AGENT = {
+    ("codex", "real"): "AI_LOOP_CODEX_REAL_COMMAND",
+    ("codex", "smoke"): "AI_LOOP_CODEX_SMOKE_COMMAND",
+    ("claude-code", "real"): "AI_LOOP_CLAUDE_REAL_COMMAND",
+    ("claude-code", "smoke"): "AI_LOOP_CLAUDE_SMOKE_COMMAND",
+}
+
+PROFILE_MODEL_ENV_FOR_AGENT = {
+    ("codex", "real"): "AI_LOOP_CODEX_REAL_MODEL",
+    ("codex", "smoke"): "AI_LOOP_CODEX_SMOKE_MODEL",
+    ("claude-code", "real"): "AI_LOOP_CLAUDE_REAL_MODEL",
+    ("claude-code", "smoke"): "AI_LOOP_CLAUDE_SMOKE_MODEL",
+}
+
+PROFILE_EFFORT_ENV_FOR_AGENT = {
+    ("codex", "real"): "AI_LOOP_CODEX_REAL_EFFORT",
+    ("codex", "smoke"): "AI_LOOP_CODEX_SMOKE_EFFORT",
+    ("claude-code", "real"): "AI_LOOP_CLAUDE_REAL_EFFORT",
+    ("claude-code", "smoke"): "AI_LOOP_CLAUDE_SMOKE_EFFORT",
+}
+
+DEFAULT_PROFILE_MODEL_FOR_AGENT = {
+    ("codex", "real"): "",
+    ("codex", "smoke"): "",
+    ("claude-code", "real"): "opus",
+    ("claude-code", "smoke"): "haiku",
+}
+
+DEFAULT_PROFILE_EFFORT_FOR_AGENT = {
+    ("codex", "real"): "xhigh",
+    ("codex", "smoke"): "low",
+    ("claude-code", "real"): "max",
+    ("claude-code", "smoke"): "low",
+}
+
 EVENT_BLOCK_RE = re.compile(r"<!--\s*ai-loop-event\s*\n(.*?)\n\s*-->", re.DOTALL)
 INIT_BLOCK_RE = re.compile(r"<!--\s*ai-loop-init\s*\n(.*?)\n\s*-->", re.DOTALL)
 KEY_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_-]*$")
 AI_LOOP_LOG_RE = re.compile(r"^docs/ai-loop/(?:local-\d{8}-\d{6}|pr-\d{4})\.md$")
+INITIAL_PROMPT_RE = re.compile(
+    r"## Initial user prompt\s*\n(?P<body>.*?)(?=\n## |\Z)",
+    re.DOTALL,
+)
+TRUTHY = {"1", "true", "yes", "on"}
 
 
 class AILoopError(RuntimeError):
@@ -56,6 +117,21 @@ class ParsedLog:
     @property
     def latest_event(self) -> dict[str, str] | None:
         return self.events[-1] if self.events else None
+
+
+@dataclass(frozen=True)
+class Route:
+    role: str
+    agent: str
+
+
+@dataclass(frozen=True)
+class AgentInvocation:
+    role: str
+    agent: str
+    profile: str
+    command: list[str]
+    prompt: str
 
 
 def run_git(
@@ -91,6 +167,15 @@ def ensure_clean_worktree(repo: Path) -> None:
     if status:
         raise AILoopError(
             "working tree must be clean before ai-loop-start creates the bootstrap commit"
+        )
+
+
+def ensure_dispatch_safe_worktree(repo: Path) -> None:
+    status = run_git(repo, ["status", "--porcelain"]).stdout.strip()
+    if status:
+        raise AILoopError(
+            "working tree must be clean before dispatching an agent; "
+            "commit, stash, or remove local changes first"
         )
 
 
@@ -140,15 +225,327 @@ def parse_log_file(path: Path) -> ParsedLog:
     return parse_log_text(path.read_text(encoding="utf-8"))
 
 
-def routing_decision(event: dict[str, str]) -> str:
+def route_for_event(event: dict[str, str]) -> Route | None:
     status = event.get("status", "")
     if status in STATUS_TO_ROUTE:
         role = STATUS_TO_ROUTE[status]
         agent = event.get("next_agent") or AGENT_FOR_ROLE[role]
-        return f"would dispatch {role} agent: {agent}"
+        return Route(role=role, agent=agent)
+    return None
+
+
+def routing_decision(event: dict[str, str]) -> str:
+    route = route_for_event(event)
+    if route:
+        return f"would dispatch {route.role} agent: {route.agent}"
+    status = event.get("status", "")
     if status in STATUS_TO_STOP_REASON:
         return f"stop: {STATUS_TO_STOP_REASON[status]}"
     return f"stop: unknown status {status!r}"
+
+
+def require_file_exists(repo: Path, rel_path: str) -> None:
+    path = repo / rel_path
+    if not path.is_file():
+        raise AILoopError(f"required prompt context file is missing: {rel_path}")
+
+
+def render_instruction_manifest(repo: Path, prompt_files: Sequence[str]) -> str:
+    lines = [
+        "Read these repository instruction files from disk, in order, before acting.",
+        "They are listed here instead of inlined so local agent calls stay lean.",
+    ]
+    for index, rel_path in enumerate(prompt_files, start=1):
+        require_file_exists(repo, rel_path)
+        lines.append(f'{index}. <file path="{rel_path}" required="true" />')
+    return "\n".join(lines)
+
+
+def resolve_diff_base(repo: Path) -> str | None:
+    for ref in ("origin/main", "main", "origin/master", "master"):
+        result = run_git(repo, ["rev-parse", "--verify", "--quiet", ref], check=False)
+        if result.returncode == 0:
+            return ref
+    result = run_git(repo, ["rev-list", "--max-parents=0", "HEAD"], check=False)
+    root_commit = result.stdout.strip().splitlines()
+    return root_commit[0] if root_commit else None
+
+
+def git_output(repo: Path, args: Sequence[str]) -> str:
+    result = run_git(repo, args, check=False)
+    if result.returncode != 0:
+        stderr = result.stderr.strip()
+        return f"[command failed: git {' '.join(args)}]\n{stderr}".rstrip()
+    return result.stdout.rstrip()
+
+
+def git_required_output(repo: Path, args: Sequence[str]) -> str:
+    return run_git(repo, args).stdout.strip()
+
+
+def branch_context(repo: Path) -> str:
+    base = resolve_diff_base(repo)
+    if not base:
+        return "No Git base ref could be resolved for branch context."
+
+    base_sha = git_output(repo, ["rev-parse", base]).strip() or base
+    merge_base = git_output(repo, ["merge-base", "HEAD", base]).strip() or base_sha
+    head_sha = git_required_output(repo, ["rev-parse", "HEAD"])
+    diff_range = f"{merge_base}..{head_sha}"
+    name_status = git_output(repo, ["diff", "--name-status", diff_range])
+    stat = git_output(repo, ["diff", "--stat", diff_range])
+    if not name_status:
+        name_status = "(no committed file changes)"
+    if not stat:
+        stat = "(no committed diff stat)"
+    return f"""Base ref: {base}
+Base ref SHA: {base_sha}
+Merge base SHA: {merge_base}
+Head SHA: {head_sha}
+Diff range: {diff_range}
+
+Changed files:
+{name_status}
+
+Diff stat:
+{stat}
+
+Suggested local inspection commands:
+- git diff --stat {diff_range}
+- git diff --name-status {diff_range}
+- git diff {diff_range}
+- git diff {diff_range} -- <path>
+
+Stale-state guard: if current HEAD differs from {head_sha} before acting, stop
+and report stale state instead of editing or reviewing."""
+
+
+def initial_prompt_from_log(log_text: str) -> str:
+    match = INITIAL_PROMPT_RE.search(log_text)
+    if not match:
+        return "(initial prompt section not found; read the full AI loop log)"
+    body = match.group("body").strip()
+    return body or "(initial prompt is empty)"
+
+
+def render_event_metadata(event: dict[str, str]) -> str:
+    return "\n".join(f"{key}: {value}" for key, value in event.items())
+
+
+def loop_context(log_path: Path) -> str:
+    log_text = log_path.read_text(encoding="utf-8")
+    parsed = parse_log_text(log_text)
+    latest = parsed.latest_event
+    latest_metadata = (
+        render_event_metadata(latest)
+        if latest
+        else "(no ai-loop-event blocks found; read the full AI loop log)"
+    )
+    return f"""AI loop log path: {log_path}
+
+Initial user prompt:
+{initial_prompt_from_log(log_text)}
+
+Latest event metadata:
+{latest_metadata}
+
+Read the full AI loop log from disk before appending to it or when prior
+conversation details are needed."""
+
+
+def compose_agent_prompt(
+    *,
+    repo: Path,
+    log_path: Path,
+    role: str,
+    agent: str,
+) -> str:
+    rel_log_path = log_path.resolve().relative_to(repo.resolve())
+    prompt_files = PROMPT_FILES_FOR_ROLE.get(role)
+    if not prompt_files:
+        raise AILoopError(f"unsupported agent role: {role}")
+
+    instruction_manifest = render_instruction_manifest(repo, prompt_files)
+    status = git_output(repo, ["status", "--short", "--branch"])
+    branch = current_branch(repo)
+    head = git_required_output(repo, ["rev-parse", "HEAD"])
+
+    return f"""# CatVox Local AI Loop Invocation
+
+You are the {role} agent for the CatVox local AI loop.
+Agent id: {agent}
+
+The repository and agent-specific instruction file manifest below is
+authoritative. Read those files before using any task context.
+
+<instruction_files>
+{instruction_manifest}
+</instruction_files>
+
+<task_context>
+## Current Repository State
+
+Repository: {repo_name(repo)}
+Branch: {branch}
+HEAD: {head}
+AI loop log: {rel_log_path}
+
+## Git Status
+
+{status or "(clean)"}
+
+## AI Loop Log
+
+{loop_context(log_path)}
+
+## Branch Context
+
+{branch_context(repo)}
+</task_context>
+"""
+
+
+def normalize_agent_profile(raw_profile: str) -> str:
+    profile = raw_profile.strip().lower()
+    if profile not in AGENT_PROFILES:
+        allowed = ", ".join(AGENT_PROFILES)
+        raise AILoopError(
+            f"unsupported AI loop agent profile {raw_profile!r}; "
+            f"expected one of: {allowed}"
+        )
+    return profile
+
+
+def selected_agent_profile(repo: Path, args: argparse.Namespace) -> str:
+    arg_profile = getattr(args, "agent_profile", "") or ""
+    if arg_profile:
+        return normalize_agent_profile(arg_profile)
+
+    env_profile = os.environ.get(AGENT_PROFILE_ENV, "")
+    if env_profile:
+        return normalize_agent_profile(env_profile)
+
+    config_profile = run_git(
+        repo,
+        ["config", "--get", "ai-loop.agentProfile"],
+        check=False,
+    ).stdout.strip()
+    if config_profile:
+        return normalize_agent_profile(config_profile)
+
+    return DEFAULT_AGENT_PROFILE
+
+
+def env_or_default(env_name: str | None, default: str) -> str:
+    if not env_name:
+        return default
+    return os.environ.get(env_name, default).strip()
+
+
+def command_parts_from_template(template: str, repo: Path) -> list[str]:
+    return [part.format(repo=str(repo)) for part in shlex.split(template)]
+
+
+def default_command_for_agent_profile(repo: Path, agent: str, profile: str) -> list[str]:
+    model = env_or_default(
+        PROFILE_MODEL_ENV_FOR_AGENT.get((agent, profile)),
+        DEFAULT_PROFILE_MODEL_FOR_AGENT.get((agent, profile), ""),
+    )
+    effort = env_or_default(
+        PROFILE_EFFORT_ENV_FOR_AGENT.get((agent, profile)),
+        DEFAULT_PROFILE_EFFORT_FOR_AGENT.get((agent, profile), ""),
+    )
+
+    if agent == "codex":
+        command = ["codex", "exec", "--cd", "{repo}"]
+        if model:
+            command.extend(["--model", model])
+        if effort:
+            command.extend(["-c", f'model_reasoning_effort="{effort}"'])
+        command.append("-")
+    elif agent == "claude-code":
+        command = ["claude", "--print", "--input-format", "text"]
+        if model:
+            command.extend(["--model", model])
+        if effort:
+            command.extend(["--effort", effort])
+    else:
+        raise AILoopError(f"unsupported agent command target: {agent}")
+
+    return [part.format(repo=str(repo)) for part in command]
+
+
+def command_for_agent(repo: Path, agent: str, profile: str) -> list[str]:
+    profile_env_var = PROFILE_COMMAND_ENV_FOR_AGENT.get((agent, profile))
+    profile_override = os.environ.get(profile_env_var, "") if profile_env_var else ""
+    if profile_override:
+        return command_parts_from_template(profile_override, repo)
+
+    env_var = COMMAND_ENV_FOR_AGENT.get(agent)
+    override = os.environ.get(env_var, "") if env_var else ""
+    if override:
+        return command_parts_from_template(override, repo)
+
+    return default_command_for_agent_profile(repo, agent, profile)
+
+
+def build_agent_invocation(
+    repo: Path,
+    log_path: Path,
+    route: Route,
+    profile: str,
+) -> AgentInvocation:
+    return AgentInvocation(
+        role=route.role,
+        agent=route.agent,
+        profile=profile,
+        command=command_for_agent(repo, route.agent, profile),
+        prompt=compose_agent_prompt(
+            repo=repo,
+            log_path=log_path,
+            role=route.role,
+            agent=route.agent,
+        ),
+    )
+
+
+def should_invoke_agents(repo: Path, args: argparse.Namespace) -> bool:
+    if getattr(args, "dry_run", False):
+        return False
+    if getattr(args, "invoke", False):
+        return True
+    env_value = os.environ.get("AI_LOOP_INVOKE_AGENTS", "").strip().lower()
+    if env_value in TRUTHY:
+        return True
+    config_value = run_git(
+        repo,
+        ["config", "--get", "ai-loop.invokeAgents"],
+        check=False,
+    ).stdout.strip().lower()
+    return config_value in TRUTHY
+
+
+def run_agent_invocation(repo: Path, invocation: AgentInvocation) -> int:
+    print(
+        "ai-loop invoke: "
+        f"dispatching {invocation.role} agent {invocation.agent} "
+        f"with {invocation.profile} profile: "
+        f"{shlex.join(invocation.command)}",
+        flush=True,
+    )
+    try:
+        completed = subprocess.run(
+            invocation.command,
+            cwd=repo,
+            input=invocation.prompt,
+            text=True,
+            check=False,
+        )
+    except FileNotFoundError as exc:
+        raise AILoopError(
+            f"{invocation.agent} command not found: {invocation.command[0]}"
+        ) from exc
+    return completed.returncode
 
 
 def latest_ai_loop_log_from_head(repo: Path) -> Path:
@@ -211,8 +608,8 @@ started_at: {started_at}
 
 ## {display_time} - Human - Start local AI loop
 
-Started the local AI loop. Slice 1 stops at dry-run routing; no agent is
-invoked yet.
+Started the local AI loop. Default mode uses dry-run routing; no agent is
+invoked unless local agent invocation is enabled explicitly.
 
 Result:
 - status: needs_developer
@@ -315,7 +712,45 @@ def command_continue(args: argparse.Namespace) -> int:
     latest = parsed.latest_event
     if not latest:
         raise AILoopError(f"no ai-loop-event blocks found in {log_path}")
-    print(f"ai-loop dry-run ({args.trigger}): {routing_decision(latest)}")
+
+    route = route_for_event(latest)
+    if not route:
+        print(f"ai-loop ({args.trigger}): {routing_decision(latest)}")
+        return 0
+
+    if not should_invoke_agents(repo, args):
+        print(f"ai-loop dry-run ({args.trigger}): {routing_decision(latest)}")
+        return 0
+
+    ensure_dispatch_safe_worktree(repo)
+    profile = selected_agent_profile(repo, args)
+    invocation = build_agent_invocation(repo, log_path, route, profile)
+    return_code = run_agent_invocation(repo, invocation)
+    if return_code != 0:
+        raise AILoopError(
+            f"{invocation.agent} exited with status {return_code}; loop stopped"
+        )
+    return 0
+
+
+def command_compose_prompt(args: argparse.Namespace) -> int:
+    repo = Path(args.repo).resolve() if args.repo else repo_root_from_cwd()
+    if not args.log:
+        raise AILoopError("--log is required when composing a prompt")
+    log_path = Path(args.log).resolve()
+    agent = args.agent or AGENT_FOR_ROLE[args.role]
+    prompt = compose_agent_prompt(
+        repo=repo,
+        log_path=log_path,
+        role=args.role,
+        agent=agent,
+    )
+    if args.output:
+        output = Path(args.output)
+        output.write_text(prompt, encoding="utf-8")
+        print(f"wrote {output}")
+    else:
+        print(prompt)
     return 0
 
 
@@ -335,7 +770,28 @@ def build_parser() -> argparse.ArgumentParser:
     cont = subparsers.add_parser("continue", help="continue the local AI loop")
     cont.add_argument("--trigger", default="manual", help="wake-up source")
     cont.add_argument("--log", help="AI loop log path; defaults to latest log in HEAD")
+    cont.add_argument("--invoke", action="store_true", help="invoke the routed agent")
+    cont.add_argument(
+        "--agent-profile",
+        choices=AGENT_PROFILES,
+        help=f"agent command profile; defaults to {AGENT_PROFILE_ENV} or real",
+    )
+    cont.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="print the routing decision even if invocation is enabled",
+    )
     cont.set_defaults(func=command_continue)
+
+    compose = subparsers.add_parser(
+        "compose-prompt",
+        help="render the prompt that would be sent to a local agent",
+    )
+    compose.add_argument("--role", choices=sorted(PROMPT_FILES_FOR_ROLE), required=True)
+    compose.add_argument("--agent", help="agent id; defaults to the role default")
+    compose.add_argument("--log", required=True, help="AI loop log path")
+    compose.add_argument("--output", help="write prompt to this path instead of stdout")
+    compose.set_defaults(func=command_compose_prompt)
     return parser
 
 
