@@ -61,6 +61,71 @@ def init_repo_with_ai_loop_tooling(repo: Path) -> None:
     run(["git", "commit", "-m", "Initial tools"], repo)
 
 
+def write_fake_handoff_agent(script_path: Path) -> None:
+    script_path.write_text(
+        """from pathlib import Path
+import re
+import subprocess
+import sys
+
+role = sys.argv[1]
+calls_path = Path(sys.argv[2])
+prompt = sys.stdin.read()
+
+if len(sys.argv) >= 4:
+    log_path = Path(sys.argv[3])
+else:
+    match = re.search(r"^AI loop log: (?P<path>.+)$", prompt, re.MULTILINE)
+    if not match:
+        raise SystemExit("AI loop log path not found in prompt")
+    log_path = Path(match.group("path").strip())
+    if not log_path.is_absolute():
+        log_path = Path.cwd() / log_path
+
+if calls_path.exists():
+    calls = calls_path.read_text(encoding="utf-8")
+else:
+    calls = ""
+calls_path.write_text(calls + role + "\\n", encoding="utf-8")
+
+if role == "developer":
+    event = '''
+## Fake developer event
+
+<!-- ai-loop-event
+agent: codex
+role: developer
+cycle: 1
+status: needs_review
+next_agent: claude-code
+-->
+'''
+    message = "[ai-loop] Codex: ready for review"
+elif role == "reviewer":
+    event = '''
+## Fake reviewer event
+
+<!-- ai-loop-event
+agent: claude-code
+role: reviewer
+cycle: 1
+status: needs_fix
+next_agent: codex
+-->
+'''
+    message = "[ai-loop] Claude: needs fix"
+else:
+    raise SystemExit(f"unknown role: {role}")
+
+with log_path.open("a", encoding="utf-8") as handle:
+    handle.write(event)
+subprocess.run(["git", "add", str(log_path)], check=True)
+subprocess.run(["git", "commit", "-m", message], check=True)
+""",
+        encoding="utf-8",
+    )
+
+
 def git_context(repo: Path) -> ai_loop.GitContext:
     return ai_loop.GitContext(repo)
 
@@ -444,6 +509,75 @@ next_agent: claude-code
             self.assertLess(prompt.index('path="CLAUDE.md"'), prompt.index("<task_context>"))
             self.assertIn("status: needs_review", prompt)
 
+    def test_developer_dispatch_hands_off_to_reviewer_once(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            repo = root / "repo"
+            repo.mkdir()
+            init_repo_with_ai_loop_tooling(repo)
+
+            log_path = repo / "docs/ai-loop/local-20260524-120000.md"
+            log_path.parent.mkdir(parents=True)
+            log_path.write_text(
+                """# AI Loop
+
+<!-- ai-loop-event
+agent: human
+role: owner
+cycle: 0
+status: needs_developer
+next_agent: codex
+-->
+""",
+                encoding="utf-8",
+            )
+            run(["git", "add", "docs/ai-loop/local-20260524-120000.md"], repo)
+            run(["git", "commit", "-m", "[ai-loop] Human: start"], repo)
+
+            fake_agent = root / "fake_agent.py"
+            calls_path = root / "agent_calls.txt"
+            write_fake_handoff_agent(fake_agent)
+
+            env = os.environ.copy()
+            env["AI_LOOP_CODEX_COMMAND"] = (
+                f"{sys.executable} {fake_agent} developer {calls_path} {log_path}"
+            )
+            env["AI_LOOP_CLAUDE_COMMAND"] = (
+                f"{sys.executable} {fake_agent} reviewer {calls_path} {log_path}"
+            )
+
+            script = repo / "tools/ai-loop/ai_loop.py"
+            result = run(
+                [
+                    sys.executable,
+                    str(script),
+                    "continue",
+                    "--trigger",
+                    "test",
+                    "--log",
+                    str(log_path),
+                    "--invoke",
+                ],
+                repo,
+                env=env,
+            )
+
+            self.assertIn("dispatching developer agent codex", result.stdout)
+            self.assertIn(
+                "ai-loop handoff: would dispatch reviewer agent: claude-code",
+                result.stdout,
+            )
+            self.assertIn("dispatching reviewer agent claude-code", result.stdout)
+            self.assertEqual(calls_path.read_text(encoding="utf-8").splitlines(), [
+                "developer",
+                "reviewer",
+            ])
+            parsed = ai_loop.parse_log_file(log_path)
+            self.assertEqual(parsed.latest_event["status"], "needs_fix")
+            self.assertEqual(parsed.latest_event["next_agent"], "codex")
+            status = run(["git", "status", "--porcelain"], repo)
+            self.assertEqual(status.stdout, "")
+
 
 class GitIntegrationTests(unittest.TestCase):
     def test_setup_start_and_hook_dry_run(self) -> None:
@@ -489,6 +623,64 @@ class GitIntegrationTests(unittest.TestCase):
 
             commit_message = run(["git", "log", "-1", "--format=%B"], repo)
             self.assertIn("[ai-loop] Human: start", commit_message.stdout)
+
+    def test_hook_invocation_hands_developer_to_reviewer_under_lock(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            repo = root / "repo"
+            repo.mkdir()
+            init_repo_with_ai_loop_tooling(repo)
+
+            script = repo / "tools/ai-loop/ai_loop.py"
+            run([sys.executable, str(script), "setup"], repo)
+
+            fake_agent = root / "fake_agent.py"
+            calls_path = root / "agent_calls.txt"
+            write_fake_handoff_agent(fake_agent)
+
+            env = os.environ.copy()
+            env["AI_LOOP_INVOKE_AGENTS"] = "1"
+            env["AI_LOOP_CODEX_COMMAND"] = (
+                f"{sys.executable} {fake_agent} developer {calls_path}"
+            )
+            env["AI_LOOP_CLAUDE_COMMAND"] = (
+                f"{sys.executable} {fake_agent} reviewer {calls_path}"
+            )
+
+            start = run(
+                [
+                    sys.executable,
+                    str(script),
+                    "start",
+                    "--branch",
+                    "feature/ai-loop-hook-handoff",
+                    "--prompt",
+                    "Implement hook reviewer handoff",
+                ],
+                repo,
+                env=env,
+            )
+            start_output = start.stdout + start.stderr
+
+            self.assertIn("dispatching developer agent codex", start_output)
+            self.assertIn(
+                "ai-loop handoff: would dispatch reviewer agent: claude-code",
+                start_output,
+            )
+            self.assertIn("dispatching reviewer agent claude-code", start_output)
+            self.assertIn("ai-loop: lock exists, skipping continuation", start_output)
+            self.assertEqual(calls_path.read_text(encoding="utf-8").splitlines(), [
+                "developer",
+                "reviewer",
+            ])
+
+            logs = sorted((repo / "docs/ai-loop").glob("local-*.md"))
+            self.assertEqual(len(logs), 1)
+            parsed = ai_loop.parse_log_file(logs[0])
+            self.assertEqual(parsed.latest_event["status"], "needs_fix")
+            self.assertEqual(parsed.latest_event["next_agent"], "codex")
+            status = run(["git", "status", "--porcelain"], repo)
+            self.assertEqual(status.stdout, "")
 
     def test_hook_dry_run_uses_real_git_dir_in_linked_worktree(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
