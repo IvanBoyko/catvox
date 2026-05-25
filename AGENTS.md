@@ -375,6 +375,11 @@ Use `docs/CREATE_NEW_ENVIRONMENT.md` and `make environment-create` for new envir
 - When updating repeated Markdown status blocks such as audit findings, patch with heading-specific context or line-number-anchored inspection. Do not rely on replacing the first identical `Status` / `Resolution` block. Always review the focused diff before committing.
 - Keep large review artifacts, reviewer reports, and temporary analysis notes in PR comments or attached PR files unless they are intended to become durable repository documentation. Do not commit ad hoc review files from the repo root just because they were useful during review.
 
+### Refactoring Notes
+
+- When refactoring internal code, do not keep pass-through compatibility wrappers, re-export aliases, or renamed-unused shims solely to avoid updating in-repo tests. If there is no documented external or runtime caller for the old API, delete the old surface and migrate tests and local callers to the new structure directly.
+- When a refactor moves parsing, normalization, or matching logic for external-shaped values such as Git remote URLs, environment names, config keys, tool arguments, or CI patterns, add a focused input matrix around the moved behavior before claiming behavior is unchanged. Cover the common forms and at least the nearest failure variant.
+
 ### GitHub PR Publishing Notes
 
 - Prefer the GitHub connector for creating PRs when available, but if it returns `403 Resource not accessible by integration`, do not retry the same connector path. Fall back to the authenticated `gh` CLI and mention the fallback in the final summary.
@@ -431,7 +436,7 @@ The same rule applies at **design and planning** time. When a slice's viability 
 
 **Negative claims need a higher verification bar.** Asserting that a feature, rule, or API *does not exist* in a third-party library is higher-stakes than asserting it does, because the recommendation that follows a negative claim is usually "remove this." If the rule that was disabled silently turns out to be real, removing it changes behavior. Before posting a "this doesn't exist, delete it" finding, verify the absence empirically — enumerate from the installed package, run the tool with the rule or flag explicitly enabled, grep the source — and record the verification step alongside the finding. This applies equally to AI agents and human reviewers.
 
-**Pattern-coverage claims need an empirical reproducer.** When a finding asserts that a regex, grep, ESLint rule, CI guard, or similar matcher misses a case (or matches one it shouldn't), build a small scratch file with the suspected variants, run the existing pattern against it, and post the result alongside the finding. After the fix lands, re-run the same scratch against the new pattern to confirm. A pattern-coverage finding without a reproducer is a guess in the same risk class as an SDK-API guess — the recommended change is just as likely to under- or over-correct without evidence.
+**Pattern-coverage claims need an empirical reproducer.** When a finding asserts that a regex, grep, ESLint rule, CI guard, or similar matcher misses a case (or matches one it shouldn't), build a small scratch file with the suspected variants, run the existing pattern against it, and post the result alongside the finding. After the fix lands, re-run the same scratch against the new pattern to confirm — and extend the matrix with adjacent variants (alternative URL forms, alternative quoting, edge encodings) so the verification confirms robustness against neighbors of the original failure cases, not just minimum-passing. A pattern-coverage finding without a reproducer is a guess in the same risk class as an SDK-API guess — the recommended change is just as likely to under- or over-correct without evidence.
 
 ### Verifying Local Changes Before Claiming Green
 
@@ -503,6 +508,8 @@ Open every review with a one-sentence "is this PR right-sized for the bug it cla
 When a review round prompts scope expansion that no longer matches the PR title, parent-issue link, or slice framing, ask explicitly whether to reframe — update the PR title, change the issue cross-reference, or retitle the slice. Right-sizing as observation is weaker than right-sizing as action; if the scope has genuinely shifted, the framing should shift with it.
 
 Use severity gating (High / Medium / Low / Observations) with explicit "block on" vs "nice to have" labels. Numbering every nit at Low severity inflates the punch list — cluster sub-low items under a single "Nits" heading rather than giving each its own ID. If a Low or Observation item needs hedging in the chat preview ("borderline", "arguably", "could go either way"), drop it instead of clustering — the clustering rule applies to nits you'd post unconditionally; hedged items add review noise without adding signal.
+
+When the user explicitly asks for a strict review ("make it strict," "block on everything," or similar), the hedging-drop rule above is suspended. Re-evaluate findings you would have cut as hedged Low or Observation under the conventional threshold, and escalate them back into the required-action set with explicit "Required:" subsections. Strict mode also changes the message register — drop "consider," "either / or," and "follow-up PR is fine" framing in favor of imperatives, because the user has already signed up for resolving all of them.
 
 Before classifying a formatting finding as cosmetic, check whether the formatting is mechanically meaningful in its context. Examples where "stray whitespace" is functional: blank lines inside `\`-terminated shell continuation blocks (the blank line ends the continuation, breaking the documented command), YAML indentation, Makefile leading tabs, Markdown table pipes, and the xcconfig `//` rule that silently truncates URL values. A formatting issue in one of those contexts is a functional bug, not a nit — the hedging-drop rule above does not apply.
 

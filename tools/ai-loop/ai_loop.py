@@ -14,6 +14,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 from typing import Sequence
+from urllib.parse import urlparse
 
 
 STATUS_TO_ROUTE = {
@@ -134,21 +135,6 @@ class AgentInvocation:
     prompt: str
 
 
-def run_git(
-    repo: Path,
-    args: Sequence[str],
-    *,
-    check: bool = True,
-    capture_output: bool = True,
-) -> subprocess.CompletedProcess[str]:
-    return subprocess.run(
-        ["git", "-C", str(repo), *args],
-        check=check,
-        text=True,
-        capture_output=capture_output,
-    )
-
-
 def repo_root_from_cwd() -> Path:
     try:
         result = subprocess.run(
@@ -162,38 +148,125 @@ def repo_root_from_cwd() -> Path:
     return Path(result.stdout.strip()).resolve()
 
 
-def ensure_clean_worktree(repo: Path) -> None:
-    status = run_git(repo, ["status", "--porcelain"]).stdout.strip()
-    if status:
-        raise AILoopError(
-            "working tree must be clean before ai-loop-start creates the bootstrap commit"
+@dataclass(frozen=True)
+class GitContext:
+    repo: Path
+
+    def run(
+        self,
+        args: Sequence[str],
+        *,
+        check: bool = True,
+        capture_output: bool = True,
+    ) -> subprocess.CompletedProcess[str]:
+        return subprocess.run(
+            ["git", "-C", str(self.repo), *args],
+            check=check,
+            text=True,
+            capture_output=capture_output,
         )
 
+    def ensure_clean_worktree(self) -> None:
+        status = self.run(["status", "--porcelain"]).stdout.strip()
+        if status:
+            raise AILoopError(
+                "working tree must be clean before ai-loop-start creates the bootstrap commit"
+            )
 
-def ensure_dispatch_safe_worktree(repo: Path) -> None:
-    status = run_git(repo, ["status", "--porcelain"]).stdout.strip()
-    if status:
-        raise AILoopError(
-            "working tree must be clean before dispatching an agent; "
-            "commit, stash, or remove local changes first"
-        )
+    def ensure_dispatch_safe_worktree(self) -> None:
+        status = self.run(["status", "--porcelain"]).stdout.strip()
+        if status:
+            raise AILoopError(
+                "working tree must be clean before dispatching an agent; "
+                "commit, stash, or remove local changes first"
+            )
 
+    def current_branch(self) -> str:
+        return self.run(["branch", "--show-current"]).stdout.strip()
 
-def current_branch(repo: Path) -> str:
-    return run_git(repo, ["branch", "--show-current"]).stdout.strip()
+    def repo_name(self) -> str:
+        remote = self.run(
+            ["remote", "get-url", "origin"],
+            check=False,
+        ).stdout.strip()
+        if not remote:
+            return self.repo.name
+        if remote.endswith(".git"):
+            remote = remote[:-4]
 
+        parsed = urlparse(remote)
+        if parsed.scheme and parsed.path:
+            path = parsed.path.lstrip("/")
+            return path or remote
 
-def repo_name(repo: Path) -> str:
-    remote = run_git(repo, ["remote", "get-url", "origin"], check=False).stdout.strip()
-    if not remote:
-        return repo.name
-    if remote.endswith(".git"):
-        remote = remote[:-4]
-    if ":" in remote and "/" in remote:
-        return remote.split(":", 1)[1]
-    if "github.com/" in remote:
-        return remote.split("github.com/", 1)[1]
-    return remote
+        if "://" not in remote and ":" in remote and "/" in remote:
+            return remote.split(":", 1)[1]
+        return remote
+
+    def output(self, args: Sequence[str]) -> str:
+        result = self.run(args, check=False)
+        if result.returncode != 0:
+            stderr = result.stderr.strip()
+            return f"[command failed: git {' '.join(args)}]\n{stderr}".rstrip()
+        return result.stdout.rstrip()
+
+    def required_output(self, args: Sequence[str]) -> str:
+        return self.run(args).stdout.strip()
+
+    def resolve_diff_base(self) -> str | None:
+        for ref in ("origin/main", "main", "origin/master", "master"):
+            result = self.run(["rev-parse", "--verify", "--quiet", ref], check=False)
+            if result.returncode == 0:
+                return ref
+        result = self.run(["rev-list", "--max-parents=0", "HEAD"], check=False)
+        root_commit = result.stdout.strip().splitlines()
+        return root_commit[0] if root_commit else None
+
+    def branch_context(self) -> str:
+        base = self.resolve_diff_base()
+        if not base:
+            return "No Git base ref could be resolved for branch context."
+
+        base_sha = self.output(["rev-parse", base]).strip() or base
+        merge_base = self.output(["merge-base", "HEAD", base]).strip() or base_sha
+        head_sha = self.required_output(["rev-parse", "HEAD"])
+        diff_range = f"{merge_base}..{head_sha}"
+        name_status = self.output(["diff", "--name-status", diff_range])
+        stat = self.output(["diff", "--stat", diff_range])
+        if not name_status:
+            name_status = "(no committed file changes)"
+        if not stat:
+            stat = "(no committed diff stat)"
+        return f"""Resolved base ref: {base}
+Resolved base ref SHA: {base_sha}
+Resolved merge-base SHA: {merge_base}
+Dispatch HEAD SHA: {head_sha}
+Diff range: {diff_range}
+
+Changed files (`git diff --name-status {diff_range}`):
+{name_status}
+
+Diff stat (`git diff --stat {diff_range}`):
+{stat}
+
+Suggested local inspection commands:
+- git status --short --branch
+- git diff --stat {diff_range}
+- git diff --name-status {diff_range}
+- git diff {diff_range}
+- git diff {diff_range} -- <path>
+
+Stale-state guard: before editing or reviewing, run `git rev-parse HEAD`. If
+it differs from the Dispatch HEAD SHA above, stop and report stale state instead
+of editing or reviewing."""
+
+    def latest_ai_loop_log_from_head(self) -> Path:
+        result = self.run(["show", "--name-only", "--format=", "HEAD"])
+        paths = [line.strip() for line in result.stdout.splitlines() if line.strip()]
+        ai_loop_paths = [path for path in paths if AI_LOOP_LOG_RE.match(path)]
+        if not ai_loop_paths:
+            raise AILoopError("latest commit did not change an AI loop log")
+        return self.repo / ai_loop_paths[-1]
 
 
 def parse_kv_block(block: str) -> dict[str, str]:
@@ -223,103 +296,6 @@ def parse_log_text(text: str) -> ParsedLog:
 
 def parse_log_file(path: Path) -> ParsedLog:
     return parse_log_text(path.read_text(encoding="utf-8"))
-
-
-def route_for_event(event: dict[str, str]) -> Route | None:
-    status = event.get("status", "")
-    if status in STATUS_TO_ROUTE:
-        role = STATUS_TO_ROUTE[status]
-        agent = event.get("next_agent") or AGENT_FOR_ROLE[role]
-        return Route(role=role, agent=agent)
-    return None
-
-
-def routing_decision(event: dict[str, str]) -> str:
-    route = route_for_event(event)
-    if route:
-        return f"would dispatch {route.role} agent: {route.agent}"
-    status = event.get("status", "")
-    if status in STATUS_TO_STOP_REASON:
-        return f"stop: {STATUS_TO_STOP_REASON[status]}"
-    return f"stop: unknown status {status!r}"
-
-
-def require_file_exists(repo: Path, rel_path: str) -> None:
-    path = repo / rel_path
-    if not path.is_file():
-        raise AILoopError(f"required prompt context file is missing: {rel_path}")
-
-
-def render_instruction_manifest(repo: Path, prompt_files: Sequence[str]) -> str:
-    lines = [
-        "Read these repository instruction files from disk, in order, before acting.",
-        "They are listed here instead of inlined so local agent calls stay lean.",
-    ]
-    for index, rel_path in enumerate(prompt_files, start=1):
-        require_file_exists(repo, rel_path)
-        lines.append(f'{index}. <file path="{rel_path}" required="true" />')
-    return "\n".join(lines)
-
-
-def resolve_diff_base(repo: Path) -> str | None:
-    for ref in ("origin/main", "main", "origin/master", "master"):
-        result = run_git(repo, ["rev-parse", "--verify", "--quiet", ref], check=False)
-        if result.returncode == 0:
-            return ref
-    result = run_git(repo, ["rev-list", "--max-parents=0", "HEAD"], check=False)
-    root_commit = result.stdout.strip().splitlines()
-    return root_commit[0] if root_commit else None
-
-
-def git_output(repo: Path, args: Sequence[str]) -> str:
-    result = run_git(repo, args, check=False)
-    if result.returncode != 0:
-        stderr = result.stderr.strip()
-        return f"[command failed: git {' '.join(args)}]\n{stderr}".rstrip()
-    return result.stdout.rstrip()
-
-
-def git_required_output(repo: Path, args: Sequence[str]) -> str:
-    return run_git(repo, args).stdout.strip()
-
-
-def branch_context(repo: Path) -> str:
-    base = resolve_diff_base(repo)
-    if not base:
-        return "No Git base ref could be resolved for branch context."
-
-    base_sha = git_output(repo, ["rev-parse", base]).strip() or base
-    merge_base = git_output(repo, ["merge-base", "HEAD", base]).strip() or base_sha
-    head_sha = git_required_output(repo, ["rev-parse", "HEAD"])
-    diff_range = f"{merge_base}..{head_sha}"
-    name_status = git_output(repo, ["diff", "--name-status", diff_range])
-    stat = git_output(repo, ["diff", "--stat", diff_range])
-    if not name_status:
-        name_status = "(no committed file changes)"
-    if not stat:
-        stat = "(no committed diff stat)"
-    return f"""Resolved base ref: {base}
-Resolved base ref SHA: {base_sha}
-Resolved merge-base SHA: {merge_base}
-Dispatch HEAD SHA: {head_sha}
-Diff range: {diff_range}
-
-Changed files (`git diff --name-status {diff_range}`):
-{name_status}
-
-Diff stat (`git diff --stat {diff_range}`):
-{stat}
-
-Suggested local inspection commands:
-- git status --short --branch
-- git diff --stat {diff_range}
-- git diff --name-status {diff_range}
-- git diff {diff_range}
-- git diff {diff_range} -- <path>
-
-Stale-state guard: before editing or reviewing, run `git rev-parse HEAD`. If
-it differs from the Dispatch HEAD SHA above, stop and report stale state instead
-of editing or reviewing."""
 
 
 def initial_prompt_from_log(log_text: str) -> str:
@@ -355,24 +331,63 @@ Read the full AI loop log from disk before appending to it or when prior
 conversation details are needed."""
 
 
-def compose_agent_prompt(
-    *,
-    repo: Path,
-    log_path: Path,
-    role: str,
-    agent: str,
-) -> str:
-    rel_log_path = log_path.resolve().relative_to(repo.resolve())
-    prompt_files = PROMPT_FILES_FOR_ROLE.get(role)
-    if not prompt_files:
-        raise AILoopError(f"unsupported agent role: {role}")
+@dataclass(frozen=True)
+class StateRouter:
+    def route_for_event(self, event: dict[str, str]) -> Route | None:
+        status = event.get("status", "")
+        if status in STATUS_TO_ROUTE:
+            role = STATUS_TO_ROUTE[status]
+            agent = event.get("next_agent") or AGENT_FOR_ROLE[role]
+            return Route(role=role, agent=agent)
+        return None
 
-    instruction_manifest = render_instruction_manifest(repo, prompt_files)
-    status = git_output(repo, ["status", "--short", "--branch"])
-    branch = current_branch(repo)
-    head = git_required_output(repo, ["rev-parse", "HEAD"])
+    def routing_decision(self, event: dict[str, str]) -> str:
+        route = self.route_for_event(event)
+        if route:
+            return f"would dispatch {route.role} agent: {route.agent}"
+        status = event.get("status", "")
+        if status in STATUS_TO_STOP_REASON:
+            return f"stop: {STATUS_TO_STOP_REASON[status]}"
+        return f"stop: unknown status {status!r}"
 
-    return f"""# CatVox Local AI Loop Invocation
+
+@dataclass(frozen=True)
+class PromptComposer:
+    git: GitContext
+
+    def require_file_exists(self, rel_path: str) -> None:
+        path = self.git.repo / rel_path
+        if not path.is_file():
+            raise AILoopError(f"required prompt context file is missing: {rel_path}")
+
+    def render_instruction_manifest(self, prompt_files: Sequence[str]) -> str:
+        lines = [
+            "Read these repository instruction files from disk, in order, before acting.",
+            "They are listed here instead of inlined so local agent calls stay lean.",
+        ]
+        for index, rel_path in enumerate(prompt_files, start=1):
+            self.require_file_exists(rel_path)
+            lines.append(f'{index}. <file path="{rel_path}" required="true" />')
+        return "\n".join(lines)
+
+    def compose_agent_prompt(
+        self,
+        *,
+        log_path: Path,
+        role: str,
+        agent: str,
+    ) -> str:
+        rel_log_path = log_path.resolve().relative_to(self.git.repo.resolve())
+        prompt_files = PROMPT_FILES_FOR_ROLE.get(role)
+        if not prompt_files:
+            raise AILoopError(f"unsupported agent role: {role}")
+
+        instruction_manifest = self.render_instruction_manifest(prompt_files)
+        status = self.git.output(["status", "--short", "--branch"])
+        branch = self.git.current_branch()
+        head = self.git.required_output(["rev-parse", "HEAD"])
+
+        return f"""# CatVox Local AI Loop Invocation
 
 You are the {role} agent for the CatVox local AI loop.
 Agent id: {agent}
@@ -387,7 +402,7 @@ authoritative. Read those files before using any task context.
 <task_context>
 ## Current Repository State
 
-Repository: {repo_name(repo)}
+Repository: {self.git.repo_name()}
 Branch: {branch}
 HEAD: {head}
 AI loop log: {rel_log_path}
@@ -402,161 +417,149 @@ AI loop log: {rel_log_path}
 
 ## Branch Context
 
-{branch_context(repo)}
+{self.git.branch_context()}
 </task_context>
 """
 
 
-def normalize_agent_profile(raw_profile: str) -> str:
-    profile = raw_profile.strip().lower()
-    if profile not in AGENT_PROFILES:
-        allowed = ", ".join(AGENT_PROFILES)
-        raise AILoopError(
-            f"unsupported AI loop agent profile {raw_profile!r}; "
-            f"expected one of: {allowed}"
+@dataclass(frozen=True)
+class AgentDispatcher:
+    git: GitContext
+
+    @staticmethod
+    def normalize_profile(raw_profile: str) -> str:
+        profile = raw_profile.strip().lower()
+        if profile not in AGENT_PROFILES:
+            allowed = ", ".join(AGENT_PROFILES)
+            raise AILoopError(
+                f"unsupported AI loop agent profile {raw_profile!r}; "
+                f"expected one of: {allowed}"
+            )
+        return profile
+
+    def selected_profile(self, args: argparse.Namespace) -> str:
+        arg_profile = getattr(args, "agent_profile", "") or ""
+        if arg_profile:
+            return self.normalize_profile(arg_profile)
+
+        env_profile = os.environ.get(AGENT_PROFILE_ENV, "")
+        if env_profile:
+            return self.normalize_profile(env_profile)
+
+        config_profile = self.git.run(
+            ["config", "--get", "ai-loop.agentProfile"],
+            check=False,
+        ).stdout.strip()
+        if config_profile:
+            return self.normalize_profile(config_profile)
+
+        return DEFAULT_AGENT_PROFILE
+
+    @staticmethod
+    def env_or_default(env_name: str | None, default: str) -> str:
+        if not env_name:
+            return default
+        return os.environ.get(env_name, default).strip()
+
+    def command_parts_from_template(self, template: str) -> list[str]:
+        return [part.format(repo=str(self.git.repo)) for part in shlex.split(template)]
+
+    def default_command_for_agent_profile(self, agent: str, profile: str) -> list[str]:
+        model = self.env_or_default(
+            PROFILE_MODEL_ENV_FOR_AGENT.get((agent, profile)),
+            DEFAULT_PROFILE_MODEL_FOR_AGENT.get((agent, profile), ""),
         )
-    return profile
+        effort = self.env_or_default(
+            PROFILE_EFFORT_ENV_FOR_AGENT.get((agent, profile)),
+            DEFAULT_PROFILE_EFFORT_FOR_AGENT.get((agent, profile), ""),
+        )
 
+        if agent == "codex":
+            command = ["codex", "exec", "--cd", "{repo}"]
+            if model:
+                command.extend(["--model", model])
+            if effort:
+                command.extend(["-c", f'model_reasoning_effort="{effort}"'])
+            command.append("-")
+        elif agent == "claude-code":
+            command = ["claude", "--print", "--input-format", "text"]
+            if model:
+                command.extend(["--model", model])
+            if effort:
+                command.extend(["--effort", effort])
+        else:
+            raise AILoopError(f"unsupported agent command target: {agent}")
 
-def selected_agent_profile(repo: Path, args: argparse.Namespace) -> str:
-    arg_profile = getattr(args, "agent_profile", "") or ""
-    if arg_profile:
-        return normalize_agent_profile(arg_profile)
+        return [part.format(repo=str(self.git.repo)) for part in command]
 
-    env_profile = os.environ.get(AGENT_PROFILE_ENV, "")
-    if env_profile:
-        return normalize_agent_profile(env_profile)
+    def command_for_agent(self, agent: str, profile: str) -> list[str]:
+        profile_env_var = PROFILE_COMMAND_ENV_FOR_AGENT.get((agent, profile))
+        profile_override = (
+            os.environ.get(profile_env_var, "") if profile_env_var else ""
+        )
+        if profile_override:
+            return self.command_parts_from_template(profile_override)
 
-    config_profile = run_git(
-        repo,
-        ["config", "--get", "ai-loop.agentProfile"],
-        check=False,
-    ).stdout.strip()
-    if config_profile:
-        return normalize_agent_profile(config_profile)
+        env_var = COMMAND_ENV_FOR_AGENT.get(agent)
+        override = os.environ.get(env_var, "") if env_var else ""
+        if override:
+            return self.command_parts_from_template(override)
 
-    return DEFAULT_AGENT_PROFILE
+        return self.default_command_for_agent_profile(agent, profile)
 
-
-def env_or_default(env_name: str | None, default: str) -> str:
-    if not env_name:
-        return default
-    return os.environ.get(env_name, default).strip()
-
-
-def command_parts_from_template(template: str, repo: Path) -> list[str]:
-    return [part.format(repo=str(repo)) for part in shlex.split(template)]
-
-
-def default_command_for_agent_profile(repo: Path, agent: str, profile: str) -> list[str]:
-    model = env_or_default(
-        PROFILE_MODEL_ENV_FOR_AGENT.get((agent, profile)),
-        DEFAULT_PROFILE_MODEL_FOR_AGENT.get((agent, profile), ""),
-    )
-    effort = env_or_default(
-        PROFILE_EFFORT_ENV_FOR_AGENT.get((agent, profile)),
-        DEFAULT_PROFILE_EFFORT_FOR_AGENT.get((agent, profile), ""),
-    )
-
-    if agent == "codex":
-        command = ["codex", "exec", "--cd", "{repo}"]
-        if model:
-            command.extend(["--model", model])
-        if effort:
-            command.extend(["-c", f'model_reasoning_effort="{effort}"'])
-        command.append("-")
-    elif agent == "claude-code":
-        command = ["claude", "--print", "--input-format", "text"]
-        if model:
-            command.extend(["--model", model])
-        if effort:
-            command.extend(["--effort", effort])
-    else:
-        raise AILoopError(f"unsupported agent command target: {agent}")
-
-    return [part.format(repo=str(repo)) for part in command]
-
-
-def command_for_agent(repo: Path, agent: str, profile: str) -> list[str]:
-    profile_env_var = PROFILE_COMMAND_ENV_FOR_AGENT.get((agent, profile))
-    profile_override = os.environ.get(profile_env_var, "") if profile_env_var else ""
-    if profile_override:
-        return command_parts_from_template(profile_override, repo)
-
-    env_var = COMMAND_ENV_FOR_AGENT.get(agent)
-    override = os.environ.get(env_var, "") if env_var else ""
-    if override:
-        return command_parts_from_template(override, repo)
-
-    return default_command_for_agent_profile(repo, agent, profile)
-
-
-def build_agent_invocation(
-    repo: Path,
-    log_path: Path,
-    route: Route,
-    profile: str,
-) -> AgentInvocation:
-    return AgentInvocation(
-        role=route.role,
-        agent=route.agent,
-        profile=profile,
-        command=command_for_agent(repo, route.agent, profile),
-        prompt=compose_agent_prompt(
-            repo=repo,
-            log_path=log_path,
+    def build_invocation(
+        self,
+        log_path: Path,
+        route: Route,
+        profile: str,
+    ) -> AgentInvocation:
+        return AgentInvocation(
             role=route.role,
             agent=route.agent,
-        ),
-    )
-
-
-def should_invoke_agents(repo: Path, args: argparse.Namespace) -> bool:
-    if getattr(args, "dry_run", False):
-        return False
-    if getattr(args, "invoke", False):
-        return True
-    env_value = os.environ.get("AI_LOOP_INVOKE_AGENTS", "").strip().lower()
-    if env_value in TRUTHY:
-        return True
-    config_value = run_git(
-        repo,
-        ["config", "--get", "ai-loop.invokeAgents"],
-        check=False,
-    ).stdout.strip().lower()
-    return config_value in TRUTHY
-
-
-def run_agent_invocation(repo: Path, invocation: AgentInvocation) -> int:
-    print(
-        "ai-loop invoke: "
-        f"dispatching {invocation.role} agent {invocation.agent} "
-        f"with {invocation.profile} profile: "
-        f"{shlex.join(invocation.command)}",
-        flush=True,
-    )
-    try:
-        completed = subprocess.run(
-            invocation.command,
-            cwd=repo,
-            input=invocation.prompt,
-            text=True,
-            check=False,
+            profile=profile,
+            command=self.command_for_agent(route.agent, profile),
+            prompt=PromptComposer(self.git).compose_agent_prompt(
+                log_path=log_path,
+                role=route.role,
+                agent=route.agent,
+            ),
         )
-    except FileNotFoundError as exc:
-        raise AILoopError(
-            f"{invocation.agent} command not found: {invocation.command[0]}"
-        ) from exc
-    return completed.returncode
 
+    def should_invoke(self, args: argparse.Namespace) -> bool:
+        if getattr(args, "dry_run", False):
+            return False
+        if getattr(args, "invoke", False):
+            return True
+        env_value = os.environ.get("AI_LOOP_INVOKE_AGENTS", "").strip().lower()
+        if env_value in TRUTHY:
+            return True
+        config_value = self.git.run(
+            ["config", "--get", "ai-loop.invokeAgents"],
+            check=False,
+        ).stdout.strip().lower()
+        return config_value in TRUTHY
 
-def latest_ai_loop_log_from_head(repo: Path) -> Path:
-    result = run_git(repo, ["show", "--name-only", "--format=", "HEAD"])
-    paths = [line.strip() for line in result.stdout.splitlines() if line.strip()]
-    ai_loop_paths = [path for path in paths if AI_LOOP_LOG_RE.match(path)]
-    if not ai_loop_paths:
-        raise AILoopError("latest commit did not change an AI loop log")
-    return repo / ai_loop_paths[-1]
+    def run_invocation(self, invocation: AgentInvocation) -> int:
+        print(
+            "ai-loop invoke: "
+            f"dispatching {invocation.role} agent {invocation.agent} "
+            f"with {invocation.profile} profile: "
+            f"{shlex.join(invocation.command)}",
+            flush=True,
+        )
+        try:
+            completed = subprocess.run(
+                invocation.command,
+                cwd=self.git.repo,
+                input=invocation.prompt,
+                text=True,
+                check=False,
+            )
+        except FileNotFoundError as exc:
+            raise AILoopError(
+                f"{invocation.agent} command not found: {invocation.command[0]}"
+            ) from exc
+        return completed.returncode
 
 
 def iso_now_local() -> str:
@@ -638,13 +641,14 @@ def verify_tool(name: str, *, required: bool) -> str:
 
 def command_setup(args: argparse.Namespace) -> int:
     repo = Path(args.repo).resolve() if args.repo else repo_root_from_cwd()
+    git = GitContext(repo)
     hooks_path = repo / "tools/ai-loop/hooks"
     post_commit = hooks_path / "post-commit"
     if post_commit.exists():
         mode = post_commit.stat().st_mode
         post_commit.chmod(mode | 0o111)
 
-    run_git(repo, ["config", "core.hooksPath", "tools/ai-loop/hooks"], capture_output=True)
+    git.run(["config", "core.hooksPath", "tools/ai-loop/hooks"], capture_output=True)
     print("configured core.hooksPath=tools/ai-loop/hooks")
     for message in [
         verify_tool("git", required=True),
@@ -659,6 +663,7 @@ def command_setup(args: argparse.Namespace) -> int:
 
 def command_start(args: argparse.Namespace) -> int:
     repo = Path(args.repo).resolve() if args.repo else repo_root_from_cwd()
+    git = GitContext(repo)
     branch = args.branch or os.environ.get("AI_LOOP_BRANCH", "")
     prompt = args.prompt or os.environ.get("AI_LOOP_PROMPT", "")
     if not branch:
@@ -666,15 +671,15 @@ def command_start(args: argparse.Namespace) -> int:
     if not prompt:
         raise AILoopError("AI_LOOP_PROMPT or --prompt is required")
 
-    ensure_clean_worktree(repo)
+    git.ensure_clean_worktree()
 
-    existing_branches = run_git(repo, ["branch", "--list", branch]).stdout.strip()
+    existing_branches = git.run(["branch", "--list", branch]).stdout.strip()
     if existing_branches:
-        run_git(repo, ["switch", branch], capture_output=False)
+        git.run(["switch", branch], capture_output=False)
     else:
-        run_git(repo, ["switch", "-c", branch], capture_output=False)
+        git.run(["switch", "-c", branch], capture_output=False)
 
-    ensure_clean_worktree(repo)
+    git.ensure_clean_worktree()
 
     run_id = make_run_id()
     rel_log_path = f"docs/ai-loop/{run_id}.md"
@@ -683,22 +688,20 @@ def command_start(args: argparse.Namespace) -> int:
         raise AILoopError(f"AI loop log already exists: {rel_log_path}")
     log_path.parent.mkdir(parents=True, exist_ok=True)
     started_at = iso_now_local()
-    active_branch = current_branch(repo)
     log_path.write_text(
         render_bootstrap_log(
             run_id=run_id,
             log_path=rel_log_path,
             prompt=prompt,
-            repo=repo_name(repo),
-            branch=active_branch,
+            repo=git.repo_name(),
+            branch=git.current_branch(),
             started_at=started_at,
         ),
         encoding="utf-8",
     )
 
-    run_git(repo, ["add", rel_log_path], capture_output=True)
-    run_git(
-        repo,
+    git.run(["add", rel_log_path], capture_output=True)
+    git.run(
         ["commit", "-m", f"[ai-loop] Human: start {run_id}"],
         capture_output=False,
     )
@@ -709,25 +712,30 @@ def command_start(args: argparse.Namespace) -> int:
 
 def command_continue(args: argparse.Namespace) -> int:
     repo = Path(args.repo).resolve() if args.repo else repo_root_from_cwd()
-    log_path = Path(args.log).resolve() if args.log else latest_ai_loop_log_from_head(repo)
+    git = GitContext(repo)
+    router = StateRouter()
+    dispatcher = AgentDispatcher(git)
+    log_path = (
+        Path(args.log).resolve() if args.log else git.latest_ai_loop_log_from_head()
+    )
     parsed = parse_log_file(log_path)
     latest = parsed.latest_event
     if not latest:
         raise AILoopError(f"no ai-loop-event blocks found in {log_path}")
 
-    route = route_for_event(latest)
+    route = router.route_for_event(latest)
     if not route:
-        print(f"ai-loop ({args.trigger}): {routing_decision(latest)}")
+        print(f"ai-loop ({args.trigger}): {router.routing_decision(latest)}")
         return 0
 
-    if not should_invoke_agents(repo, args):
-        print(f"ai-loop dry-run ({args.trigger}): {routing_decision(latest)}")
+    if not dispatcher.should_invoke(args):
+        print(f"ai-loop dry-run ({args.trigger}): {router.routing_decision(latest)}")
         return 0
 
-    ensure_dispatch_safe_worktree(repo)
-    profile = selected_agent_profile(repo, args)
-    invocation = build_agent_invocation(repo, log_path, route, profile)
-    return_code = run_agent_invocation(repo, invocation)
+    git.ensure_dispatch_safe_worktree()
+    profile = dispatcher.selected_profile(args)
+    invocation = dispatcher.build_invocation(log_path, route, profile)
+    return_code = dispatcher.run_invocation(invocation)
     if return_code != 0:
         raise AILoopError(
             f"{invocation.agent} exited with status {return_code}; loop stopped"
@@ -739,10 +747,10 @@ def command_compose_prompt(args: argparse.Namespace) -> int:
     repo = Path(args.repo).resolve() if args.repo else repo_root_from_cwd()
     if not args.log:
         raise AILoopError("--log is required when composing a prompt")
+    git = GitContext(repo)
     log_path = Path(args.log).resolve()
     agent = args.agent or AGENT_FOR_ROLE[args.role]
-    prompt = compose_agent_prompt(
-        repo=repo,
+    prompt = PromptComposer(git).compose_agent_prompt(
         log_path=log_path,
         role=args.role,
         agent=agent,
