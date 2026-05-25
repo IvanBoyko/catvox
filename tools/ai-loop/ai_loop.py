@@ -785,10 +785,13 @@ def maybe_handoff_to_reviewer(
 
     next_route = router.route_for_event(latest)
     if not next_route or next_route.role != "reviewer":
-        print(f"ai-loop handoff: {router.routing_decision(latest)}")
+        print(f"ai-loop handoff: {router.routing_decision(latest)}", flush=True)
         return
 
-    print(f"ai-loop handoff: {router.routing_decision(latest)}", flush=True)
+    print(
+        f"ai-loop handoff: dispatching {next_route.role} agent: {next_route.agent}",
+        flush=True,
+    )
     invoke_route(dispatcher, next_log_path, next_route, profile)
 
 

@@ -564,7 +564,7 @@ next_agent: codex
 
             self.assertIn("dispatching developer agent codex", result.stdout)
             self.assertIn(
-                "ai-loop handoff: would dispatch reviewer agent: claude-code",
+                "ai-loop handoff: dispatching reviewer agent: claude-code",
                 result.stdout,
             )
             self.assertIn("dispatching reviewer agent claude-code", result.stdout)
@@ -664,7 +664,7 @@ class GitIntegrationTests(unittest.TestCase):
 
             self.assertIn("dispatching developer agent codex", start_output)
             self.assertIn(
-                "ai-loop handoff: would dispatch reviewer agent: claude-code",
+                "ai-loop handoff: dispatching reviewer agent: claude-code",
                 start_output,
             )
             self.assertIn("dispatching reviewer agent claude-code", start_output)

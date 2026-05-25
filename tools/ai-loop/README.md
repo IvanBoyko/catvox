@@ -76,10 +76,10 @@ python3 tools/ai-loop/ai_loop.py continue --invoke --trigger manual
 
 Use `--dry-run` to force observe-only routing even when invocation is enabled.
 
-When the routed agent is Codex as the developer, a successful committed
-`needs_review` event is handed to Claude Code immediately. The reviewer may
-commit `clean`, `needs_fix`, `awaiting_human`, or another stop-state event. The
-controller does not yet dispatch Codex again after reviewer findings.
+When a developer-routed agent commits a `needs_review` event, that event is
+handed to Claude Code immediately. The reviewer may commit `clean`, `needs_fix`,
+`awaiting_human`, or another stop-state event. The controller does not yet
+dispatch the developer again after reviewer findings.
 
 ## Agent Profiles
 
