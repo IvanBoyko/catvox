@@ -156,7 +156,9 @@ The local Option B AI loop lives under `tools/ai-loop/` (see ADR-0023). Run
 `make setup-local-ai-loop` once per clone to configure repo-controlled hooks.
 `make ai-loop-start` bootstraps a local run and defaults to dry-run routing;
 agent invocation is opt-in via `AI_LOOP_INVOKE_AGENTS=1` or local Git config
-`ai-loop.invokeAgents=true`.
+`ai-loop.invokeAgents=true`. Local agent command profiles are explicit:
+`AI_LOOP_AGENT_PROFILE=real` is the default for real work, while
+`AI_LOOP_AGENT_PROFILE=smoke` selects cheaper smoke-test defaults.
 
 Environment-dependent app/backend/CI/Terraform non-secret values are parameterized through generic
 `CATVOX_*` variables such as `CATVOX_ENVIRONMENT`,

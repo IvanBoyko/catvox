@@ -73,6 +73,69 @@ python3 tools/ai-loop/ai_loop.py continue --invoke --trigger manual
 
 Use `--dry-run` to force observe-only routing even when invocation is enabled.
 
+## Agent Profiles
+
+Real local runs default to the `real` profile. Smoke tests can opt into the
+cheaper `smoke` profile:
+
+```bash
+AI_LOOP_AGENT_PROFILE=smoke python3 tools/ai-loop/ai_loop.py continue --invoke
+```
+
+You can also set the local clone default:
+
+```bash
+git config ai-loop.agentProfile smoke
+```
+
+Profile selection order is:
+
+1. `--agent-profile real|smoke`
+2. `AI_LOOP_AGENT_PROFILE`
+3. `git config ai-loop.agentProfile`
+4. `real`
+
+Built-in profile defaults:
+
+| Agent | Profile | Default command behavior |
+|---|---|---|
+| Codex | `real` | `codex exec --cd <repo> -c model_reasoning_effort="xhigh" -` |
+| Codex | `smoke` | `codex exec --cd <repo> -c model_reasoning_effort="low" -` |
+| Claude Code | `real` | `claude --print --input-format text --model opus --effort max` |
+| Claude Code | `smoke` | `claude --print --input-format text --model haiku --effort low` |
+
+Pin exact local model names with:
+
+```bash
+AI_LOOP_CODEX_REAL_MODEL=...
+AI_LOOP_CODEX_SMOKE_MODEL=...
+AI_LOOP_CLAUDE_REAL_MODEL=...
+AI_LOOP_CLAUDE_SMOKE_MODEL=...
+```
+
+For example, if the installed Claude CLI exposes exact model IDs for Opus 4.7
+Max or Haiku 4.5, set `AI_LOOP_CLAUDE_REAL_MODEL` and
+`AI_LOOP_CLAUDE_SMOKE_MODEL` to those exact strings.
+
+Override effort independently with:
+
+```bash
+AI_LOOP_CODEX_REAL_EFFORT=xhigh
+AI_LOOP_CODEX_SMOKE_EFFORT=low
+AI_LOOP_CLAUDE_REAL_EFFORT=max
+AI_LOOP_CLAUDE_SMOKE_EFFORT=low
+```
+
+Full command overrides remain available. Profile-specific overrides win over
+legacy per-agent overrides:
+
+```bash
+AI_LOOP_CODEX_REAL_COMMAND="codex exec --cd {repo} --model gpt-5.5 -c 'model_reasoning_effort=\"xhigh\"' -"
+AI_LOOP_CODEX_SMOKE_COMMAND="codex exec --cd {repo} -c 'model_reasoning_effort=\"low\"' -"
+AI_LOOP_CLAUDE_REAL_COMMAND='claude --print --input-format text --model opus --effort max'
+AI_LOOP_CLAUDE_SMOKE_COMMAND='claude --print --input-format text --model haiku --effort low'
+```
+
 ## Metadata Format
 
 Machine-readable state lives in HTML comment blocks with key-value lines:
@@ -132,15 +195,16 @@ python3 tools/ai-loop/ai_loop.py compose-prompt \
   --log docs/ai-loop/local-YYYYMMDD-HHMMSS.md
 ```
 
-Default local commands:
+Profiled default local commands:
 
 ```text
-Codex developer:  codex exec --cd <repo> -
-Claude reviewer:  claude --print --input-format text
+Codex developer:  codex exec --cd <repo> -c model_reasoning_effort="<profile effort>" -
+Claude reviewer:  claude --print --input-format text --model <profile model> --effort <profile effort>
 ```
 
 Both commands receive the composed prompt on stdin. For local experimentation,
-override them with `AI_LOOP_CODEX_COMMAND` or `AI_LOOP_CLAUDE_COMMAND`.
+override them with profile-specific command variables or the legacy
+`AI_LOOP_CODEX_COMMAND` / `AI_LOOP_CLAUDE_COMMAND` variables.
 
 ## Slice 2 Limitations
 

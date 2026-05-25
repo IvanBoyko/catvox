@@ -50,14 +50,48 @@ PROMPT_FILES_FOR_ROLE = {
     ],
 }
 
-DEFAULT_COMMAND_FOR_AGENT = {
-    "codex": ["codex", "exec", "--cd", "{repo}", "-"],
-    "claude-code": ["claude", "--print", "--input-format", "text"],
-}
-
 COMMAND_ENV_FOR_AGENT = {
     "codex": "AI_LOOP_CODEX_COMMAND",
     "claude-code": "AI_LOOP_CLAUDE_COMMAND",
+}
+
+AGENT_PROFILES = ("real", "smoke")
+DEFAULT_AGENT_PROFILE = "real"
+AGENT_PROFILE_ENV = "AI_LOOP_AGENT_PROFILE"
+
+PROFILE_COMMAND_ENV_FOR_AGENT = {
+    ("codex", "real"): "AI_LOOP_CODEX_REAL_COMMAND",
+    ("codex", "smoke"): "AI_LOOP_CODEX_SMOKE_COMMAND",
+    ("claude-code", "real"): "AI_LOOP_CLAUDE_REAL_COMMAND",
+    ("claude-code", "smoke"): "AI_LOOP_CLAUDE_SMOKE_COMMAND",
+}
+
+PROFILE_MODEL_ENV_FOR_AGENT = {
+    ("codex", "real"): "AI_LOOP_CODEX_REAL_MODEL",
+    ("codex", "smoke"): "AI_LOOP_CODEX_SMOKE_MODEL",
+    ("claude-code", "real"): "AI_LOOP_CLAUDE_REAL_MODEL",
+    ("claude-code", "smoke"): "AI_LOOP_CLAUDE_SMOKE_MODEL",
+}
+
+PROFILE_EFFORT_ENV_FOR_AGENT = {
+    ("codex", "real"): "AI_LOOP_CODEX_REAL_EFFORT",
+    ("codex", "smoke"): "AI_LOOP_CODEX_SMOKE_EFFORT",
+    ("claude-code", "real"): "AI_LOOP_CLAUDE_REAL_EFFORT",
+    ("claude-code", "smoke"): "AI_LOOP_CLAUDE_SMOKE_EFFORT",
+}
+
+DEFAULT_PROFILE_MODEL_FOR_AGENT = {
+    ("codex", "real"): "",
+    ("codex", "smoke"): "",
+    ("claude-code", "real"): "opus",
+    ("claude-code", "smoke"): "haiku",
+}
+
+DEFAULT_PROFILE_EFFORT_FOR_AGENT = {
+    ("codex", "real"): "xhigh",
+    ("codex", "smoke"): "low",
+    ("claude-code", "real"): "max",
+    ("claude-code", "smoke"): "low",
 }
 
 EVENT_BLOCK_RE = re.compile(r"<!--\s*ai-loop-event\s*\n(.*?)\n\s*-->", re.DOTALL)
@@ -95,6 +129,7 @@ class Route:
 class AgentInvocation:
     role: str
     agent: str
+    profile: str
     command: list[str]
     prompt: str
 
@@ -370,23 +405,101 @@ AI loop log: {rel_log_path}
 """
 
 
-def command_for_agent(repo: Path, agent: str) -> list[str]:
+def normalize_agent_profile(raw_profile: str) -> str:
+    profile = raw_profile.strip().lower()
+    if profile not in AGENT_PROFILES:
+        allowed = ", ".join(AGENT_PROFILES)
+        raise AILoopError(
+            f"unsupported AI loop agent profile {raw_profile!r}; "
+            f"expected one of: {allowed}"
+        )
+    return profile
+
+
+def selected_agent_profile(repo: Path, args: argparse.Namespace) -> str:
+    arg_profile = getattr(args, "agent_profile", "") or ""
+    if arg_profile:
+        return normalize_agent_profile(arg_profile)
+
+    env_profile = os.environ.get(AGENT_PROFILE_ENV, "")
+    if env_profile:
+        return normalize_agent_profile(env_profile)
+
+    config_profile = run_git(
+        repo,
+        ["config", "--get", "ai-loop.agentProfile"],
+        check=False,
+    ).stdout.strip()
+    if config_profile:
+        return normalize_agent_profile(config_profile)
+
+    return DEFAULT_AGENT_PROFILE
+
+
+def env_or_default(env_name: str | None, default: str) -> str:
+    if not env_name:
+        return default
+    return os.environ.get(env_name, default).strip()
+
+
+def command_parts_from_template(template: str, repo: Path) -> list[str]:
+    return [part.format(repo=str(repo)) for part in shlex.split(template)]
+
+
+def default_command_for_agent_profile(repo: Path, agent: str, profile: str) -> list[str]:
+    model = env_or_default(
+        PROFILE_MODEL_ENV_FOR_AGENT.get((agent, profile)),
+        DEFAULT_PROFILE_MODEL_FOR_AGENT.get((agent, profile), ""),
+    )
+    effort = env_or_default(
+        PROFILE_EFFORT_ENV_FOR_AGENT.get((agent, profile)),
+        DEFAULT_PROFILE_EFFORT_FOR_AGENT.get((agent, profile), ""),
+    )
+
+    if agent == "codex":
+        command = ["codex", "exec", "--cd", "{repo}"]
+        if model:
+            command.extend(["--model", model])
+        if effort:
+            command.extend(["-c", f'model_reasoning_effort="{effort}"'])
+        command.append("-")
+    elif agent == "claude-code":
+        command = ["claude", "--print", "--input-format", "text"]
+        if model:
+            command.extend(["--model", model])
+        if effort:
+            command.extend(["--effort", effort])
+    else:
+        raise AILoopError(f"unsupported agent command target: {agent}")
+
+    return [part.format(repo=str(repo)) for part in command]
+
+
+def command_for_agent(repo: Path, agent: str, profile: str) -> list[str]:
+    profile_env_var = PROFILE_COMMAND_ENV_FOR_AGENT.get((agent, profile))
+    profile_override = os.environ.get(profile_env_var, "") if profile_env_var else ""
+    if profile_override:
+        return command_parts_from_template(profile_override, repo)
+
     env_var = COMMAND_ENV_FOR_AGENT.get(agent)
     override = os.environ.get(env_var, "") if env_var else ""
     if override:
-        return [part.format(repo=str(repo)) for part in shlex.split(override)]
+        return command_parts_from_template(override, repo)
 
-    template = DEFAULT_COMMAND_FOR_AGENT.get(agent)
-    if not template:
-        raise AILoopError(f"unsupported agent command target: {agent}")
-    return [part.format(repo=str(repo)) for part in template]
+    return default_command_for_agent_profile(repo, agent, profile)
 
 
-def build_agent_invocation(repo: Path, log_path: Path, route: Route) -> AgentInvocation:
+def build_agent_invocation(
+    repo: Path,
+    log_path: Path,
+    route: Route,
+    profile: str,
+) -> AgentInvocation:
     return AgentInvocation(
         role=route.role,
         agent=route.agent,
-        command=command_for_agent(repo, route.agent),
+        profile=profile,
+        command=command_for_agent(repo, route.agent, profile),
         prompt=compose_agent_prompt(
             repo=repo,
             log_path=log_path,
@@ -415,7 +528,8 @@ def should_invoke_agents(repo: Path, args: argparse.Namespace) -> bool:
 def run_agent_invocation(repo: Path, invocation: AgentInvocation) -> int:
     print(
         "ai-loop invoke: "
-        f"dispatching {invocation.role} agent {invocation.agent}: "
+        f"dispatching {invocation.role} agent {invocation.agent} "
+        f"with {invocation.profile} profile: "
         f"{shlex.join(invocation.command)}",
         flush=True,
     )
@@ -609,7 +723,8 @@ def command_continue(args: argparse.Namespace) -> int:
         return 0
 
     ensure_dispatch_safe_worktree(repo)
-    invocation = build_agent_invocation(repo, log_path, route)
+    profile = selected_agent_profile(repo, args)
+    invocation = build_agent_invocation(repo, log_path, route, profile)
     return_code = run_agent_invocation(repo, invocation)
     if return_code != 0:
         raise AILoopError(
@@ -656,6 +771,11 @@ def build_parser() -> argparse.ArgumentParser:
     cont.add_argument("--trigger", default="manual", help="wake-up source")
     cont.add_argument("--log", help="AI loop log path; defaults to latest log in HEAD")
     cont.add_argument("--invoke", action="store_true", help="invoke the routed agent")
+    cont.add_argument(
+        "--agent-profile",
+        choices=AGENT_PROFILES,
+        help=f"agent command profile; defaults to {AGENT_PROFILE_ENV} or real",
+    )
     cont.add_argument(
         "--dry-run",
         action="store_true",

@@ -11,6 +11,7 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 
 sys.dont_write_bytecode = True
@@ -245,6 +246,95 @@ next_agent: claude-code
             self.assertIn("Suggested local inspection commands:", prompt)
             self.assertIn("changed.txt", prompt)
             self.assertNotIn("+changed content", prompt)
+
+
+class CommandProfileTests(unittest.TestCase):
+    def test_codex_real_and_smoke_profiles_set_reasoning_effort(self) -> None:
+        repo = Path("/tmp/repo")
+        with patch.dict(os.environ, {}, clear=True):
+            real = ai_loop.command_for_agent(repo, "codex", "real")
+            smoke = ai_loop.command_for_agent(repo, "codex", "smoke")
+
+        self.assertEqual(
+            real,
+            [
+                "codex",
+                "exec",
+                "--cd",
+                "/tmp/repo",
+                "-c",
+                'model_reasoning_effort="xhigh"',
+                "-",
+            ],
+        )
+        self.assertEqual(
+            smoke,
+            [
+                "codex",
+                "exec",
+                "--cd",
+                "/tmp/repo",
+                "-c",
+                'model_reasoning_effort="low"',
+                "-",
+            ],
+        )
+
+    def test_claude_profiles_set_model_and_effort(self) -> None:
+        repo = Path("/tmp/repo")
+        with patch.dict(os.environ, {}, clear=True):
+            real = ai_loop.command_for_agent(repo, "claude-code", "real")
+            smoke = ai_loop.command_for_agent(repo, "claude-code", "smoke")
+
+        self.assertEqual(
+            real,
+            [
+                "claude",
+                "--print",
+                "--input-format",
+                "text",
+                "--model",
+                "opus",
+                "--effort",
+                "max",
+            ],
+        )
+        self.assertEqual(
+            smoke,
+            [
+                "claude",
+                "--print",
+                "--input-format",
+                "text",
+                "--model",
+                "haiku",
+                "--effort",
+                "low",
+            ],
+        )
+
+    def test_profile_specific_command_override_wins_over_legacy_override(self) -> None:
+        repo = Path("/tmp/repo")
+        with patch.dict(
+            os.environ,
+            {
+                "AI_LOOP_CLAUDE_SMOKE_COMMAND": "profile-claude {repo}",
+                "AI_LOOP_CLAUDE_COMMAND": "legacy-claude {repo}",
+            },
+            clear=True,
+        ):
+            command = ai_loop.command_for_agent(repo, "claude-code", "smoke")
+
+        self.assertEqual(command, ["profile-claude", "/tmp/repo"])
+
+    def test_agent_profile_can_come_from_env(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            repo = Path(tmp)
+            init_repo_with_ai_loop_tooling(repo)
+            args = type("Args", (), {"agent_profile": ""})()
+            with patch.dict(os.environ, {"AI_LOOP_AGENT_PROFILE": "smoke"}):
+                profile = ai_loop.selected_agent_profile(repo, args)
+        self.assertEqual(profile, "smoke")
 
 
 class AgentDispatchTests(unittest.TestCase):
