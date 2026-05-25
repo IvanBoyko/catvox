@@ -61,6 +61,18 @@ def init_repo_with_ai_loop_tooling(repo: Path) -> None:
     run(["git", "commit", "-m", "Initial tools"], repo)
 
 
+def git_context(repo: Path) -> ai_loop.GitContext:
+    return ai_loop.GitContext(repo)
+
+
+def prompt_composer(repo: Path) -> ai_loop.PromptComposer:
+    return ai_loop.PromptComposer(git_context(repo))
+
+
+def agent_dispatcher(repo: Path) -> ai_loop.AgentDispatcher:
+    return ai_loop.AgentDispatcher(git_context(repo))
+
+
 class MetadataParsingTests(unittest.TestCase):
     def test_parse_init_and_events(self) -> None:
         text = """# AI Loop
@@ -101,6 +113,7 @@ next_agent: claude-code
             "failed": "stop: loop is failed",
             "max_cycles_reached": "stop: cycle cap reached",
         }
+        router = ai_loop.StateRouter()
         for status, expected in cases.items():
             with self.subTest(status=status):
                 event = {"status": status}
@@ -108,7 +121,7 @@ next_agent: claude-code
                     event["next_agent"] = "claude-code"
                 if status in {"needs_developer", "needs_fix"}:
                     event["next_agent"] = "codex"
-                self.assertEqual(ai_loop.routing_decision(event), expected)
+                self.assertEqual(router.routing_decision(event), expected)
 
     def test_bootstrap_log_contains_valid_metadata(self) -> None:
         log = ai_loop.render_bootstrap_log(
@@ -123,6 +136,26 @@ next_agent: claude-code
         self.assertEqual(parsed.init["run_id"], "local-20260524-120000")
         self.assertEqual(parsed.latest_event["status"], "needs_developer")
         self.assertEqual(parsed.latest_event["next_agent"], "codex")
+
+
+class GitContextTests(unittest.TestCase):
+    def test_repo_name_supports_ssh_and_https_remotes(self) -> None:
+        cases = {
+            "git@github.com:kathelix/catvox.git": "kathelix/catvox",
+            "https://github.com/kathelix/catvox.git": "kathelix/catvox",
+            "https://github.com/kathelix/catvox": "kathelix/catvox",
+            "git@github.com:kathelix/catvox": "kathelix/catvox",
+        }
+        with tempfile.TemporaryDirectory() as tmp:
+            repo = Path(tmp)
+            run(["git", "init"], repo)
+            run(["git", "remote", "add", "origin", "git@github.com:kathelix/catvox.git"], repo)
+            git = git_context(repo)
+
+            for remote, expected in cases.items():
+                with self.subTest(remote=remote):
+                    run(["git", "remote", "set-url", "origin", remote], repo)
+                    self.assertEqual(git.repo_name(), expected)
 
 
 class PromptCompositionTests(unittest.TestCase):
@@ -146,8 +179,7 @@ next_agent: codex
                 encoding="utf-8",
             )
 
-            prompt = ai_loop.compose_agent_prompt(
-                repo=repo,
+            prompt = prompt_composer(repo).compose_agent_prompt(
                 log_path=log_path,
                 role="developer",
                 agent="codex",
@@ -186,8 +218,7 @@ next_agent: claude-code
                 encoding="utf-8",
             )
 
-            prompt = ai_loop.compose_agent_prompt(
-                repo=repo,
+            prompt = prompt_composer(repo).compose_agent_prompt(
                 log_path=log_path,
                 role="reviewer",
                 agent="claude-code",
@@ -234,14 +265,13 @@ next_agent: claude-code
                 encoding="utf-8",
             )
 
-            prompt = ai_loop.compose_agent_prompt(
-                repo=repo,
+            prompt = prompt_composer(repo).compose_agent_prompt(
                 log_path=log_path,
                 role="reviewer",
                 agent="claude-code",
             )
 
-            base = ai_loop.resolve_diff_base(repo)
+            base = git_context(repo).resolve_diff_base()
             self.assertIsNotNone(base)
             assert base is not None
             head_sha = run(["git", "rev-parse", "HEAD"], repo).stdout.strip()
@@ -272,14 +302,17 @@ next_agent: claude-code
 
 
 class CommandProfileTests(unittest.TestCase):
-    def test_codex_real_and_smoke_profiles_set_reasoning_effort(self) -> None:
+    def test_default_agent_profiles_set_model_and_effort(self) -> None:
         repo = Path("/tmp/repo")
+        dispatcher = agent_dispatcher(repo)
         with patch.dict(os.environ, {}, clear=True):
-            real = ai_loop.command_for_agent(repo, "codex", "real")
-            smoke = ai_loop.command_for_agent(repo, "codex", "smoke")
+            codex_real = dispatcher.command_for_agent("codex", "real")
+            codex_smoke = dispatcher.command_for_agent("codex", "smoke")
+            claude_real = dispatcher.command_for_agent("claude-code", "real")
+            claude_smoke = dispatcher.command_for_agent("claude-code", "smoke")
 
         self.assertEqual(
-            real,
+            codex_real,
             [
                 "codex",
                 "exec",
@@ -291,7 +324,7 @@ class CommandProfileTests(unittest.TestCase):
             ],
         )
         self.assertEqual(
-            smoke,
+            codex_smoke,
             [
                 "codex",
                 "exec",
@@ -302,15 +335,8 @@ class CommandProfileTests(unittest.TestCase):
                 "-",
             ],
         )
-
-    def test_claude_profiles_set_model_and_effort(self) -> None:
-        repo = Path("/tmp/repo")
-        with patch.dict(os.environ, {}, clear=True):
-            real = ai_loop.command_for_agent(repo, "claude-code", "real")
-            smoke = ai_loop.command_for_agent(repo, "claude-code", "smoke")
-
         self.assertEqual(
-            real,
+            claude_real,
             [
                 "claude",
                 "--print",
@@ -323,7 +349,7 @@ class CommandProfileTests(unittest.TestCase):
             ],
         )
         self.assertEqual(
-            smoke,
+            claude_smoke,
             [
                 "claude",
                 "--print",
@@ -346,7 +372,7 @@ class CommandProfileTests(unittest.TestCase):
             },
             clear=True,
         ):
-            command = ai_loop.command_for_agent(repo, "claude-code", "smoke")
+            command = agent_dispatcher(repo).command_for_agent("claude-code", "smoke")
 
         self.assertEqual(command, ["profile-claude", "/tmp/repo"])
 
@@ -356,7 +382,7 @@ class CommandProfileTests(unittest.TestCase):
             init_repo_with_ai_loop_tooling(repo)
             args = type("Args", (), {"agent_profile": ""})()
             with patch.dict(os.environ, {"AI_LOOP_AGENT_PROFILE": "smoke"}):
-                profile = ai_loop.selected_agent_profile(repo, args)
+                profile = agent_dispatcher(repo).selected_profile(args)
         self.assertEqual(profile, "smoke")
 
 

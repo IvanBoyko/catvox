@@ -14,6 +14,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 from typing import Sequence
+from urllib.parse import urlparse
 
 
 STATUS_TO_ROUTE = {
@@ -192,10 +193,14 @@ class GitContext:
             return self.repo.name
         if remote.endswith(".git"):
             remote = remote[:-4]
-        if ":" in remote and "/" in remote:
+
+        parsed = urlparse(remote)
+        if parsed.scheme and parsed.path:
+            path = parsed.path.lstrip("/")
+            return path or remote
+
+        if "://" not in remote and ":" in remote and "/" in remote:
             return remote.split(":", 1)[1]
-        if "github.com/" in remote:
-            return remote.split("github.com/", 1)[1]
         return remote
 
     def output(self, args: Sequence[str]) -> str:
@@ -293,6 +298,39 @@ def parse_log_file(path: Path) -> ParsedLog:
     return parse_log_text(path.read_text(encoding="utf-8"))
 
 
+def initial_prompt_from_log(log_text: str) -> str:
+    match = INITIAL_PROMPT_RE.search(log_text)
+    if not match:
+        return "(initial prompt section not found; read the full AI loop log)"
+    body = match.group("body").strip()
+    return body or "(initial prompt is empty)"
+
+
+def render_event_metadata(event: dict[str, str]) -> str:
+    return "\n".join(f"{key}: {value}" for key, value in event.items())
+
+
+def loop_context(log_path: Path) -> str:
+    log_text = log_path.read_text(encoding="utf-8")
+    parsed = parse_log_text(log_text)
+    latest = parsed.latest_event
+    latest_metadata = (
+        render_event_metadata(latest)
+        if latest
+        else "(no ai-loop-event blocks found; read the full AI loop log)"
+    )
+    return f"""AI loop log path: {log_path}
+
+Initial user prompt:
+{initial_prompt_from_log(log_text)}
+
+Latest event metadata:
+{latest_metadata}
+
+Read the full AI loop log from disk before appending to it or when prior
+conversation details are needed."""
+
+
 @dataclass(frozen=True)
 class StateRouter:
     def route_for_event(self, event: dict[str, str]) -> Route | None:
@@ -315,10 +353,10 @@ class StateRouter:
 
 @dataclass(frozen=True)
 class PromptComposer:
-    repo: Path
+    git: GitContext
 
     def require_file_exists(self, rel_path: str) -> None:
-        path = self.repo / rel_path
+        path = self.git.repo / rel_path
         if not path.is_file():
             raise AILoopError(f"required prompt context file is missing: {rel_path}")
 
@@ -332,39 +370,6 @@ class PromptComposer:
             lines.append(f'{index}. <file path="{rel_path}" required="true" />')
         return "\n".join(lines)
 
-    @staticmethod
-    def initial_prompt_from_log(log_text: str) -> str:
-        match = INITIAL_PROMPT_RE.search(log_text)
-        if not match:
-            return "(initial prompt section not found; read the full AI loop log)"
-        body = match.group("body").strip()
-        return body or "(initial prompt is empty)"
-
-    @staticmethod
-    def render_event_metadata(event: dict[str, str]) -> str:
-        return "\n".join(f"{key}: {value}" for key, value in event.items())
-
-    @staticmethod
-    def loop_context(log_path: Path) -> str:
-        log_text = log_path.read_text(encoding="utf-8")
-        parsed = parse_log_text(log_text)
-        latest = parsed.latest_event
-        latest_metadata = (
-            PromptComposer.render_event_metadata(latest)
-            if latest
-            else "(no ai-loop-event blocks found; read the full AI loop log)"
-        )
-        return f"""AI loop log path: {log_path}
-
-Initial user prompt:
-{PromptComposer.initial_prompt_from_log(log_text)}
-
-Latest event metadata:
-{latest_metadata}
-
-Read the full AI loop log from disk before appending to it or when prior
-conversation details are needed."""
-
     def compose_agent_prompt(
         self,
         *,
@@ -372,16 +377,15 @@ conversation details are needed."""
         role: str,
         agent: str,
     ) -> str:
-        git = GitContext(self.repo)
-        rel_log_path = log_path.resolve().relative_to(self.repo.resolve())
+        rel_log_path = log_path.resolve().relative_to(self.git.repo.resolve())
         prompt_files = PROMPT_FILES_FOR_ROLE.get(role)
         if not prompt_files:
             raise AILoopError(f"unsupported agent role: {role}")
 
         instruction_manifest = self.render_instruction_manifest(prompt_files)
-        status = git.output(["status", "--short", "--branch"])
-        branch = git.current_branch()
-        head = git.required_output(["rev-parse", "HEAD"])
+        status = self.git.output(["status", "--short", "--branch"])
+        branch = self.git.current_branch()
+        head = self.git.required_output(["rev-parse", "HEAD"])
 
         return f"""# CatVox Local AI Loop Invocation
 
@@ -398,7 +402,7 @@ authoritative. Read those files before using any task context.
 <task_context>
 ## Current Repository State
 
-Repository: {git.repo_name()}
+Repository: {self.git.repo_name()}
 Branch: {branch}
 HEAD: {head}
 AI loop log: {rel_log_path}
@@ -409,18 +413,18 @@ AI loop log: {rel_log_path}
 
 ## AI Loop Log
 
-{self.loop_context(log_path)}
+{loop_context(log_path)}
 
 ## Branch Context
 
-{git.branch_context()}
+{self.git.branch_context()}
 </task_context>
 """
 
 
 @dataclass(frozen=True)
 class AgentDispatcher:
-    repo: Path
+    git: GitContext
 
     @staticmethod
     def normalize_profile(raw_profile: str) -> str:
@@ -442,7 +446,7 @@ class AgentDispatcher:
         if env_profile:
             return self.normalize_profile(env_profile)
 
-        config_profile = GitContext(self.repo).run(
+        config_profile = self.git.run(
             ["config", "--get", "ai-loop.agentProfile"],
             check=False,
         ).stdout.strip()
@@ -458,7 +462,7 @@ class AgentDispatcher:
         return os.environ.get(env_name, default).strip()
 
     def command_parts_from_template(self, template: str) -> list[str]:
-        return [part.format(repo=str(self.repo)) for part in shlex.split(template)]
+        return [part.format(repo=str(self.git.repo)) for part in shlex.split(template)]
 
     def default_command_for_agent_profile(self, agent: str, profile: str) -> list[str]:
         model = self.env_or_default(
@@ -486,7 +490,7 @@ class AgentDispatcher:
         else:
             raise AILoopError(f"unsupported agent command target: {agent}")
 
-        return [part.format(repo=str(self.repo)) for part in command]
+        return [part.format(repo=str(self.git.repo)) for part in command]
 
     def command_for_agent(self, agent: str, profile: str) -> list[str]:
         profile_env_var = PROFILE_COMMAND_ENV_FOR_AGENT.get((agent, profile))
@@ -514,7 +518,7 @@ class AgentDispatcher:
             agent=route.agent,
             profile=profile,
             command=self.command_for_agent(route.agent, profile),
-            prompt=PromptComposer(self.repo).compose_agent_prompt(
+            prompt=PromptComposer(self.git).compose_agent_prompt(
                 log_path=log_path,
                 role=route.role,
                 agent=route.agent,
@@ -529,7 +533,7 @@ class AgentDispatcher:
         env_value = os.environ.get("AI_LOOP_INVOKE_AGENTS", "").strip().lower()
         if env_value in TRUTHY:
             return True
-        config_value = GitContext(self.repo).run(
+        config_value = self.git.run(
             ["config", "--get", "ai-loop.invokeAgents"],
             check=False,
         ).stdout.strip().lower()
@@ -546,7 +550,7 @@ class AgentDispatcher:
         try:
             completed = subprocess.run(
                 invocation.command,
-                cwd=self.repo,
+                cwd=self.git.repo,
                 input=invocation.prompt,
                 text=True,
                 check=False,
@@ -556,135 +560,6 @@ class AgentDispatcher:
                 f"{invocation.agent} command not found: {invocation.command[0]}"
             ) from exc
         return completed.returncode
-
-
-def run_git(
-    repo: Path,
-    args: Sequence[str],
-    *,
-    check: bool = True,
-    capture_output: bool = True,
-) -> subprocess.CompletedProcess[str]:
-    return GitContext(repo).run(args, check=check, capture_output=capture_output)
-
-
-def ensure_clean_worktree(repo: Path) -> None:
-    GitContext(repo).ensure_clean_worktree()
-
-
-def ensure_dispatch_safe_worktree(repo: Path) -> None:
-    GitContext(repo).ensure_dispatch_safe_worktree()
-
-
-def current_branch(repo: Path) -> str:
-    return GitContext(repo).current_branch()
-
-
-def repo_name(repo: Path) -> str:
-    return GitContext(repo).repo_name()
-
-
-def route_for_event(event: dict[str, str]) -> Route | None:
-    return StateRouter().route_for_event(event)
-
-
-def routing_decision(event: dict[str, str]) -> str:
-    return StateRouter().routing_decision(event)
-
-
-def require_file_exists(repo: Path, rel_path: str) -> None:
-    PromptComposer(repo).require_file_exists(rel_path)
-
-
-def render_instruction_manifest(repo: Path, prompt_files: Sequence[str]) -> str:
-    return PromptComposer(repo).render_instruction_manifest(prompt_files)
-
-
-def resolve_diff_base(repo: Path) -> str | None:
-    return GitContext(repo).resolve_diff_base()
-
-
-def git_output(repo: Path, args: Sequence[str]) -> str:
-    return GitContext(repo).output(args)
-
-
-def git_required_output(repo: Path, args: Sequence[str]) -> str:
-    return GitContext(repo).required_output(args)
-
-
-def branch_context(repo: Path) -> str:
-    return GitContext(repo).branch_context()
-
-
-def initial_prompt_from_log(log_text: str) -> str:
-    return PromptComposer.initial_prompt_from_log(log_text)
-
-
-def render_event_metadata(event: dict[str, str]) -> str:
-    return PromptComposer.render_event_metadata(event)
-
-
-def loop_context(log_path: Path) -> str:
-    return PromptComposer.loop_context(log_path)
-
-
-def compose_agent_prompt(
-    *,
-    repo: Path,
-    log_path: Path,
-    role: str,
-    agent: str,
-) -> str:
-    return PromptComposer(repo).compose_agent_prompt(
-        log_path=log_path,
-        role=role,
-        agent=agent,
-    )
-
-
-def normalize_agent_profile(raw_profile: str) -> str:
-    return AgentDispatcher.normalize_profile(raw_profile)
-
-
-def selected_agent_profile(repo: Path, args: argparse.Namespace) -> str:
-    return AgentDispatcher(repo).selected_profile(args)
-
-
-def env_or_default(env_name: str | None, default: str) -> str:
-    return AgentDispatcher.env_or_default(env_name, default)
-
-
-def command_parts_from_template(template: str, repo: Path) -> list[str]:
-    return AgentDispatcher(repo).command_parts_from_template(template)
-
-
-def default_command_for_agent_profile(repo: Path, agent: str, profile: str) -> list[str]:
-    return AgentDispatcher(repo).default_command_for_agent_profile(agent, profile)
-
-
-def command_for_agent(repo: Path, agent: str, profile: str) -> list[str]:
-    return AgentDispatcher(repo).command_for_agent(agent, profile)
-
-
-def build_agent_invocation(
-    repo: Path,
-    log_path: Path,
-    route: Route,
-    profile: str,
-) -> AgentInvocation:
-    return AgentDispatcher(repo).build_invocation(log_path, route, profile)
-
-
-def should_invoke_agents(repo: Path, args: argparse.Namespace) -> bool:
-    return AgentDispatcher(repo).should_invoke(args)
-
-
-def run_agent_invocation(repo: Path, invocation: AgentInvocation) -> int:
-    return AgentDispatcher(repo).run_invocation(invocation)
-
-
-def latest_ai_loop_log_from_head(repo: Path) -> Path:
-    return GitContext(repo).latest_ai_loop_log_from_head()
 
 
 def iso_now_local() -> str:
@@ -839,7 +714,7 @@ def command_continue(args: argparse.Namespace) -> int:
     repo = Path(args.repo).resolve() if args.repo else repo_root_from_cwd()
     git = GitContext(repo)
     router = StateRouter()
-    dispatcher = AgentDispatcher(repo)
+    dispatcher = AgentDispatcher(git)
     log_path = (
         Path(args.log).resolve() if args.log else git.latest_ai_loop_log_from_head()
     )
@@ -872,9 +747,10 @@ def command_compose_prompt(args: argparse.Namespace) -> int:
     repo = Path(args.repo).resolve() if args.repo else repo_root_from_cwd()
     if not args.log:
         raise AILoopError("--log is required when composing a prompt")
+    git = GitContext(repo)
     log_path = Path(args.log).resolve()
     agent = args.agent or AGENT_FOR_ROLE[args.role]
-    prompt = PromptComposer(repo).compose_agent_prompt(
+    prompt = PromptComposer(git).compose_agent_prompt(
         log_path=log_path,
         role=args.role,
         agent=agent,
