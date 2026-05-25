@@ -91,8 +91,10 @@ Current state is derived from the latest `ai-loop-event` block.
 
 ## Agent Invocation Context
 
-Agent prompts are composed with the repository instruction files explicitly. Do
-not rely only on each CLI's automatic discovery behavior.
+Agent prompts include a verified manifest of repository instruction files before
+task context. The files are referenced by path rather than inlined, so local
+agent calls stay small while still making the required process instructions
+explicit. Do not rely only on each CLI's automatic discovery behavior.
 
 Required context for every agent:
 
@@ -108,14 +110,19 @@ Required extra context by role:
 
 The prompt order is:
 
-1. shared repository instructions (`AGENTS.md`)
-2. the role-specific agent overlay (`.codex/AGENTS.md` or `CLAUDE.md`)
-3. common and role-specific AI loop prompt files
-4. task context: current loop log, Git status, and branch diff
+1. instruction file manifest:
+   `AGENTS.md`, the role-specific overlay, common AI-loop prompt, and
+   role-specific AI-loop prompt
+2. task context: current loop log path and compact state, Git status, base/head
+   SHAs, changed-file summary, and diff-stat summary
 
 If a CLI invocation cannot include those files reliably, the orchestrator must
 stop before dispatching the agent rather than run with incomplete process
 instructions.
+
+The prompt does not inline the full branch patch. Agents receive the resolved
+diff range and suggested commands such as `git diff <base>..<head>` and
+path-scoped diffs, then inspect only the details they need locally.
 
 To inspect a prompt without invoking an agent:
 

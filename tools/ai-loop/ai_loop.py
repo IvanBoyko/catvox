@@ -64,6 +64,10 @@ EVENT_BLOCK_RE = re.compile(r"<!--\s*ai-loop-event\s*\n(.*?)\n\s*-->", re.DOTALL
 INIT_BLOCK_RE = re.compile(r"<!--\s*ai-loop-init\s*\n(.*?)\n\s*-->", re.DOTALL)
 KEY_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_-]*$")
 AI_LOOP_LOG_RE = re.compile(r"^docs/ai-loop/(?:local-\d{8}-\d{6}|pr-\d{4})\.md$")
+INITIAL_PROMPT_RE = re.compile(
+    r"## Initial user prompt\s*\n(?P<body>.*?)(?=\n## |\Z)",
+    re.DOTALL,
+)
 TRUTHY = {"1", "true", "yes", "on"}
 
 
@@ -205,16 +209,21 @@ def routing_decision(event: dict[str, str]) -> str:
     return f"stop: unknown status {status!r}"
 
 
-def require_file_text(repo: Path, rel_path: str) -> str:
+def require_file_exists(repo: Path, rel_path: str) -> None:
     path = repo / rel_path
     if not path.is_file():
         raise AILoopError(f"required prompt context file is missing: {rel_path}")
-    return path.read_text(encoding="utf-8")
 
 
-def render_file_block(repo: Path, rel_path: str) -> str:
-    text = require_file_text(repo, rel_path)
-    return f'<file path="{rel_path}">\n{text.rstrip()}\n</file>'
+def render_instruction_manifest(repo: Path, prompt_files: Sequence[str]) -> str:
+    lines = [
+        "Read these repository instruction files from disk, in order, before acting.",
+        "They are listed here instead of inlined so local agent calls stay lean.",
+    ]
+    for index, rel_path in enumerate(prompt_files, start=1):
+        require_file_exists(repo, rel_path)
+        lines.append(f'{index}. <file path="{rel_path}" required="true" />')
+    return "\n".join(lines)
 
 
 def resolve_diff_base(repo: Path) -> str | None:
@@ -235,26 +244,78 @@ def git_output(repo: Path, args: Sequence[str]) -> str:
     return result.stdout.rstrip()
 
 
-def diff_context(repo: Path) -> str:
+def git_required_output(repo: Path, args: Sequence[str]) -> str:
+    return run_git(repo, args).stdout.strip()
+
+
+def branch_context(repo: Path) -> str:
     base = resolve_diff_base(repo)
     if not base:
-        return "No Git base ref could be resolved for diff context."
+        return "No Git base ref could be resolved for branch context."
 
-    merge_base = git_output(repo, ["merge-base", "HEAD", base]).strip() or base
-    stat = git_output(repo, ["diff", "--stat", f"{merge_base}..HEAD"])
-    diff = git_output(repo, ["diff", "--find-renames", f"{merge_base}..HEAD"])
+    base_sha = git_output(repo, ["rev-parse", base]).strip() or base
+    merge_base = git_output(repo, ["merge-base", "HEAD", base]).strip() or base_sha
+    head_sha = git_required_output(repo, ["rev-parse", "HEAD"])
+    diff_range = f"{merge_base}..{head_sha}"
+    name_status = git_output(repo, ["diff", "--name-status", diff_range])
+    stat = git_output(repo, ["diff", "--stat", diff_range])
+    if not name_status:
+        name_status = "(no committed file changes)"
     if not stat:
-        stat = "(no committed diff)"
-    if not diff:
-        diff = "(no committed diff)"
+        stat = "(no committed diff stat)"
     return f"""Base ref: {base}
-Merge base: {merge_base}
+Base ref SHA: {base_sha}
+Merge base SHA: {merge_base}
+Head SHA: {head_sha}
+Diff range: {diff_range}
+
+Changed files:
+{name_status}
 
 Diff stat:
 {stat}
 
-Diff:
-{diff}"""
+Suggested local inspection commands:
+- git diff --stat {diff_range}
+- git diff --name-status {diff_range}
+- git diff {diff_range}
+- git diff {diff_range} -- <path>
+
+Stale-state guard: if current HEAD differs from {head_sha} before acting, stop
+and report stale state instead of editing or reviewing."""
+
+
+def initial_prompt_from_log(log_text: str) -> str:
+    match = INITIAL_PROMPT_RE.search(log_text)
+    if not match:
+        return "(initial prompt section not found; read the full AI loop log)"
+    body = match.group("body").strip()
+    return body or "(initial prompt is empty)"
+
+
+def render_event_metadata(event: dict[str, str]) -> str:
+    return "\n".join(f"{key}: {value}" for key, value in event.items())
+
+
+def loop_context(log_path: Path) -> str:
+    log_text = log_path.read_text(encoding="utf-8")
+    parsed = parse_log_text(log_text)
+    latest = parsed.latest_event
+    latest_metadata = (
+        render_event_metadata(latest)
+        if latest
+        else "(no ai-loop-event blocks found; read the full AI loop log)"
+    )
+    return f"""AI loop log path: {log_path}
+
+Initial user prompt:
+{initial_prompt_from_log(log_text)}
+
+Latest event metadata:
+{latest_metadata}
+
+Read the full AI loop log from disk before appending to it or when prior
+conversation details are needed."""
 
 
 def compose_agent_prompt(
@@ -269,22 +330,21 @@ def compose_agent_prompt(
     if not prompt_files:
         raise AILoopError(f"unsupported agent role: {role}")
 
-    instruction_blocks = "\n\n".join(render_file_block(repo, rel_path) for rel_path in prompt_files)
+    instruction_manifest = render_instruction_manifest(repo, prompt_files)
     status = git_output(repo, ["status", "--short", "--branch"])
     branch = current_branch(repo)
-    head = git_output(repo, ["rev-parse", "--short", "HEAD"])
-    log_text = log_path.read_text(encoding="utf-8").rstrip()
+    head = git_required_output(repo, ["rev-parse", "HEAD"])
 
     return f"""# CatVox Local AI Loop Invocation
 
 You are the {role} agent for the CatVox local AI loop.
 Agent id: {agent}
 
-The repository and agent-specific instruction files below are authoritative.
-Follow them before using any task context.
+The repository and agent-specific instruction file manifest below is
+authoritative. Read those files before using any task context.
 
 <instruction_files>
-{instruction_blocks}
+{instruction_manifest}
 </instruction_files>
 
 <task_context>
@@ -301,11 +361,11 @@ AI loop log: {rel_log_path}
 
 ## AI Loop Log
 
-{log_text}
+{loop_context(log_path)}
 
-## Branch Diff Context
+## Branch Context
 
-{diff_context(repo)}
+{branch_context(repo)}
 </task_context>
 """
 

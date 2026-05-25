@@ -154,14 +154,16 @@ next_agent: codex
             task_context_index = prompt.index("<task_context>")
 
             for marker in [
-                '<file path="AGENTS.md">',
-                '<file path=".codex/AGENTS.md">',
-                '<file path="tools/ai-loop/prompts/common.md">',
-                '<file path="tools/ai-loop/prompts/developer.md">',
+                'path="AGENTS.md"',
+                'path=".codex/AGENTS.md"',
+                'path="tools/ai-loop/prompts/common.md"',
+                'path="tools/ai-loop/prompts/developer.md"',
             ]:
                 with self.subTest(marker=marker):
                     self.assertLess(prompt.index(marker), task_context_index)
-            self.assertNotIn('<file path="CLAUDE.md">', prompt)
+            self.assertNotIn('path="CLAUDE.md"', prompt)
+            self.assertNotIn("root agent instructions", prompt)
+            self.assertNotIn("codex instructions", prompt)
 
     def test_reviewer_prompt_puts_claude_instructions_before_task_context(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -192,14 +194,57 @@ next_agent: claude-code
             task_context_index = prompt.index("<task_context>")
 
             for marker in [
-                '<file path="AGENTS.md">',
-                '<file path="CLAUDE.md">',
-                '<file path="tools/ai-loop/prompts/common.md">',
-                '<file path="tools/ai-loop/prompts/reviewer.md">',
+                'path="AGENTS.md"',
+                'path="CLAUDE.md"',
+                'path="tools/ai-loop/prompts/common.md"',
+                'path="tools/ai-loop/prompts/reviewer.md"',
             ]:
                 with self.subTest(marker=marker):
                     self.assertLess(prompt.index(marker), task_context_index)
-            self.assertNotIn('<file path=".codex/AGENTS.md">', prompt)
+            self.assertNotIn('path=".codex/AGENTS.md"', prompt)
+            self.assertNotIn("root agent instructions", prompt)
+            self.assertNotIn("claude instructions", prompt)
+
+    def test_prompt_uses_sha_context_without_full_patch(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            repo = Path(tmp)
+            init_repo_with_ai_loop_tooling(repo)
+            run(["git", "switch", "-c", "feature/context-test"], repo)
+            (repo / "changed.txt").write_text("changed content\n", encoding="utf-8")
+            run(["git", "add", "changed.txt"], repo)
+            run(["git", "commit", "-m", "Add changed file"], repo)
+            log_path = repo / "docs/ai-loop/local-20260524-120000.md"
+            log_path.parent.mkdir(parents=True, exist_ok=True)
+            log_path.write_text(
+                """# AI Loop
+
+## Initial user prompt
+
+Review the changed file.
+
+<!-- ai-loop-event
+agent: codex
+role: developer
+cycle: 1
+status: needs_review
+next_agent: claude-code
+-->
+""",
+                encoding="utf-8",
+            )
+
+            prompt = ai_loop.compose_agent_prompt(
+                repo=repo,
+                log_path=log_path,
+                role="reviewer",
+                agent="claude-code",
+            )
+
+            self.assertIn("Head SHA:", prompt)
+            self.assertIn("Diff range:", prompt)
+            self.assertIn("Suggested local inspection commands:", prompt)
+            self.assertIn("changed.txt", prompt)
+            self.assertNotIn("+changed content", prompt)
 
 
 class AgentDispatchTests(unittest.TestCase):
@@ -256,8 +301,8 @@ next_agent: claude-code
 
             self.assertIn("dispatching reviewer agent claude-code", result.stdout)
             prompt = captured_prompt.read_text(encoding="utf-8")
-            self.assertLess(prompt.index('<file path="AGENTS.md">'), prompt.index("<task_context>"))
-            self.assertLess(prompt.index('<file path="CLAUDE.md">'), prompt.index("<task_context>"))
+            self.assertLess(prompt.index('path="AGENTS.md"'), prompt.index("<task_context>"))
+            self.assertLess(prompt.index('path="CLAUDE.md"'), prompt.index("<task_context>"))
             self.assertIn("status: needs_review", prompt)
 
 
