@@ -241,10 +241,33 @@ next_agent: claude-code
                 agent="claude-code",
             )
 
-            self.assertIn("Head SHA:", prompt)
-            self.assertIn("Diff range:", prompt)
+            base = ai_loop.resolve_diff_base(repo)
+            self.assertIsNotNone(base)
+            assert base is not None
+            head_sha = run(["git", "rev-parse", "HEAD"], repo).stdout.strip()
+            merge_base = run(["git", "merge-base", "HEAD", base], repo).stdout.strip()
+            diff_range = f"{merge_base}..{head_sha}"
+
+            self.assertIn("## Git Status (`git status --short --branch`)", prompt)
+            self.assertIn("Resolved base ref:", prompt)
+            self.assertIn("Resolved base ref SHA:", prompt)
+            self.assertIn(f"Resolved merge-base SHA: {merge_base}", prompt)
+            self.assertIn(f"Dispatch HEAD SHA: {head_sha}", prompt)
+            self.assertIn(f"Diff range: {diff_range}", prompt)
+            self.assertIn("Changed files (`git diff --name-status", prompt)
+            self.assertIn("Diff stat (`git diff --stat", prompt)
             self.assertIn("Suggested local inspection commands:", prompt)
+            self.assertIn(f"git diff {diff_range}", prompt)
+            self.assertIn(f"git diff {diff_range} -- <path>", prompt)
+            self.assertIn("git status --short --branch", prompt)
+            self.assertIn("Stale-state guard:", prompt)
+            self.assertIn("git rev-parse HEAD", prompt)
+            self.assertIn("Dispatch HEAD SHA above", prompt)
+            self.assertIn("stop and report stale state", prompt)
             self.assertIn("changed.txt", prompt)
+            self.assertIn("1 file changed", prompt)
+            self.assertNotIn("diff --git", prompt)
+            self.assertNotIn("@@", prompt)
             self.assertNotIn("+changed content", prompt)
 
 

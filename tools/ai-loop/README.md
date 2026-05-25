@@ -164,7 +164,8 @@ Required context for every agent:
 - `AGENTS.md`
 - `tools/ai-loop/prompts/common.md`
 - the current AI loop log
-- current Git status and relevant diff context
+- current Git status from `git status --short --branch`
+- compact branch context
 
 Required extra context by role:
 
@@ -176,16 +177,30 @@ The prompt order is:
 1. instruction file manifest:
    `AGENTS.md`, the role-specific overlay, common AI-loop prompt, and
    role-specific AI-loop prompt
-2. task context: current loop log path and compact state, Git status, base/head
-   SHAs, changed-file summary, and diff-stat summary
+2. task context: current loop log path and compact state, exact
+   `git status --short --branch` output, resolved base ref, base ref SHA,
+   merge-base SHA, dispatch HEAD SHA, changed-file summary, and diff-stat
+   summary
 
 If a CLI invocation cannot include those files reliably, the orchestrator must
 stop before dispatching the agent rather than run with incomplete process
 instructions.
 
-The prompt does not inline the full branch patch. Agents receive the resolved
-diff range and suggested commands such as `git diff <base>..<head>` and
-path-scoped diffs, then inspect only the details they need locally.
+The prompt does not inline the full branch patch by default. Agents receive the
+resolved diff range and suggested local inspection commands, including:
+
+```bash
+git status --short --branch
+git diff --stat <merge-base>..<head>
+git diff --name-status <merge-base>..<head>
+git diff <merge-base>..<head>
+git diff <merge-base>..<head> -- <path>
+```
+
+Agents should inspect only the details they need locally. Before acting, the
+agent must compare `git rev-parse HEAD` with the dispatch HEAD SHA in the
+prompt. If they differ, the agent must stop and report stale state instead of
+editing or reviewing.
 
 To inspect a prompt without invoking an agent:
 
