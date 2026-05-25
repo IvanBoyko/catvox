@@ -97,7 +97,7 @@ define catvox_require_env_path
 endef
 
 .PHONY: help doctor scripts-test \
-	setup-local-ai-loop ai-loop-start \
+	setup-local-ai-loop ai-loop-start ai-loop-answer \
 	ios-generate ios-build ios-build-only ios-test ios-test-only ios-ui-test ios-ui-test-only ios-ci ios-device-launch ios-device-console app-deploy \
 	ios-validate-env-config ios-validate-prod-env-config-structure ios-validate-env-config-drift ios-analytics-guard \
 	functions-install functions-build functions-test functions-deploy functions-integration functions-ci \
@@ -113,6 +113,7 @@ help:
 		'  make doctor                 Check core local CLI prerequisites' \
 		'  make setup-local-ai-loop    Configure local AI loop Git hook and prerequisites' \
 		'  make ai-loop-start          Start local AI loop with AI_LOOP_BRANCH and AI_LOOP_PROMPT' \
+		'  make ai-loop-answer         Answer an AI loop clarification with AI_LOOP_ANSWER' \
 		'' \
 		'  make ios-build              Generate project and build simulator app' \
 		'  make ios-test               Generate project and run iOS unit tests' \
@@ -160,6 +161,7 @@ help:
 		'  CATVOX_TFVARS_PATH=... overrides the local tfvars fallback path for App Check debug tokens' \
 		'  AI_LOOP_INVOKE_AGENTS=1 enables opt-in local AI-loop agent dispatch' \
 		'  AI_LOOP_AGENT_PROFILE=smoke|real selects cheaper smoke or stronger real local AI-loop commands' \
+		'  AI_LOOP_ANSWER="..." answers an AI-loop clarification via make ai-loop-answer' \
 		'  CATVOX_POSTHOG_PROJECT_ID=... overrides the xcconfig PostHog project ID for terraform/posthog/' \
 		'  CATVOX_POSTHOG_ORGANIZATION_ID=... overrides the xcconfig PostHog organization ID for terraform/posthog/' \
 		'  CATVOX_POSTHOG_API_HOST_NAME=us.posthog.com overrides the xcconfig PostHog Terraform API host name' \
@@ -203,6 +205,9 @@ setup-local-ai-loop:
 
 ai-loop-start:
 	@python3 tools/ai-loop/ai_loop.py start
+
+ai-loop-answer:
+	@python3 tools/ai-loop/ai_loop.py answer
 
 ios-generate:
 	@xcodegen generate

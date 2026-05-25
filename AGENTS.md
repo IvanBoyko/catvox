@@ -128,6 +128,7 @@ make help
 make doctor
 make setup-local-ai-loop
 make ai-loop-start AI_LOOP_BRANCH=<branch> AI_LOOP_PROMPT="<task>"
+make ai-loop-answer AI_LOOP_ANSWER="<answer>"
 make ios-build
 make ios-test
 make ios-ui-test
@@ -155,10 +156,12 @@ DEVICE_ID=<device-udid> make ios-device-launch
 The local Option B AI loop lives under `tools/ai-loop/` (see ADR-0023). Run
 `make setup-local-ai-loop` once per clone to configure repo-controlled hooks.
 `make ai-loop-start` bootstraps a local run and defaults to dry-run routing;
-agent invocation is opt-in via `AI_LOOP_INVOKE_AGENTS=1` or local Git config
-`ai-loop.invokeAgents=true`. Local agent command profiles are explicit:
-`AI_LOOP_AGENT_PROFILE=real` is the default for real work, while
-`AI_LOOP_AGENT_PROFILE=smoke` selects cheaper smoke-test defaults.
+`make ai-loop-answer` appends a structured human clarification answer and wakes
+the loop when the latest event is `awaiting_human`. Agent invocation is opt-in
+via `AI_LOOP_INVOKE_AGENTS=1` or local Git config `ai-loop.invokeAgents=true`.
+Local agent command profiles are explicit: `AI_LOOP_AGENT_PROFILE=real` is the
+default for real work, while `AI_LOOP_AGENT_PROFILE=smoke` selects cheaper
+smoke-test defaults.
 
 Environment-dependent app/backend/CI/Terraform non-secret values are parameterized through generic
 `CATVOX_*` variables such as `CATVOX_ENVIRONMENT`,

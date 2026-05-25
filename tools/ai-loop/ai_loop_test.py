@@ -188,6 +188,22 @@ next_agent: claude-code
                     event["next_agent"] = "codex"
                 self.assertEqual(router.routing_decision(event), expected)
 
+    def test_clarified_events_resume_the_named_agent(self) -> None:
+        router = ai_loop.StateRouter()
+        cases = {
+            "codex": "would dispatch developer agent: codex",
+            "claude-code": "would dispatch reviewer agent: claude-code",
+            "human": "stop: clarified event is missing a supported next_agent",
+        }
+        for next_agent, expected in cases.items():
+            with self.subTest(next_agent=next_agent):
+                self.assertEqual(
+                    router.routing_decision(
+                        {"status": "clarified", "next_agent": next_agent}
+                    ),
+                    expected,
+                )
+
     def test_bootstrap_log_contains_valid_metadata(self) -> None:
         log = ai_loop.render_bootstrap_log(
             run_id="local-20260524-120000",
@@ -679,6 +695,69 @@ class GitIntegrationTests(unittest.TestCase):
             parsed = ai_loop.parse_log_file(logs[0])
             self.assertEqual(parsed.latest_event["status"], "needs_fix")
             self.assertEqual(parsed.latest_event["next_agent"], "codex")
+            status = run(["git", "status", "--porcelain"], repo)
+            self.assertEqual(status.stdout, "")
+
+    def test_answer_appends_clarified_event_and_wakes_hook(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            repo = Path(tmp)
+            init_repo_with_ai_loop_tooling(repo)
+            script = repo / "tools/ai-loop/ai_loop.py"
+            run([sys.executable, str(script), "setup"], repo)
+
+            log_path = repo / "docs/ai-loop/local-20260524-120000.md"
+            log_path.parent.mkdir(parents=True)
+            log_path.write_text(
+                """# AI Loop
+
+## Initial user prompt
+
+Implement a clarification workflow.
+
+<!-- ai-loop-event
+agent: codex
+role: developer
+cycle: 1
+status: awaiting_human
+next_agent: human
+questions: q1,q2
+-->
+""",
+                encoding="utf-8",
+            )
+            run(["git", "add", "docs/ai-loop/local-20260524-120000.md"], repo)
+            run(["git", "commit", "-m", "[ai-loop] Codex: ask clarification"], repo)
+
+            result = run(
+                [
+                    sys.executable,
+                    str(script),
+                    "answer",
+                    "--log",
+                    str(log_path),
+                    "--answer",
+                    "q1 A, q2 B",
+                ],
+                repo,
+            )
+            output = result.stdout + result.stderr
+            self.assertIn(
+                "ai-loop dry-run (post-commit): would dispatch developer agent: codex",
+                output,
+            )
+            self.assertIn(
+                "appended human answer to docs/ai-loop/local-20260524-120000.md",
+                output,
+            )
+
+            parsed = ai_loop.parse_log_file(log_path)
+            self.assertEqual(parsed.latest_event["agent"], "human")
+            self.assertEqual(parsed.latest_event["status"], "clarified")
+            self.assertEqual(parsed.latest_event["next_agent"], "codex")
+            self.assertEqual(parsed.latest_event["questions"], "q1,q2")
+
+            commit_message = run(["git", "log", "-1", "--format=%B"], repo)
+            self.assertIn("[ai-loop] Human: answer q1,q2", commit_message.stdout)
             status = run(["git", "status", "--porcelain"], repo)
             self.assertEqual(status.stdout, "")
 

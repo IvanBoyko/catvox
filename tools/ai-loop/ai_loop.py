@@ -36,6 +36,8 @@ AGENT_FOR_ROLE = {
     "reviewer": "claude-code",
 }
 
+ROLE_FOR_AGENT = {agent: role for role, agent in AGENT_FOR_ROLE.items()}
+
 PROMPT_FILES_FOR_ROLE = {
     "developer": [
         "AGENTS.md",
@@ -310,6 +312,13 @@ def render_event_metadata(event: dict[str, str]) -> str:
     return "\n".join(f"{key}: {value}" for key, value in event.items())
 
 
+def repo_relative_path(repo: Path, path: Path) -> str:
+    try:
+        return path.resolve().relative_to(repo.resolve()).as_posix()
+    except ValueError as exc:
+        raise AILoopError(f"path is outside repository: {path}") from exc
+
+
 def loop_context(log_path: Path) -> str:
     log_text = log_path.read_text(encoding="utf-8")
     parsed = parse_log_text(log_text)
@@ -339,6 +348,11 @@ class StateRouter:
             role = STATUS_TO_ROUTE[status]
             agent = event.get("next_agent") or AGENT_FOR_ROLE[role]
             return Route(role=role, agent=agent)
+        if status == "clarified":
+            agent = event.get("next_agent", "")
+            role = ROLE_FOR_AGENT.get(agent)
+            if role:
+                return Route(role=role, agent=agent)
         return None
 
     def routing_decision(self, event: dict[str, str]) -> str:
@@ -346,6 +360,8 @@ class StateRouter:
         if route:
             return f"would dispatch {route.role} agent: {route.agent}"
         status = event.get("status", "")
+        if status == "clarified":
+            return "stop: clarified event is missing a supported next_agent"
         if status in STATUS_TO_STOP_REASON:
             return f"stop: {STATUS_TO_STOP_REASON[status]}"
         return f"stop: unknown status {status!r}"
@@ -631,6 +647,44 @@ next_agent: codex
 """
 
 
+def render_human_answer_event(
+    *,
+    answer: str,
+    questions: str,
+    cycle: str,
+    next_agent: str,
+    answered_at: str,
+) -> str:
+    display_time = display_now_local()
+    question_label = questions or "clarification"
+    metadata = {
+        "agent": "human",
+        "role": "owner",
+        "status": "clarified",
+        "next_agent": next_agent,
+        "answered_at": answered_at,
+    }
+    if cycle:
+        metadata["cycle"] = cycle
+    if questions:
+        metadata["questions"] = questions
+
+    return f"""
+## {display_time} - Human - Answer {question_label}
+
+Answer:
+{answer}
+
+Result:
+- status: clarified
+- next_agent: {next_agent}
+
+<!-- ai-loop-event
+{render_event_metadata(metadata)}
+-->
+"""
+
+
 def verify_tool(name: str, *, required: bool) -> str:
     path = shutil.which(name)
     if path:
@@ -707,6 +761,65 @@ def command_start(args: argparse.Namespace) -> int:
     )
     print(f"created {rel_log_path}")
     print(f"ai-loop run id: {run_id}")
+    return 0
+
+
+def command_answer(args: argparse.Namespace) -> int:
+    repo = Path(args.repo).resolve() if args.repo else repo_root_from_cwd()
+    git = GitContext(repo)
+    answer = args.answer or os.environ.get("AI_LOOP_ANSWER", "")
+    if not answer:
+        raise AILoopError("AI_LOOP_ANSWER or --answer is required")
+
+    git.ensure_clean_worktree()
+    log_path = (
+        Path(args.log).resolve() if args.log else git.latest_ai_loop_log_from_head()
+    )
+    rel_log_path = repo_relative_path(repo, log_path)
+    if not AI_LOOP_LOG_RE.match(rel_log_path):
+        raise AILoopError(f"not an AI loop log path: {rel_log_path}")
+
+    parsed = parse_log_file(log_path)
+    latest = parsed.latest_event
+    if not latest:
+        raise AILoopError(f"no ai-loop-event blocks found in {log_path}")
+    if latest.get("status") != "awaiting_human":
+        status = latest.get("status", "")
+        raise AILoopError(
+            "latest AI loop event must have status awaiting_human before "
+            f"answering; found {status!r}"
+        )
+
+    next_agent = (
+        args.next_agent
+        or os.environ.get("AI_LOOP_NEXT_AGENT", "")
+        or latest.get("resume_agent", "")
+        or latest.get("agent", "")
+    )
+    if next_agent == "human":
+        next_agent = ""
+    if next_agent not in ROLE_FOR_AGENT:
+        supported = ", ".join(sorted(ROLE_FOR_AGENT))
+        raise AILoopError(
+            "unable to determine which agent should resume after the answer; "
+            f"use --next-agent with one of: {supported}"
+        )
+
+    questions = args.questions or latest.get("questions", "")
+    event = render_human_answer_event(
+        answer=answer,
+        questions=questions,
+        cycle=latest.get("cycle", ""),
+        next_agent=next_agent,
+        answered_at=iso_now_local(),
+    )
+    with log_path.open("a", encoding="utf-8") as handle:
+        handle.write(event)
+
+    git.run(["add", rel_log_path], capture_output=True)
+    commit_subject = f"[ai-loop] Human: answer {questions or 'clarification'}"
+    git.run(["commit", "-m", commit_subject], capture_output=False)
+    print(f"appended human answer to {rel_log_path}")
     return 0
 
 
@@ -828,6 +941,23 @@ def build_parser() -> argparse.ArgumentParser:
     start.add_argument("--branch", help="feature branch to create or switch to")
     start.add_argument("--prompt", help="initial human prompt for the local loop")
     start.set_defaults(func=command_start)
+
+    answer = subparsers.add_parser(
+        "answer",
+        help="append a human clarification answer and resume the local loop",
+    )
+    answer.add_argument("--log", help="AI loop log path; defaults to latest log in HEAD")
+    answer.add_argument("--answer", help="human answer text")
+    answer.add_argument(
+        "--questions",
+        help="question ids being answered; defaults to latest event questions",
+    )
+    answer.add_argument(
+        "--next-agent",
+        choices=sorted(ROLE_FOR_AGENT),
+        help="agent to resume; defaults to the agent that asked for clarification",
+    )
+    answer.set_defaults(func=command_answer)
 
     cont = subparsers.add_parser("continue", help="continue the local AI loop")
     cont.add_argument("--trigger", default="manual", help="wake-up source")

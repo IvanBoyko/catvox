@@ -4,11 +4,13 @@ This directory contains the local AI loop for Option B from ADR-0023.
 
 Slice 1 created committed loop logs and dry-run routing. Slice 2 added
 role-aware prompt composition and optional local agent invocation for Codex and
-Claude Code. Slice 3 adds the first automatic reviewer handoff: when a
+Claude Code. Slice 3 added the first automatic reviewer handoff: when a
 developer invocation commits a `needs_review` event, the controller dispatches
-the reviewer once and then stops. Invocation remains opt-in so developers can
-validate routing without spending tokens or giving a local CLI write access by
-accident.
+the reviewer once and then stops. Slice 4 adds human clarification answers:
+when an agent stops with `awaiting_human`, `make ai-loop-answer` appends a
+structured `clarified` event and wakes the controller to resume the asking
+agent. Invocation remains opt-in so developers can validate routing without
+spending tokens or giving a local CLI write access by accident.
 
 ## Setup
 
@@ -80,6 +82,34 @@ When a developer-routed agent commits a `needs_review` event, that event is
 handed to Claude Code immediately. The reviewer may commit `clean`, `needs_fix`,
 `awaiting_human`, or another stop-state event. The controller does not yet
 dispatch the developer again after reviewer findings.
+
+## Answer Clarification
+
+If an agent appends an `awaiting_human` event, answer through the helper instead
+of editing the AI loop log manually:
+
+```bash
+make ai-loop-answer AI_LOOP_ANSWER="q1 A, q2 B - brief rationale"
+```
+
+The helper reads the latest AI loop log from `HEAD`, requires that the latest
+event is `awaiting_human`, appends a human `clarified` event, and commits it
+with:
+
+```text
+[ai-loop] Human: answer <question ids>
+```
+
+The hook then wakes the controller. By default it prints the dry-run routing
+decision; with invocation enabled it dispatches the agent that asked the
+clarification question. If the latest commit is not the relevant AI loop log,
+pass it explicitly:
+
+```bash
+python3 tools/ai-loop/ai_loop.py answer \
+  --log docs/ai-loop/local-YYYYMMDD-HHMMSS.md \
+  --answer "q1 A"
+```
 
 ## Agent Profiles
 
@@ -250,7 +280,8 @@ starting the subprocess so terminal and CI logs stay in causal order.
   automatic multi-cycle developer/reviewer looping is deferred.
 - No draft PR creation.
 - No `docs/ai-loop/pr-XXXX.md` bootstrap yet.
-- No human answer command yet.
+- Human answers resume the asking agent, but broader multi-cycle routing after
+  reviewer findings is still deferred.
 
 ADR-0023 requires committed PR-numbered loop logs for the MVP. The current
 implementation still uses a local run ID first so parser, hook, routing, and

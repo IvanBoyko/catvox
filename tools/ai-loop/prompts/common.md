@@ -15,7 +15,11 @@ You are participating in the CatVox local AI implementation/review loop.
 - Do not guess on blocking product, architecture, security, scope, or
   implementation decisions.
 - If clarification is needed, ask all independent blocking questions in one
-  event and set `status: awaiting_human` and `next_agent: human`.
+  event and set `status: awaiting_human` and `next_agent: human`. Include a
+  comma-separated `questions:` metadata field so the human answer can link back
+  to the questions being answered.
+- After a human answer event with `status: clarified`, resume from the answer
+  and the prior question event before continuing.
 - Respect the configured cycle limit.
 - Developer events start or advance a cycle when handing work to the reviewer.
   Reviewer events use the same cycle number as the developer event they
