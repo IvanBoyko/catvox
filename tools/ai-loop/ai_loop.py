@@ -107,6 +107,8 @@ INITIAL_PROMPT_RE = re.compile(
 )
 TRUTHY = {"1", "true", "yes", "on"}
 DEFAULT_MAX_CYCLES = 3
+DEFAULT_AGENT_TIMEOUT_SECONDS = 1800.0
+AGENT_TIMEOUT_ENV = "AI_LOOP_AGENT_TIMEOUT_SECONDS"
 
 
 class AILoopError(RuntimeError):
@@ -136,6 +138,7 @@ class AgentInvocation:
     profile: str
     command: list[str]
     prompt: str
+    timeout_seconds: float
 
 
 def repo_root_from_cwd() -> Path:
@@ -525,6 +528,36 @@ class AgentDispatcher:
             return default
         return os.environ.get(env_name, default).strip()
 
+    @staticmethod
+    def normalize_timeout_seconds(raw_timeout: str) -> float:
+        try:
+            timeout_seconds = float(raw_timeout)
+        except ValueError as exc:
+            raise AILoopError(
+                f"unsupported AI loop agent timeout {raw_timeout!r}; "
+                "expected a positive number of seconds"
+            ) from exc
+        if timeout_seconds <= 0:
+            raise AILoopError(
+                f"unsupported AI loop agent timeout {raw_timeout!r}; "
+                "expected a positive number of seconds"
+            )
+        return timeout_seconds
+
+    def selected_timeout_seconds(self) -> float:
+        env_timeout = os.environ.get(AGENT_TIMEOUT_ENV, "").strip()
+        if env_timeout:
+            return self.normalize_timeout_seconds(env_timeout)
+
+        config_timeout = self.git.run(
+            ["config", "--get", "ai-loop.agentTimeoutSeconds"],
+            check=False,
+        ).stdout.strip()
+        if config_timeout:
+            return self.normalize_timeout_seconds(config_timeout)
+
+        return DEFAULT_AGENT_TIMEOUT_SECONDS
+
     def command_parts_from_template(self, template: str) -> list[str]:
         return [part.format(repo=str(self.git.repo)) for part in shlex.split(template)]
 
@@ -587,6 +620,7 @@ class AgentDispatcher:
                 role=route.role,
                 agent=route.agent,
             ),
+            timeout_seconds=self.selected_timeout_seconds(),
         )
 
     def should_invoke(self, args: argparse.Namespace) -> bool:
@@ -608,7 +642,8 @@ class AgentDispatcher:
             "ai-loop invoke: "
             f"dispatching {invocation.role} agent {invocation.agent} "
             f"with {invocation.profile} profile: "
-            f"{shlex.join(invocation.command)}",
+            f"{shlex.join(invocation.command)} "
+            f"(timeout: {invocation.timeout_seconds:g}s)",
             flush=True,
         )
         try:
@@ -618,10 +653,16 @@ class AgentDispatcher:
                 input=invocation.prompt,
                 text=True,
                 check=False,
+                timeout=invocation.timeout_seconds,
             )
         except FileNotFoundError as exc:
             raise AILoopError(
                 f"{invocation.agent} command not found: {invocation.command[0]}"
+            ) from exc
+        except subprocess.TimeoutExpired as exc:
+            raise AILoopError(
+                f"{invocation.agent} exceeded timeout of "
+                f"{invocation.timeout_seconds:g}s; loop stopped"
             ) from exc
         return completed.returncode
 
@@ -962,7 +1003,7 @@ def run_agent_loop(
     profile: str,
     trigger: str,
 ) -> None:
-    has_dispatched = False
+    is_chained_dispatch = False
     while True:
         parsed = parse_log_file(log_path)
         latest = parsed.latest_event
@@ -972,11 +1013,11 @@ def run_agent_loop(
         route = router.route_for_event(latest)
         decision = routing_decision_for_log(router, parsed, latest)
         if not route:
-            print_stop_decision(trigger, decision, has_dispatched)
+            print_stop_decision(trigger, decision, is_chained_dispatch)
             return
 
         if should_stop_for_cycle_cap(parsed, latest, route):
-            print_stop_decision(trigger, decision, has_dispatched)
+            print_stop_decision(trigger, decision, is_chained_dispatch)
             append_max_cycles_reached_event(
                 git=git,
                 log_path=log_path,
@@ -985,7 +1026,7 @@ def run_agent_loop(
             )
             return
 
-        if has_dispatched:
+        if is_chained_dispatch:
             print(
                 f"ai-loop handoff: dispatching {route.role} agent: {route.agent}",
                 flush=True,
@@ -1002,11 +1043,15 @@ def run_agent_loop(
 
         git.ensure_dispatch_safe_worktree()
         log_path = git.latest_ai_loop_log_from_head()
-        has_dispatched = True
+        is_chained_dispatch = True
 
 
-def print_stop_decision(trigger: str, decision: str, has_dispatched: bool) -> None:
-    if has_dispatched:
+def print_stop_decision(
+    trigger: str,
+    decision: str,
+    is_chained_dispatch: bool,
+) -> None:
+    if is_chained_dispatch:
         print(f"ai-loop handoff: {decision}", flush=True)
     else:
         print(f"ai-loop ({trigger}): {decision}", flush=True)

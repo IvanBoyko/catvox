@@ -512,6 +512,29 @@ class CommandProfileTests(unittest.TestCase):
                 profile = agent_dispatcher(repo).selected_profile(args)
         self.assertEqual(profile, "smoke")
 
+    def test_agent_timeout_can_come_from_env(self) -> None:
+        repo = Path("/tmp/repo")
+        with patch.dict(os.environ, {"AI_LOOP_AGENT_TIMEOUT_SECONDS": "12.5"}):
+            timeout = agent_dispatcher(repo).selected_timeout_seconds()
+
+        self.assertEqual(timeout, 12.5)
+
+    def test_agent_timeout_can_come_from_git_config(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            repo = Path(tmp)
+            init_repo_with_ai_loop_tooling(repo)
+            run(["git", "config", "ai-loop.agentTimeoutSeconds", "7"], repo)
+            with patch.dict(os.environ, {}, clear=True):
+                timeout = agent_dispatcher(repo).selected_timeout_seconds()
+
+        self.assertEqual(timeout, 7.0)
+
+    def test_reject_invalid_agent_timeout(self) -> None:
+        repo = Path("/tmp/repo")
+        with patch.dict(os.environ, {"AI_LOOP_AGENT_TIMEOUT_SECONDS": "0"}):
+            with self.assertRaises(ai_loop.AILoopError):
+                agent_dispatcher(repo).selected_timeout_seconds()
+
 
 class AgentDispatchTests(unittest.TestCase):
     def test_continue_can_invoke_reviewer_with_composed_prompt_on_stdin(self) -> None:
@@ -634,6 +657,60 @@ next_agent: claude-code
                 "reviewer agent exited without committing an AI loop event",
                 result.stderr,
             )
+
+    def test_invoked_agent_timeout_stops_loop(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            repo = root / "repo"
+            repo.mkdir()
+            init_repo_with_ai_loop_tooling(repo)
+            log_path = write_committed_log(
+                repo,
+                """# AI Loop
+
+<!-- ai-loop-event
+agent: codex
+role: developer
+cycle: 1
+status: needs_review
+next_agent: claude-code
+-->
+""",
+            )
+
+            fake_agent = root / "fake_agent.py"
+            fake_agent.write_text(
+                "import sys, time\nsys.stdin.read()\ntime.sleep(5)\n",
+                encoding="utf-8",
+            )
+            env = os.environ.copy()
+            env["AI_LOOP_CLAUDE_COMMAND"] = f"{sys.executable} {fake_agent}"
+            env["AI_LOOP_AGENT_TIMEOUT_SECONDS"] = "0.1"
+
+            script = repo / "tools/ai-loop/ai_loop.py"
+            result = run(
+                [
+                    sys.executable,
+                    str(script),
+                    "continue",
+                    "--trigger",
+                    "test",
+                    "--log",
+                    str(log_path),
+                    "--invoke",
+                ],
+                repo,
+                check=False,
+                env=env,
+            )
+
+            self.assertEqual(result.returncode, 1)
+            self.assertIn(
+                "claude-code exceeded timeout of 0.1s; loop stopped",
+                result.stderr,
+            )
+            parsed = ai_loop.parse_log_file(log_path)
+            self.assertEqual(parsed.latest_event["status"], "needs_review")
 
     def test_dispatch_loop_runs_until_reviewer_clean(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

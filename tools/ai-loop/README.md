@@ -181,6 +181,19 @@ AI_LOOP_CLAUDE_REAL_COMMAND='claude --print --input-format text --model opus --e
 AI_LOOP_CLAUDE_SMOKE_COMMAND='claude --print --input-format text --model haiku --effort low'
 ```
 
+Each local agent invocation has a timeout so a hung CLI cannot block the
+controller indefinitely. The default is 1800 seconds. Override it per shell:
+
+```bash
+AI_LOOP_AGENT_TIMEOUT_SECONDS=900 python3 tools/ai-loop/ai_loop.py continue --invoke
+```
+
+Or set it for this clone:
+
+```bash
+git config ai-loop.agentTimeoutSeconds 900
+```
+
 ## Metadata Format
 
 Machine-readable state lives in HTML comment blocks with key-value lines:
