@@ -298,26 +298,28 @@ def branch_context(repo: Path) -> str:
         name_status = "(no committed file changes)"
     if not stat:
         stat = "(no committed diff stat)"
-    return f"""Base ref: {base}
-Base ref SHA: {base_sha}
-Merge base SHA: {merge_base}
-Head SHA: {head_sha}
+    return f"""Resolved base ref: {base}
+Resolved base ref SHA: {base_sha}
+Resolved merge-base SHA: {merge_base}
+Dispatch HEAD SHA: {head_sha}
 Diff range: {diff_range}
 
-Changed files:
+Changed files (`git diff --name-status {diff_range}`):
 {name_status}
 
-Diff stat:
+Diff stat (`git diff --stat {diff_range}`):
 {stat}
 
 Suggested local inspection commands:
+- git status --short --branch
 - git diff --stat {diff_range}
 - git diff --name-status {diff_range}
 - git diff {diff_range}
 - git diff {diff_range} -- <path>
 
-Stale-state guard: if current HEAD differs from {head_sha} before acting, stop
-and report stale state instead of editing or reviewing."""
+Stale-state guard: before editing or reviewing, run `git rev-parse HEAD`. If
+it differs from the Dispatch HEAD SHA above, stop and report stale state instead
+of editing or reviewing."""
 
 
 def initial_prompt_from_log(log_text: str) -> str:
@@ -390,7 +392,7 @@ Branch: {branch}
 HEAD: {head}
 AI loop log: {rel_log_path}
 
-## Git Status
+## Git Status (`git status --short --branch`)
 
 {status or "(clean)"}
 
