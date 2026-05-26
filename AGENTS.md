@@ -370,6 +370,7 @@ Use `docs/CREATE_NEW_ENVIRONMENT.md` and `make environment-create` for new envir
 - The Terraform pipeline posts a plan comment on every PR — review it before merging.
 - Before final review or merge, check all PR bot / AI review findings and explicitly triage each one as fix, reject with reasoning, or defer.
 - Treat bot findings touching concurrency, cancellation, state ownership, persistence, navigation, or other direct user-facing behavior as high-signal by default until disproven.
+- When opening a follow-up PR to address bot findings on an already-merged PR, read the full original PR diff — not only the lines the bot quoted — before settling on the fix. The bot's quoted hunk is the symptom site; the surrounding context is where you classify the class of weakness (input-validation gap, trust boundary, defense-in-depth) and decide whether the symptom-level fix needs a paired follow-up issue for the broader pattern. Example: in PR #85 the missing-cycle-field fix shipped in the PR, while the underlying "controller trusts agent-self-reported metadata" pattern landed as a separate issue (#84) so the symptom fix did not absorb a scope-expanding refactor.
 - Before opening or finalizing a PR, compare the branch against `origin/main` and rebase or merge as needed so PR review and conflict resolution happen before the final merge step.
 - Use descriptive branch names: `feature/`, `fix/`, `infra/`.
 
