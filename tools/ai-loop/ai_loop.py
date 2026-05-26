@@ -358,7 +358,19 @@ def max_cycles_for_log(parsed: ParsedLog) -> int:
 
 
 def cycle_for_event(event: dict[str, str]) -> int:
-    raw_value = event.get("cycle", "0").strip() or "0"
+    """Return the cycle number from a cap-relevant event.
+
+    The cycle field is required on any event the cycle cap consults
+    (currently reviewer ``needs_fix`` events). Treating a missing
+    ``cycle:`` as zero would silently bypass the cap, so this helper
+    raises ``AILoopError`` rather than defaulting.
+    """
+    raw_value = event.get("cycle", "").strip()
+    if not raw_value:
+        status = event.get("status", "")
+        raise AILoopError(
+            f"event with status {status!r} is missing required cycle metadata"
+        )
     try:
         cycle = int(raw_value)
     except ValueError as exc:

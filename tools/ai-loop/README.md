@@ -90,6 +90,16 @@ configured cap and the reviewer still commits `needs_fix`, the controller
 commits a `max_cycles_reached` event instead of dispatching another developer
 turn.
 
+The cycle cap only fires on reviewer `needs_fix` → developer transitions. A
+human `clarified` event that re-dispatches the asking agent is intentionally
+**not** counted against `max_cycles`: answering a clarification question is the
+human's way to grant the loop more runway, and the controller respects that.
+Practically, a clarification round can extend execution past the configured cap
+until the next reviewer `needs_fix` is committed at or above the cap. The
+controller-side cycle accounting itself remains the responsibility of the
+agents that emit `cycle:` metadata; see issue #84 for the broader hardening
+plan to derive that count from log history instead.
+
 ## Answer Clarification
 
 If an agent appends an `awaiting_human` event, answer through the helper instead
