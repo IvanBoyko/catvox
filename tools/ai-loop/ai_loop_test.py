@@ -575,10 +575,18 @@ class CommandProfileTests(unittest.TestCase):
         self.assertEqual(timeout, 7.0)
 
     def test_reject_invalid_agent_timeout(self) -> None:
+        # subprocess.run rejects non-finite timeouts at runtime with an
+        # unwrapped OverflowError (and NaN comparisons are False either way,
+        # so the previous <= 0 guard let NaN slip through). All non-positive
+        # and non-finite values must be rejected here as AILoopError.
         repo = Path("/tmp/repo")
-        with patch.dict(os.environ, {"AI_LOOP_AGENT_TIMEOUT_SECONDS": "0"}):
-            with self.assertRaises(ai_loop.AILoopError):
-                agent_dispatcher(repo).selected_timeout_seconds()
+        cases = ["0", "-1", "not-a-number", "inf", "-inf", "nan", "Infinity", "NaN"]
+        for raw in cases:
+            with self.subTest(raw=raw):
+                with patch.dict(os.environ, {"AI_LOOP_AGENT_TIMEOUT_SECONDS": raw}):
+                    with self.assertRaises(ai_loop.AILoopError) as ctx:
+                        agent_dispatcher(repo).selected_timeout_seconds()
+                self.assertIn("positive, finite number of seconds", str(ctx.exception))
 
 
 class AgentDispatchTests(unittest.TestCase):

@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import math
 import os
 import re
 import shlex
@@ -547,12 +548,15 @@ class AgentDispatcher:
         except ValueError as exc:
             raise AILoopError(
                 f"unsupported AI loop agent timeout {raw_timeout!r}; "
-                "expected a positive number of seconds"
+                "expected a positive, finite number of seconds"
             ) from exc
-        if timeout_seconds <= 0:
+        # subprocess.run rejects non-finite timeouts at runtime with
+        # OverflowError / undefined behavior on NaN, so reject inf / -inf /
+        # NaN here and wrap the failure as AILoopError instead.
+        if not math.isfinite(timeout_seconds) or timeout_seconds <= 0:
             raise AILoopError(
                 f"unsupported AI loop agent timeout {raw_timeout!r}; "
-                "expected a positive number of seconds"
+                "expected a positive, finite number of seconds"
             )
         return timeout_seconds
 
