@@ -542,6 +542,8 @@ When posting verification of fixes, explicitly distinguish what was checked by r
 
 When recommending test additions, include an explicit "not worth adding" list. Test-coverage prompts without an explicit non-goals list reliably trigger sprawl — call out what's already covered by integration tests, what's framework/platform behavior, and what's trivial composition the suite would re-verify for no gain.
 
+When reviewing or designing tests for a flow that produces *both* local and remote state — `git push` + `gh pr create`, S3 upload + database row, file write + API call, etc. — assert the final **remote state matches the final local state**, not just that the remote call ran. "Did push run" and "is `origin/<branch>` tip the same as local `HEAD`" are different assertions; the first can pass while the second silently fails. Worked example: PR #86's happy-path test asserted `origin/<branch>` appeared in `git branch -r` and that `gh pr edit --add-label` was called — both true — but the rename commit produced after `gh pr create` was never pushed, so the remote PR had `commits=1` while local had two. Caught only by the live smoke (PR #87 inspection); fixed in PR #88 by adding a HEAD-parity assertion alongside the missing push.
+
 For iOS App Check, Firebase, or async/state-related findings, follow the failure-source classification and Release-leak audit documented earlier in this section (§ Product Feature Workflow) and in § Config / Infrastructure Change Workflow.
 
 ### PR Retrospective
