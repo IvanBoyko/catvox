@@ -1371,7 +1371,14 @@ class GitIntegrationTests(unittest.TestCase):
                 repo,
             )
             start_output = start.stdout + start.stderr
-            self.assertIn("ai-loop dry-run (post-commit): would dispatch developer agent: codex", start_output)
+            # The bootstrap holds the ai-loop lock, so the post-commit
+            # hook fired by the `[ai-loop] Human: start` commit must
+            # see "lock exists" and skip. Without this guard the hook
+            # used to dispatch the agent against the transient log
+            # state — see the user-reported smoke failure on PR #90
+            # where this fired even when codex was unavailable.
+            self.assertIn("lock exists, skipping continuation", start_output)
+            self.assertNotIn("would dispatch", start_output)
 
             branch = run(["git", "branch", "--show-current"], repo)
             self.assertEqual(branch.stdout.strip(), "feature/ai-loop-test")
@@ -1383,6 +1390,30 @@ class GitIntegrationTests(unittest.TestCase):
 
             commit_message = run(["git", "log", "-1", "--format=%B"], repo)
             self.assertIn("[ai-loop] Human: start", commit_message.stdout)
+
+            # Verify the lock was released when command_start returned.
+            # A subsequent [ai-loop] commit's post-commit hook must
+            # now run normally and print the dry-run routing decision.
+            # If the lock had leaked, this fire would also print
+            # "lock exists" instead, leaving the loop wedged.
+            with logs[0].open("a", encoding="utf-8") as handle:
+                handle.write("\n<!-- regression marker -->\n")
+            run(["git", "add", str(logs[0].relative_to(repo))], repo)
+            post_start = run(
+                [
+                    "git",
+                    "commit",
+                    "-m",
+                    "[ai-loop] Human: regression marker",
+                ],
+                repo,
+            )
+            post_start_output = post_start.stdout + post_start.stderr
+            self.assertIn(
+                "ai-loop dry-run (post-commit): would dispatch developer agent: codex",
+                post_start_output,
+            )
+            self.assertNotIn("lock exists", post_start_output)
 
     def test_hook_invocation_hands_developer_to_reviewer_under_lock(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -1595,12 +1626,47 @@ questions: q1,q2
                 linked,
             )
             start_output = start.stdout + start.stderr
-            self.assertIn("ai-loop dry-run (post-commit): would dispatch developer agent: codex", start_output)
-            self.assertNotIn("lock exists, skipping", start_output)
+            # The bootstrap holds the ai-loop lock (now keyed off the
+            # real gitdir resolved via `git rev-parse --git-dir`, which
+            # in a linked worktree points to .git/worktrees/<name>/),
+            # so the post-commit hook fired during bootstrap must see
+            # "lock exists" and skip. That this works for the linked
+            # worktree as well confirms the lock resolution honors the
+            # real git dir rather than the worktree's stub .git file.
+            self.assertIn("lock exists, skipping continuation", start_output)
+            self.assertNotIn("would dispatch", start_output)
 
             git_dir = run(["git", "rev-parse", "--git-dir"], linked).stdout.strip()
             self.assertNotEqual(git_dir, ".git")
             self.assertTrue(git_dir)
+
+            # Verify the lock was released after bootstrap by making a
+            # follow-up [ai-loop] commit in the linked worktree and
+            # confirming its hook fire runs the dry-run dispatch path
+            # rather than skipping. If `_acquire_ai_loop_lock` had
+            # resolved the git dir incorrectly (e.g., used `.git`
+            # relative path inside the worktree), the lock would have
+            # leaked into the worktree's stub .git file and broken
+            # follow-up hook fires.
+            log_path = sorted((linked / "docs/ai-loop").glob("local-*.md"))[0]
+            with log_path.open("a", encoding="utf-8") as handle:
+                handle.write("\n<!-- regression marker -->\n")
+            run(["git", "add", str(log_path.relative_to(linked))], linked)
+            post_start = run(
+                [
+                    "git",
+                    "commit",
+                    "-m",
+                    "[ai-loop] Human: regression marker",
+                ],
+                linked,
+            )
+            post_start_output = post_start.stdout + post_start.stderr
+            self.assertIn(
+                "ai-loop dry-run (post-commit): would dispatch developer agent: codex",
+                post_start_output,
+            )
+            self.assertNotIn("lock exists", post_start_output)
 
 
 class PlaceholderRenderTests(unittest.TestCase):
@@ -2139,6 +2205,125 @@ class PrBootstrapTests(unittest.TestCase):
             # No pr-*.md created
             pr_logs = list((repo / "docs/ai-loop").glob("pr-*.md"))
             self.assertEqual(pr_logs, [])
+
+    def test_invoke_agents_dispatches_once_after_bootstrap(self) -> None:
+        """Regression for the user-reported smoke failure on PR #90.
+
+        When ``AI_LOOP_INVOKE_AGENTS=1`` is set and the post-commit
+        hook is installed, ``make ai-loop-start`` previously fired the
+        hook between bootstrap commits — once after
+        ``[ai-loop] Human: start local-...`` and once after
+        ``[ai-loop] Human: bootstrap pr-NNNN``. Each fire dispatched
+        the developer agent against transient log state. The first
+        dispatch operated on the pre-rename ``local-*.md`` log whose
+        content is about to be overwritten by the rename step; on
+        success the agent's commit was silently lost, on failure (e.g.
+        codex usage limit) it just wasted an invocation. The fix is
+        to acquire the same ``.git/ai-loop.lock`` the hook uses for
+        the entire bootstrap and dispatch explicitly at the end —
+        single controlled invocation.
+
+        This test verifies:
+        - bootstrap completes (PR created, branch pushed, label).
+        - the fake developer agent is called **exactly once**, not
+          zero (lock leaked → explicit dispatch never fired) and not
+          twice (lock not held → hook fired during bootstrap).
+        - the single invocation operated on the renamed
+          ``pr-NNNN.md`` log, not on the pre-rename ``local-*.md``,
+          confirming the dispatch happened after the rename rather
+          than via the first bootstrap hook fire.
+        """
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            repo = root / "repo"
+            origin = root / "origin.git"
+            repo.mkdir()
+            init_repo_with_bare_origin(repo, origin)
+
+            # Install the post-commit hook. Without this the lock
+            # check below proves nothing — the test must exercise
+            # the hook firing path that would have dispatched
+            # without the lock.
+            script = repo / "tools/ai-loop/ai_loop.py"
+            run([sys.executable, str(script), "setup"], repo)
+
+            shim = root / "gh_shim.py"
+            state_dir = root / "gh_state"
+            write_gh_shim(shim)
+
+            fake_agent = root / "fake_agent.py"
+            calls_path = root / "agent_calls.txt"
+            sequence_path = root / "agent_sequence.txt"
+            # Single dispatch terminating in awaiting_human so the
+            # explicit run_agent_loop returns after one agent call
+            # without needing a reviewer turn. `awaiting_human` is
+            # not in TERMINAL_FINALIZE_STATUSES, so finalize is also
+            # a no-op — keeps the assertion surface tight.
+            sequence_path.write_text(
+                "developer|1|awaiting_human|\n", encoding="utf-8"
+            )
+            write_fake_sequence_agent(fake_agent)
+
+            env = self._shim_env(state_dir, shim)
+            env["AI_LOOP_INVOKE_AGENTS"] = "1"
+            env["AI_LOOP_CODEX_COMMAND"] = (
+                f"{sys.executable} {fake_agent} developer "
+                f"{calls_path} {sequence_path}"
+            )
+
+            result = run(
+                [
+                    sys.executable,
+                    str(script),
+                    "start",
+                    "--branch",
+                    "feature/pr-bootstrap-invoke",
+                    "--prompt",
+                    "Implement issue under invoke=1",
+                ],
+                repo,
+                env=env,
+            )
+
+            output = result.stdout + result.stderr
+
+            # Bootstrap completed.
+            self.assertIn("created draft PR #1", output)
+            self.assertIn("renamed to docs/ai-loop/pr-0001.md", output)
+            self.assertIn("applied label 'ai-loop' to PR #1", output)
+
+            # Hook fired during bootstrap commits but was suppressed
+            # by the lock — assert the suppression message appears
+            # (and the dispatch decision does NOT appear from a hook
+            # fire, since the hook never reached the dispatch path
+            # while the lock was held).
+            self.assertIn("lock exists, skipping continuation", output)
+
+            # The fake developer agent was dispatched exactly once
+            # via the explicit run_agent_loop after bootstrap. Zero
+            # would mean the explicit dispatch path didn't fire
+            # (lock leaked or should_invoke missed the env var).
+            # Two would mean the lock didn't suppress one of the
+            # bootstrap hook fires.
+            self.assertTrue(calls_path.exists())
+            self.assertEqual(
+                calls_path.read_text(encoding="utf-8").splitlines(),
+                ["developer"],
+            )
+
+            # The one invocation must have operated on the renamed
+            # pr-NNNN.md log. Verify by inspecting the committed log:
+            # the fake event's agent metadata is committed against
+            # the file the agent was given.
+            pr_log = repo / "docs/ai-loop/pr-0001.md"
+            self.assertTrue(pr_log.exists())
+            parsed = ai_loop.parse_log_file(pr_log)
+            self.assertEqual(parsed.latest_event["status"], "awaiting_human")
+            self.assertEqual(parsed.latest_event["agent"], "codex")
+
+            # No stray local-*.md file (the rename step ran cleanly).
+            local_logs = list((repo / "docs/ai-loop").glob("local-*.md"))
+            self.assertEqual(local_logs, [])
 
 
 class SelectCreatePrTests(unittest.TestCase):

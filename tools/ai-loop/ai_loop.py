@@ -998,6 +998,46 @@ class GhClient:
         return True
 
 
+def _resolve_git_dir(git: GitContext) -> Path:
+    git_dir_value = git.required_output(["rev-parse", "--git-dir"]).strip()
+    git_dir = Path(git_dir_value)
+    if not git_dir.is_absolute():
+        git_dir = git.repo / git_dir
+    return git_dir
+
+
+def _acquire_ai_loop_lock(git: GitContext) -> Path:
+    """Acquire the ai-loop lock shared with the post-commit hook.
+
+    Used by ``command_start`` to bracket the bootstrap so the
+    post-commit hook fires during the bootstrap commits all hit the
+    same lock and exit early without dispatching the agent. Without
+    this, the first bootstrap commit dispatches against the
+    pre-rename ``local-*.md`` log (whose contents are about to be
+    overwritten by the rename step) and the second dispatches a
+    redundant second invocation — both wasteful, and the first
+    actively loses the agent's commit on success.
+    """
+    lock_dir = _resolve_git_dir(git) / "ai-loop.lock"
+    try:
+        lock_dir.mkdir(exist_ok=False)
+    except FileExistsError as exc:
+        raise AILoopError(
+            f"ai-loop.lock already exists at {lock_dir}; another loop run "
+            "is in progress, or a previous run failed to release the lock. "
+            "Confirm no other ai-loop process is running and remove the "
+            "lock directory manually before retrying."
+        ) from exc
+    return lock_dir
+
+
+def _release_ai_loop_lock(lock_dir: Path) -> None:
+    try:
+        lock_dir.rmdir()
+    except OSError:
+        pass
+
+
 def select_create_pr(git: GitContext, args: argparse.Namespace) -> bool:
     """Decide whether `start` should bootstrap a draft PR.
 
@@ -1484,90 +1524,135 @@ def command_start(args: argparse.Namespace) -> int:
                 f"{branch!r}; close or reuse it before bootstrapping a new loop"
             )
 
-    run_id = make_run_id()
-    rel_log_path = f"docs/ai-loop/{run_id}.md"
-    log_path = repo / rel_log_path
-    if log_path.exists():
-        raise AILoopError(f"AI loop log already exists: {rel_log_path}")
-    log_path.parent.mkdir(parents=True, exist_ok=True)
-    started_at = iso_now_local()
-    display_time = display_now_local()
-    log_path.write_text(
-        render_bootstrap_log(
-            run_id=run_id,
-            log_path=rel_log_path,
-            prompt=prompt,
-            repo=git.repo_name(),
-            branch=git.current_branch(),
-            started_at=started_at,
-            display_time=display_time,
-        ),
-        encoding="utf-8",
-    )
-
-    git.run(["add", rel_log_path], capture_output=True)
-    git.run(
-        ["commit", "-m", f"[ai-loop] Human: start {run_id}"],
-        capture_output=False,
-    )
-    print(f"created {rel_log_path}")
-    print(f"ai-loop run id: {run_id}")
-
-    if not create_pr:
-        return 0
-
-    assert gh is not None
-    git.push_branch(branch)
-    pr_number = gh.create_draft_pr(
-        title=placeholder_pr_title(prompt),
-        body=placeholder_pr_body(branch),
-        base="main",
-        head=branch,
-    )
-    print(f"created draft PR #{pr_number}")
-
-    new_rel_log_path = pr_log_relpath(pr_number)
-    new_log_path = repo / new_rel_log_path
-    if new_log_path.exists():
-        raise AILoopError(
-            f"PR-numbered log already exists: {new_rel_log_path}; "
-            "loop bootstrap cannot rename onto an existing file"
+    # Hold the same lock the post-commit hook uses for the entire
+    # bootstrap. Every `[ai-loop]` commit below would otherwise fire
+    # the hook in-process and dispatch the routed agent against
+    # transient log state — the first hook fire sees the local-*.md
+    # log just before the rename step rewrites it (silently losing any
+    # commit the agent made), and even when the agent is unavailable
+    # the hook still wastes an invocation attempt. With the lock held
+    # here, all nested hook fires during bootstrap commits skip
+    # immediately. After bootstrap completes we dispatch the agent
+    # explicitly (see below) so auto-start is preserved without the
+    # bug.
+    lock_dir = _acquire_ai_loop_lock(git)
+    try:
+        run_id = make_run_id()
+        rel_log_path = f"docs/ai-loop/{run_id}.md"
+        log_path = repo / rel_log_path
+        if log_path.exists():
+            raise AILoopError(f"AI loop log already exists: {rel_log_path}")
+        log_path.parent.mkdir(parents=True, exist_ok=True)
+        started_at = iso_now_local()
+        display_time = display_now_local()
+        log_path.write_text(
+            render_bootstrap_log(
+                run_id=run_id,
+                log_path=rel_log_path,
+                prompt=prompt,
+                repo=git.repo_name(),
+                branch=git.current_branch(),
+                started_at=started_at,
+                display_time=display_time,
+            ),
+            encoding="utf-8",
         )
-    git.run(["mv", rel_log_path, new_rel_log_path], capture_output=False)
-    new_log_path.write_text(
-        render_bootstrap_log(
-            run_id=run_id,
-            log_path=new_rel_log_path,
-            prompt=prompt,
-            repo=git.repo_name(),
-            branch=git.current_branch(),
-            started_at=started_at,
-            display_time=display_time,
-            pr=pr_number,
-        ),
-        encoding="utf-8",
-    )
-    git.run(["add", new_rel_log_path], capture_output=True)
-    git.run(
-        ["commit", "-m", f"[ai-loop] Human: bootstrap pr-{pr_number:04d}"],
-        capture_output=False,
-    )
-    print(f"renamed to {new_rel_log_path}")
 
-    # Push the rename commit so the remote PR shows the pr-NNNN.md log
-    # rather than the pre-rename local-*.md placeholder. The first push
-    # above carried only the start commit (since the PR needed an
-    # existing remote tip before `gh pr create`).
-    git.push_branch(branch, set_upstream=False)
+        git.run(["add", rel_log_path], capture_output=True)
+        git.run(
+            ["commit", "-m", f"[ai-loop] Human: start {run_id}"],
+            capture_output=False,
+        )
+        print(f"created {rel_log_path}")
+        print(f"ai-loop run id: {run_id}")
 
-    gh.ensure_label(
-        AI_LOOP_LABEL,
-        color=AI_LOOP_LABEL_COLOR,
-        description=AI_LOOP_LABEL_DESCRIPTION,
-    )
-    gh.add_label_to_pr(pr_number, AI_LOOP_LABEL)
-    print(f"applied label {AI_LOOP_LABEL!r} to PR #{pr_number}")
-    return 0
+        if create_pr:
+            assert gh is not None
+            git.push_branch(branch)
+            pr_number = gh.create_draft_pr(
+                title=placeholder_pr_title(prompt),
+                body=placeholder_pr_body(branch),
+                base="main",
+                head=branch,
+            )
+            print(f"created draft PR #{pr_number}")
+
+            new_rel_log_path = pr_log_relpath(pr_number)
+            new_log_path = repo / new_rel_log_path
+            if new_log_path.exists():
+                raise AILoopError(
+                    f"PR-numbered log already exists: {new_rel_log_path}; "
+                    "loop bootstrap cannot rename onto an existing file"
+                )
+            git.run(["mv", rel_log_path, new_rel_log_path], capture_output=False)
+            new_log_path.write_text(
+                render_bootstrap_log(
+                    run_id=run_id,
+                    log_path=new_rel_log_path,
+                    prompt=prompt,
+                    repo=git.repo_name(),
+                    branch=git.current_branch(),
+                    started_at=started_at,
+                    display_time=display_time,
+                    pr=pr_number,
+                ),
+                encoding="utf-8",
+            )
+            git.run(["add", new_rel_log_path], capture_output=True)
+            git.run(
+                [
+                    "commit",
+                    "-m",
+                    f"[ai-loop] Human: bootstrap pr-{pr_number:04d}",
+                ],
+                capture_output=False,
+            )
+            print(f"renamed to {new_rel_log_path}")
+
+            # Push the rename commit so the remote PR shows the
+            # pr-NNNN.md log rather than the pre-rename local-*.md
+            # placeholder. The first push above carried only the start
+            # commit (since the PR needed an existing remote tip
+            # before `gh pr create`).
+            git.push_branch(branch, set_upstream=False)
+
+            gh.ensure_label(
+                AI_LOOP_LABEL,
+                color=AI_LOOP_LABEL_COLOR,
+                description=AI_LOOP_LABEL_DESCRIPTION,
+            )
+            gh.add_label_to_pr(pr_number, AI_LOOP_LABEL)
+            print(f"applied label {AI_LOOP_LABEL!r} to PR #{pr_number}")
+
+            log_path = new_log_path
+
+        # Bootstrap is complete. If the caller asked for invocation
+        # (env, git config, or future --invoke flag), dispatch now
+        # while we still hold the lock — agent commits inside the
+        # loop will fire the post-commit hook in their subprocesses,
+        # and those hook fires hit the same lock and skip, so the
+        # only dispatch chain is this explicit one. If the agent
+        # fails (codex usage limit, etc.) the AILoopError raised
+        # here propagates after the PR and branch are already in
+        # place, so the user can fix the underlying issue and retry
+        # via `make ai-loop-continue --invoke` without redoing the
+        # bootstrap.
+        dispatcher = AgentDispatcher(git)
+        if dispatcher.should_invoke(args):
+            git.ensure_dispatch_safe_worktree()
+            router = StateRouter()
+            profile = dispatcher.selected_profile(args)
+            run_agent_loop(
+                git=git,
+                router=router,
+                dispatcher=dispatcher,
+                log_path=log_path,
+                profile=profile,
+                trigger="start",
+            )
+        return 0
+    finally:
+        _release_ai_loop_lock(lock_dir)
 
 
 def command_answer(args: argparse.Namespace) -> int:

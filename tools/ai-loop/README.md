@@ -133,6 +133,20 @@ python3 tools/ai-loop/ai_loop.py continue --invoke --trigger manual
 
 Use `--dry-run` to force observe-only routing even when invocation is enabled.
 
+`ai-loop-start` holds the same `.git/ai-loop.lock` the post-commit hook uses
+for the entire bootstrap. Hook fires from the `[ai-loop] Human: start …` and
+`[ai-loop] Human: bootstrap pr-NNNN` commits all hit the held lock and skip
+without dispatching — the agent would otherwise run against transient log
+state and either lose its commit (the first fire's `local-*.md` log is about
+to be overwritten by the rename step) or waste an invocation. After the
+bootstrap completes (commits + push + draft PR + rename + label), if
+invocation is enabled, the controller dispatches the agent exactly once via
+an explicit `run_agent_loop` call. If that dispatch fails (e.g. the codex
+CLI reports a usage limit), the bootstrap remains complete — the PR, branch,
+and label are all in place — and the user can fix the underlying issue and
+resume via `python3 tools/ai-loop/ai_loop.py continue --invoke --trigger manual`
+without redoing the bootstrap.
+
 When a developer-routed agent commits a `needs_review` event, that event is
 handed to Claude Code immediately. When the reviewer commits `needs_fix`, the
 controller dispatches Codex again. The loop repeats until the reviewer commits
