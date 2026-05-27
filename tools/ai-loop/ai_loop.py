@@ -110,6 +110,16 @@ TRUTHY = {"1", "true", "yes", "on"}
 DEFAULT_MAX_CYCLES = 3
 DEFAULT_AGENT_TIMEOUT_SECONDS = 1800.0
 AGENT_TIMEOUT_ENV = "AI_LOOP_AGENT_TIMEOUT_SECONDS"
+GH_COMMAND_ENV = "AI_LOOP_GH_COMMAND"
+CREATE_PR_ENV = "AI_LOOP_CREATE_PR"
+DEFAULT_GH_COMMAND = "gh"
+AI_LOOP_LABEL = "ai-loop"
+AI_LOOP_LABEL_COLOR = "BFD4F2"
+AI_LOOP_LABEL_DESCRIPTION = (
+    "Pull requests created by the local AI loop bootstrap."
+)
+AI_LOOP_BASE_REF = "origin/main"
+GH_PR_URL_RE = re.compile(r"/pull/(\d+)\b")
 
 
 class AILoopError(RuntimeError):
@@ -274,6 +284,27 @@ of editing or reviewing."""
         if not ai_loop_paths:
             raise AILoopError("latest commit did not change an AI loop log")
         return self.repo / ai_loop_paths[-1]
+
+    def has_origin_remote(self) -> bool:
+        result = self.run(["remote", "get-url", "origin"], check=False)
+        return result.returncode == 0 and bool(result.stdout.strip())
+
+    def fetch(self, remote: str, ref: str) -> None:
+        self.run(["fetch", remote, ref], capture_output=False)
+
+    def is_ancestor(self, ref: str, target: str = "HEAD") -> bool:
+        result = self.run(
+            ["merge-base", "--is-ancestor", ref, target],
+            check=False,
+        )
+        return result.returncode == 0
+
+    def push_branch(self, branch: str, *, set_upstream: bool = True) -> None:
+        args = ["push"]
+        if set_upstream:
+            args.append("-u")
+        args.extend(["origin", branch])
+        self.run(args, capture_output=False)
 
 
 def parse_kv_block(block: str) -> dict[str, str]:
@@ -683,6 +714,166 @@ class AgentDispatcher:
         return completed.returncode
 
 
+@dataclass(frozen=True)
+class GhClient:
+    git: GitContext
+
+    @staticmethod
+    def base_command() -> list[str]:
+        override = os.environ.get(GH_COMMAND_ENV, "").strip()
+        if override:
+            return shlex.split(override)
+        return [DEFAULT_GH_COMMAND]
+
+    def run(
+        self,
+        args: Sequence[str],
+        *,
+        check: bool = True,
+        capture_output: bool = True,
+    ) -> subprocess.CompletedProcess[str]:
+        return subprocess.run(
+            [*self.base_command(), *args],
+            cwd=self.git.repo,
+            check=check,
+            text=True,
+            capture_output=capture_output,
+        )
+
+    def ensure_available(self) -> None:
+        binary = self.base_command()[0]
+        if shutil.which(binary) is None:
+            raise AILoopError(
+                f"{binary!r} CLI not found on PATH; install GitHub CLI "
+                f"(https://cli.github.com) or set {GH_COMMAND_ENV}"
+            )
+
+    def ensure_authenticated(self) -> None:
+        result = self.run(["auth", "status"], check=False)
+        if result.returncode != 0:
+            stderr = (result.stderr or result.stdout or "").strip()
+            detail = f": {stderr}" if stderr else ""
+            raise AILoopError(
+                f"gh is not authenticated{detail}; run `gh auth login`"
+            )
+
+    def existing_open_pr_for_branch(self, branch: str) -> int | None:
+        result = self.run(
+            [
+                "pr",
+                "list",
+                "--head",
+                branch,
+                "--state",
+                "open",
+                "--json",
+                "number",
+                "--jq",
+                ".[].number",
+            ],
+        )
+        numbers = [
+            line.strip() for line in result.stdout.splitlines() if line.strip()
+        ]
+        if not numbers:
+            return None
+        try:
+            return int(numbers[0])
+        except ValueError as exc:
+            raise AILoopError(
+                f"could not parse PR number from gh pr list output: "
+                f"{numbers[0]!r}"
+            ) from exc
+
+    def create_draft_pr(
+        self,
+        *,
+        title: str,
+        body: str,
+        base: str,
+        head: str,
+    ) -> int:
+        result = self.run(
+            [
+                "pr",
+                "create",
+                "--draft",
+                "--title",
+                title,
+                "--body",
+                body,
+                "--base",
+                base,
+                "--head",
+                head,
+            ],
+        )
+        match = GH_PR_URL_RE.search(result.stdout)
+        if not match:
+            stdout = result.stdout.strip()
+            raise AILoopError(
+                f"could not parse PR number from gh pr create output: "
+                f"{stdout!r}"
+            )
+        return int(match.group(1))
+
+    def label_exists(self, name: str) -> bool:
+        result = self.run(
+            [
+                "label",
+                "list",
+                "--search",
+                name,
+                "--json",
+                "name",
+                "--jq",
+                ".[].name",
+            ],
+        )
+        names = {
+            line.strip() for line in result.stdout.splitlines() if line.strip()
+        }
+        return name in names
+
+    def ensure_label(
+        self,
+        name: str,
+        *,
+        color: str,
+        description: str,
+    ) -> None:
+        if self.label_exists(name):
+            return
+        self.run(
+            [
+                "label",
+                "create",
+                name,
+                "--color",
+                color,
+                "--description",
+                description,
+            ],
+        )
+
+    def add_label_to_pr(self, pr_number: int, label: str) -> None:
+        self.run(["pr", "edit", str(pr_number), "--add-label", label])
+
+
+def select_create_pr(git: GitContext, args: argparse.Namespace) -> bool:
+    if getattr(args, "create_pr", False):
+        return True
+    env_value = os.environ.get(CREATE_PR_ENV, "").strip().lower()
+    if env_value in TRUTHY:
+        return True
+    config_value = (
+        git.run(["config", "--get", "ai-loop.createPr"], check=False)
+        .stdout.strip()
+        .lower()
+    )
+    return config_value in TRUTHY
+
+
 def iso_now_local() -> str:
     return datetime.now().astimezone().replace(microsecond=0).isoformat()
 
@@ -695,6 +886,10 @@ def make_run_id() -> str:
     return datetime.now().strftime("local-%Y%m%d-%H%M%S")
 
 
+def pr_log_relpath(pr_number: int) -> str:
+    return f"docs/ai-loop/pr-{pr_number:04d}.md"
+
+
 def render_bootstrap_log(
     *,
     run_id: str,
@@ -703,9 +898,14 @@ def render_bootstrap_log(
     repo: str,
     branch: str,
     started_at: str,
+    display_time: str | None = None,
+    pr: int | None = None,
 ) -> str:
-    display_time = display_now_local()
-    return f"""# AI Loop - {run_id}
+    display_time = display_time or display_now_local()
+    title = f"PR #{pr:04d}" if pr is not None else run_id
+    pr_config_line = f"\n- PR: #{pr:04d}" if pr is not None else ""
+    pr_init_line = f"\npr: {pr}" if pr is not None else ""
+    return f"""# AI Loop - {title}
 
 ## Initial user prompt
 
@@ -715,7 +915,7 @@ def render_bootstrap_log(
 
 - Repository: {repo}
 - Branch at start: {branch}
-- Log path: {log_path}
+- Log path: {log_path}{pr_config_line}
 - Max cycles: 3
 - Developer agent: Codex
 - Reviewer agent: Claude Code
@@ -725,7 +925,7 @@ def render_bootstrap_log(
 run_id: {run_id}
 repo: {repo}
 branch_at_start: {branch}
-log_path: {log_path}
+log_path: {log_path}{pr_init_line}
 max_cycles: 3
 developer_agent: codex
 reviewer_agent: claude-code
@@ -850,6 +1050,29 @@ def command_setup(args: argparse.Namespace) -> int:
     return 0
 
 
+def placeholder_pr_title(prompt: str, *, max_length: int = 70) -> str:
+    first_line = next(
+        (line.strip() for line in prompt.splitlines() if line.strip()),
+        "",
+    )
+    if not first_line:
+        first_line = "AI loop bootstrap"
+    prefix = "[wip] "
+    available = max(1, max_length - len(prefix))
+    if len(first_line) > available:
+        first_line = first_line[: available - 1].rstrip() + "…"
+    return f"{prefix}{first_line}"
+
+
+def placeholder_pr_body(branch: str) -> str:
+    return (
+        f"Local AI loop run from branch `{branch}`. The committed log under "
+        "`docs/ai-loop/` carries the agent conversation as it accumulates.\n\n"
+        "Per AI loop convention, agents update this PR title and body as the "
+        "work evolves; the bootstrap title and body are intentionally minimal."
+    )
+
+
 def command_start(args: argparse.Namespace) -> int:
     repo = Path(args.repo).resolve() if args.repo else repo_root_from_cwd()
     git = GitContext(repo)
@@ -862,6 +1085,18 @@ def command_start(args: argparse.Namespace) -> int:
 
     git.ensure_clean_worktree()
 
+    create_pr = select_create_pr(git, args)
+    gh: GhClient | None = None
+    if create_pr:
+        gh = GhClient(git)
+        gh.ensure_available()
+        gh.ensure_authenticated()
+        if not git.has_origin_remote():
+            raise AILoopError(
+                "no `origin` remote configured; add one with "
+                "`git remote add origin <url>` before bootstrapping a PR"
+            )
+
     existing_branches = git.run(["branch", "--list", branch]).stdout.strip()
     if existing_branches:
         git.run(["switch", branch], capture_output=False)
@@ -870,6 +1105,21 @@ def command_start(args: argparse.Namespace) -> int:
 
     git.ensure_clean_worktree()
 
+    if create_pr:
+        assert gh is not None
+        git.fetch("origin", "main")
+        if not git.is_ancestor(AI_LOOP_BASE_REF, "HEAD"):
+            raise AILoopError(
+                f"branch {branch!r} is not a descendant of {AI_LOOP_BASE_REF}; "
+                "rebase onto current origin/main before bootstrapping a PR"
+            )
+        existing_pr = gh.existing_open_pr_for_branch(branch)
+        if existing_pr is not None:
+            raise AILoopError(
+                f"open PR #{existing_pr} already exists for branch "
+                f"{branch!r}; close or reuse it before bootstrapping a new loop"
+            )
+
     run_id = make_run_id()
     rel_log_path = f"docs/ai-loop/{run_id}.md"
     log_path = repo / rel_log_path
@@ -877,6 +1127,7 @@ def command_start(args: argparse.Namespace) -> int:
         raise AILoopError(f"AI loop log already exists: {rel_log_path}")
     log_path.parent.mkdir(parents=True, exist_ok=True)
     started_at = iso_now_local()
+    display_time = display_now_local()
     log_path.write_text(
         render_bootstrap_log(
             run_id=run_id,
@@ -885,6 +1136,7 @@ def command_start(args: argparse.Namespace) -> int:
             repo=git.repo_name(),
             branch=git.current_branch(),
             started_at=started_at,
+            display_time=display_time,
         ),
         encoding="utf-8",
     )
@@ -896,6 +1148,55 @@ def command_start(args: argparse.Namespace) -> int:
     )
     print(f"created {rel_log_path}")
     print(f"ai-loop run id: {run_id}")
+
+    if not create_pr:
+        return 0
+
+    assert gh is not None
+    git.push_branch(branch)
+    pr_number = gh.create_draft_pr(
+        title=placeholder_pr_title(prompt),
+        body=placeholder_pr_body(branch),
+        base="main",
+        head=branch,
+    )
+    print(f"created draft PR #{pr_number}")
+
+    new_rel_log_path = pr_log_relpath(pr_number)
+    new_log_path = repo / new_rel_log_path
+    if new_log_path.exists():
+        raise AILoopError(
+            f"PR-numbered log already exists: {new_rel_log_path}; "
+            "loop bootstrap cannot rename onto an existing file"
+        )
+    git.run(["mv", rel_log_path, new_rel_log_path], capture_output=False)
+    new_log_path.write_text(
+        render_bootstrap_log(
+            run_id=run_id,
+            log_path=new_rel_log_path,
+            prompt=prompt,
+            repo=git.repo_name(),
+            branch=git.current_branch(),
+            started_at=started_at,
+            display_time=display_time,
+            pr=pr_number,
+        ),
+        encoding="utf-8",
+    )
+    git.run(["add", new_rel_log_path], capture_output=True)
+    git.run(
+        ["commit", "-m", f"[ai-loop] Human: bootstrap pr-{pr_number:04d}"],
+        capture_output=False,
+    )
+    print(f"renamed to {new_rel_log_path}")
+
+    gh.ensure_label(
+        AI_LOOP_LABEL,
+        color=AI_LOOP_LABEL_COLOR,
+        description=AI_LOOP_LABEL_DESCRIPTION,
+    )
+    gh.add_label_to_pr(pr_number, AI_LOOP_LABEL)
+    print(f"applied label {AI_LOOP_LABEL!r} to PR #{pr_number}")
     return 0
 
 
@@ -1129,6 +1430,15 @@ def build_parser() -> argparse.ArgumentParser:
     start = subparsers.add_parser("start", help="start a local AI loop run")
     start.add_argument("--branch", help="feature branch to create or switch to")
     start.add_argument("--prompt", help="initial human prompt for the local loop")
+    start.add_argument(
+        "--create-pr",
+        action="store_true",
+        help=(
+            "push the branch, create a draft PR, rename the log to "
+            f"docs/ai-loop/pr-NNNN.md, and apply the {AI_LOOP_LABEL!r} label; "
+            f"defaults to {CREATE_PR_ENV} or ai-loop.createPr git config"
+        ),
+    )
     start.set_defaults(func=command_start)
 
     answer = subparsers.add_parser(

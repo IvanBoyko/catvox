@@ -164,6 +164,121 @@ def write_committed_log(
     return log_path
 
 
+GH_SHIM_SOURCE = """\
+import json
+import os
+import sys
+from pathlib import Path
+
+state_dir = Path(os.environ["GH_SHIM_STATE_DIR"])
+state_dir.mkdir(parents=True, exist_ok=True)
+
+log_path = state_dir / "gh_calls.log"
+with log_path.open("a", encoding="utf-8") as handle:
+    handle.write(json.dumps({"argv": sys.argv[1:]}) + "\\n")
+
+argv = sys.argv[1:]
+if not argv:
+    sys.exit(0)
+
+subcommand = argv[0]
+
+if subcommand == "auth":
+    rc_path = state_dir / "auth_rc.txt"
+    rc = int(rc_path.read_text(encoding="utf-8").strip()) if rc_path.exists() else 0
+    if rc != 0:
+        sys.stderr.write("gh shim: not authenticated\\n")
+    sys.exit(rc)
+
+if subcommand == "pr":
+    if len(argv) < 2:
+        sys.exit(2)
+    pr_sub = argv[1]
+    if pr_sub == "list":
+        existing_path = state_dir / "existing_prs.txt"
+        if existing_path.exists():
+            sys.stdout.write(existing_path.read_text(encoding="utf-8"))
+        sys.exit(0)
+    if pr_sub == "create":
+        next_path = state_dir / "next_pr.txt"
+        if next_path.exists():
+            next_num = int(next_path.read_text(encoding="utf-8").strip())
+        else:
+            next_num = 1
+        next_path.write_text(str(next_num + 1), encoding="utf-8")
+        if (state_dir / "create_fail.txt").exists():
+            sys.stderr.write("gh shim: pr create simulated failure\\n")
+            sys.exit(1)
+        sys.stdout.write(
+            f"https://github.com/example/example/pull/{next_num}\\n"
+        )
+        sys.exit(0)
+    if pr_sub == "edit":
+        edits_path = state_dir / "pr_edits.log"
+        with edits_path.open("a", encoding="utf-8") as handle:
+            handle.write(json.dumps({"argv": argv}) + "\\n")
+        sys.exit(0)
+    sys.exit(2)
+
+if subcommand == "label":
+    if len(argv) < 2:
+        sys.exit(2)
+    label_sub = argv[1]
+    labels_path = state_dir / "labels.txt"
+    if label_sub == "list":
+        if labels_path.exists():
+            sys.stdout.write(labels_path.read_text(encoding="utf-8"))
+        sys.exit(0)
+    if label_sub == "create":
+        if len(argv) < 3:
+            sys.exit(2)
+        name = argv[2]
+        existing = (
+            labels_path.read_text(encoding="utf-8").splitlines()
+            if labels_path.exists()
+            else []
+        )
+        if name not in existing:
+            existing.append(name)
+        labels_path.write_text("\\n".join(existing) + "\\n", encoding="utf-8")
+        sys.exit(0)
+    sys.exit(2)
+
+sys.stderr.write(f"gh shim: unsupported argv: {argv}\\n")
+sys.exit(2)
+"""
+
+
+def write_gh_shim(script_path: Path) -> None:
+    script_path.write_text(GH_SHIM_SOURCE, encoding="utf-8")
+
+
+def read_gh_calls(state_dir: Path) -> list[list[str]]:
+    log_path = state_dir / "gh_calls.log"
+    if not log_path.exists():
+        return []
+    import json as _json
+
+    return [
+        _json.loads(line)["argv"]
+        for line in log_path.read_text(encoding="utf-8").splitlines()
+        if line.strip()
+    ]
+
+
+def init_repo_with_bare_origin(repo: Path, origin: Path) -> None:
+    run(["git", "init", "--bare", "--initial-branch=main", str(origin)], origin.parent)
+    run(["git", "init", "--initial-branch=main"], repo)
+    run(["git", "config", "user.name", "AI Loop Test"], repo)
+    run(["git", "config", "user.email", "ai-loop-test@example.com"], repo)
+    run(["git", "remote", "add", "origin", str(origin)], repo)
+    write_minimal_instruction_files(repo)
+    shutil.copytree(TOOL_DIR, repo / "tools/ai-loop")
+    run(["git", "add", "."], repo)
+    run(["git", "commit", "-m", "Initial tools"], repo)
+    run(["git", "push", "-u", "origin", "main"], repo)
+
+
 class MetadataParsingTests(unittest.TestCase):
     def test_parse_init_and_events(self) -> None:
         text = """# AI Loop
@@ -1389,6 +1504,446 @@ questions: q1,q2
             git_dir = run(["git", "rev-parse", "--git-dir"], linked).stdout.strip()
             self.assertNotEqual(git_dir, ".git")
             self.assertTrue(git_dir)
+
+
+class PlaceholderRenderTests(unittest.TestCase):
+    def test_pr_log_relpath_pads_to_four_digits(self) -> None:
+        self.assertEqual(ai_loop.pr_log_relpath(86), "docs/ai-loop/pr-0086.md")
+        self.assertEqual(ai_loop.pr_log_relpath(1), "docs/ai-loop/pr-0001.md")
+        self.assertEqual(ai_loop.pr_log_relpath(12345), "docs/ai-loop/pr-12345.md")
+
+    def test_placeholder_pr_title_truncates_long_first_line(self) -> None:
+        title = ai_loop.placeholder_pr_title(
+            "a" * 200, max_length=20
+        )
+        self.assertTrue(title.startswith("[wip] "))
+        self.assertLessEqual(len(title), 20)
+        self.assertTrue(title.endswith("…"))
+
+    def test_placeholder_pr_title_uses_first_non_blank_line(self) -> None:
+        title = ai_loop.placeholder_pr_title("\n\n  Implement issue #63  \n\n…")
+        self.assertEqual(title, "[wip] Implement issue #63")
+
+    def test_placeholder_pr_title_falls_back_when_prompt_blank(self) -> None:
+        title = ai_loop.placeholder_pr_title("   \n  \n")
+        self.assertEqual(title, "[wip] AI loop bootstrap")
+
+    def test_placeholder_pr_body_mentions_branch_and_upkeep_rule(self) -> None:
+        body = ai_loop.placeholder_pr_body("feature/test-branch")
+        self.assertIn("`feature/test-branch`", body)
+        self.assertIn("docs/ai-loop/", body)
+        self.assertIn("update this PR title and body", body)
+
+    def test_render_bootstrap_log_includes_pr_when_supplied(self) -> None:
+        log = ai_loop.render_bootstrap_log(
+            run_id="local-20260524-120000",
+            log_path="docs/ai-loop/pr-0086.md",
+            prompt="Implement the thing",
+            repo="kathelix/catvox",
+            branch="feature/test",
+            started_at="2026-05-24T12:00:00+02:00",
+            display_time="2026-05-24 12:00 CEST",
+            pr=86,
+        )
+        self.assertIn("# AI Loop - PR #0086", log)
+        self.assertIn("- PR: #0086", log)
+        parsed = ai_loop.parse_log_text(log)
+        assert parsed.init is not None
+        self.assertEqual(parsed.init["pr"], "86")
+        self.assertEqual(parsed.init["log_path"], "docs/ai-loop/pr-0086.md")
+        self.assertEqual(parsed.init["run_id"], "local-20260524-120000")
+
+    def test_render_bootstrap_log_without_pr_keeps_legacy_shape(self) -> None:
+        log = ai_loop.render_bootstrap_log(
+            run_id="local-20260524-120000",
+            log_path="docs/ai-loop/local-20260524-120000.md",
+            prompt="Implement the thing",
+            repo="kathelix/catvox",
+            branch="feature/test",
+            started_at="2026-05-24T12:00:00+02:00",
+            display_time="2026-05-24 12:00 CEST",
+        )
+        self.assertIn("# AI Loop - local-20260524-120000", log)
+        self.assertNotIn("- PR:", log)
+        parsed = ai_loop.parse_log_text(log)
+        assert parsed.init is not None
+        self.assertNotIn("pr", parsed.init)
+
+
+class PrBootstrapTests(unittest.TestCase):
+    def _shim_env(
+        self,
+        state_dir: Path,
+        shim_path: Path,
+    ) -> dict[str, str]:
+        env = os.environ.copy()
+        env["AI_LOOP_GH_COMMAND"] = f"{sys.executable} {shim_path}"
+        env["GH_SHIM_STATE_DIR"] = str(state_dir)
+        env["AI_LOOP_CREATE_PR"] = "1"
+        return env
+
+    def test_create_pr_happy_path_renames_log_and_applies_label(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            repo = root / "repo"
+            origin = root / "origin.git"
+            repo.mkdir()
+            init_repo_with_bare_origin(repo, origin)
+
+            shim = root / "gh_shim.py"
+            state_dir = root / "gh_state"
+            write_gh_shim(shim)
+            env = self._shim_env(state_dir, shim)
+
+            script = repo / "tools/ai-loop/ai_loop.py"
+            result = run(
+                [
+                    sys.executable,
+                    str(script),
+                    "start",
+                    "--branch",
+                    "feature/pr-bootstrap-happy",
+                    "--prompt",
+                    "Implement issue #63 PR-numbered bootstrap",
+                ],
+                repo,
+                env=env,
+            )
+
+            output = result.stdout + result.stderr
+            self.assertIn("created draft PR #1", output)
+            self.assertIn("renamed to docs/ai-loop/pr-0001.md", output)
+            self.assertIn("applied label 'ai-loop' to PR #1", output)
+
+            new_log = repo / "docs/ai-loop/pr-0001.md"
+            old_logs = list((repo / "docs/ai-loop").glob("local-*.md"))
+            self.assertEqual(old_logs, [])
+            self.assertTrue(new_log.exists())
+            parsed = ai_loop.parse_log_file(new_log)
+            assert parsed.init is not None
+            self.assertEqual(parsed.init["pr"], "1")
+            self.assertEqual(parsed.init["log_path"], "docs/ai-loop/pr-0001.md")
+
+            commits = run(["git", "log", "--format=%s"], repo).stdout.splitlines()
+            self.assertEqual(commits[0], "[ai-loop] Human: bootstrap pr-0001")
+            self.assertTrue(commits[1].startswith("[ai-loop] Human: start local-"))
+
+            # Branch was pushed
+            remote_branches = run(
+                ["git", "branch", "-r"], repo
+            ).stdout
+            self.assertIn(
+                "origin/feature/pr-bootstrap-happy", remote_branches
+            )
+
+            calls = read_gh_calls(state_dir)
+            pr_create = [c for c in calls if c[:2] == ["pr", "create"]]
+            self.assertEqual(len(pr_create), 1)
+            self.assertIn("--draft", pr_create[0])
+            self.assertIn("--base", pr_create[0])
+            self.assertIn("main", pr_create[0])
+            self.assertIn("--head", pr_create[0])
+            self.assertIn("feature/pr-bootstrap-happy", pr_create[0])
+            title_index = pr_create[0].index("--title") + 1
+            self.assertTrue(pr_create[0][title_index].startswith("[wip] "))
+
+            label_create = [c for c in calls if c[:2] == ["label", "create"]]
+            self.assertEqual(len(label_create), 1)
+            self.assertEqual(label_create[0][2], "ai-loop")
+
+            pr_edits = [c for c in calls if c[:2] == ["pr", "edit"]]
+            self.assertEqual(len(pr_edits), 1)
+            self.assertIn("--add-label", pr_edits[0])
+            self.assertIn("ai-loop", pr_edits[0])
+
+    def test_default_off_keeps_legacy_local_log_and_skips_gh(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            repo = root / "repo"
+            origin = root / "origin.git"
+            repo.mkdir()
+            init_repo_with_bare_origin(repo, origin)
+
+            shim = root / "gh_shim.py"
+            state_dir = root / "gh_state"
+            write_gh_shim(shim)
+            env = os.environ.copy()
+            env["AI_LOOP_GH_COMMAND"] = f"{sys.executable} {shim}"
+            env["GH_SHIM_STATE_DIR"] = str(state_dir)
+            env.pop("AI_LOOP_CREATE_PR", None)
+
+            script = repo / "tools/ai-loop/ai_loop.py"
+            result = run(
+                [
+                    sys.executable,
+                    str(script),
+                    "start",
+                    "--branch",
+                    "feature/pr-bootstrap-off",
+                    "--prompt",
+                    "Implement the requested change",
+                ],
+                repo,
+                env=env,
+            )
+
+            output = result.stdout + result.stderr
+            self.assertNotIn("created draft PR", output)
+            self.assertNotIn("renamed to docs/ai-loop/pr-", output)
+
+            local_logs = sorted((repo / "docs/ai-loop").glob("local-*.md"))
+            self.assertEqual(len(local_logs), 1)
+            pr_logs = list((repo / "docs/ai-loop").glob("pr-*.md"))
+            self.assertEqual(pr_logs, [])
+            self.assertEqual(read_gh_calls(state_dir), [])
+
+    def test_missing_gh_binary_fails_before_commit(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            repo = root / "repo"
+            origin = root / "origin.git"
+            repo.mkdir()
+            init_repo_with_bare_origin(repo, origin)
+
+            head_before = run(["git", "rev-parse", "HEAD"], repo).stdout.strip()
+
+            env = os.environ.copy()
+            env["AI_LOOP_GH_COMMAND"] = "/nonexistent/gh-binary-does-not-exist"
+            env["AI_LOOP_CREATE_PR"] = "1"
+
+            script = repo / "tools/ai-loop/ai_loop.py"
+            result = run(
+                [
+                    sys.executable,
+                    str(script),
+                    "start",
+                    "--branch",
+                    "feature/pr-bootstrap-no-gh",
+                    "--prompt",
+                    "Implement",
+                ],
+                repo,
+                check=False,
+                env=env,
+            )
+
+            self.assertEqual(result.returncode, 1)
+            self.assertIn("CLI not found on PATH", result.stderr)
+            head_after = run(["git", "rev-parse", "HEAD"], repo).stdout.strip()
+            self.assertEqual(head_after, head_before)
+            self.assertEqual(
+                list((repo / "docs/ai-loop").glob("*"))
+                if (repo / "docs/ai-loop").exists()
+                else [],
+                [],
+            )
+
+    def test_gh_auth_failure_fails_before_commit(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            repo = root / "repo"
+            origin = root / "origin.git"
+            repo.mkdir()
+            init_repo_with_bare_origin(repo, origin)
+
+            shim = root / "gh_shim.py"
+            state_dir = root / "gh_state"
+            write_gh_shim(shim)
+            state_dir.mkdir(parents=True, exist_ok=True)
+            (state_dir / "auth_rc.txt").write_text("1", encoding="utf-8")
+            env = self._shim_env(state_dir, shim)
+
+            head_before = run(["git", "rev-parse", "HEAD"], repo).stdout.strip()
+
+            script = repo / "tools/ai-loop/ai_loop.py"
+            result = run(
+                [
+                    sys.executable,
+                    str(script),
+                    "start",
+                    "--branch",
+                    "feature/pr-bootstrap-auth-fail",
+                    "--prompt",
+                    "Implement",
+                ],
+                repo,
+                check=False,
+                env=env,
+            )
+
+            self.assertEqual(result.returncode, 1)
+            self.assertIn("gh is not authenticated", result.stderr)
+            self.assertIn("gh auth login", result.stderr)
+            head_after = run(["git", "rev-parse", "HEAD"], repo).stdout.strip()
+            self.assertEqual(head_after, head_before)
+
+    def test_missing_origin_remote_fails_before_commit(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            repo = root / "repo"
+            repo.mkdir()
+            run(["git", "init", "--initial-branch=main"], repo)
+            run(["git", "config", "user.name", "AI Loop Test"], repo)
+            run(["git", "config", "user.email", "ai-loop-test@example.com"], repo)
+            write_minimal_instruction_files(repo)
+            shutil.copytree(TOOL_DIR, repo / "tools/ai-loop")
+            run(["git", "add", "."], repo)
+            run(["git", "commit", "-m", "Initial tools"], repo)
+
+            shim = root / "gh_shim.py"
+            state_dir = root / "gh_state"
+            write_gh_shim(shim)
+            env = self._shim_env(state_dir, shim)
+
+            head_before = run(["git", "rev-parse", "HEAD"], repo).stdout.strip()
+
+            script = repo / "tools/ai-loop/ai_loop.py"
+            result = run(
+                [
+                    sys.executable,
+                    str(script),
+                    "start",
+                    "--branch",
+                    "feature/pr-bootstrap-no-origin",
+                    "--prompt",
+                    "Implement",
+                ],
+                repo,
+                check=False,
+                env=env,
+            )
+
+            self.assertEqual(result.returncode, 1)
+            self.assertIn("no `origin` remote configured", result.stderr)
+            head_after = run(["git", "rev-parse", "HEAD"], repo).stdout.strip()
+            self.assertEqual(head_after, head_before)
+
+    def test_branch_not_descendant_of_origin_main_fails(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            repo = root / "repo"
+            origin = root / "origin.git"
+            repo.mkdir()
+            init_repo_with_bare_origin(repo, origin)
+
+            # Create an orphan branch with no shared history with main but
+            # keep the tools/ai-loop tree intact so the script remains
+            # invokable from the new worktree.
+            run(["git", "checkout", "--orphan", "feature/diverged"], repo)
+            run(["git", "commit", "-m", "Diverged root"], repo)
+
+            shim = root / "gh_shim.py"
+            state_dir = root / "gh_state"
+            write_gh_shim(shim)
+            env = self._shim_env(state_dir, shim)
+
+            head_before = run(["git", "rev-parse", "HEAD"], repo).stdout.strip()
+
+            script = repo / "tools/ai-loop/ai_loop.py"
+            result = run(
+                [
+                    sys.executable,
+                    str(script),
+                    "start",
+                    "--branch",
+                    "feature/diverged",
+                    "--prompt",
+                    "Implement",
+                ],
+                repo,
+                check=False,
+                env=env,
+            )
+
+            self.assertEqual(result.returncode, 1)
+            self.assertIn("not a descendant of origin/main", result.stderr)
+            head_after = run(["git", "rev-parse", "HEAD"], repo).stdout.strip()
+            self.assertEqual(head_after, head_before)
+            pr_logs = list((repo / "docs/ai-loop").glob("*.md"))
+            self.assertEqual(pr_logs, [])
+
+    def test_existing_open_pr_for_branch_fails(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            repo = root / "repo"
+            origin = root / "origin.git"
+            repo.mkdir()
+            init_repo_with_bare_origin(repo, origin)
+
+            shim = root / "gh_shim.py"
+            state_dir = root / "gh_state"
+            write_gh_shim(shim)
+            state_dir.mkdir(parents=True, exist_ok=True)
+            (state_dir / "existing_prs.txt").write_text("42\n", encoding="utf-8")
+            env = self._shim_env(state_dir, shim)
+
+            head_before = run(["git", "rev-parse", "HEAD"], repo).stdout.strip()
+
+            script = repo / "tools/ai-loop/ai_loop.py"
+            result = run(
+                [
+                    sys.executable,
+                    str(script),
+                    "start",
+                    "--branch",
+                    "feature/pr-bootstrap-existing-pr",
+                    "--prompt",
+                    "Implement",
+                ],
+                repo,
+                check=False,
+                env=env,
+            )
+
+            self.assertEqual(result.returncode, 1)
+            self.assertIn("open PR #42 already exists", result.stderr)
+            head_after = run(["git", "rev-parse", "HEAD"], repo).stdout.strip()
+            self.assertEqual(head_after, head_before)
+            pr_logs = list((repo / "docs/ai-loop").glob("*.md"))
+            self.assertEqual(pr_logs, [])
+
+    def test_pr_create_failure_leaves_local_commit_intact(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            repo = root / "repo"
+            origin = root / "origin.git"
+            repo.mkdir()
+            init_repo_with_bare_origin(repo, origin)
+
+            shim = root / "gh_shim.py"
+            state_dir = root / "gh_state"
+            write_gh_shim(shim)
+            state_dir.mkdir(parents=True, exist_ok=True)
+            (state_dir / "create_fail.txt").write_text("1", encoding="utf-8")
+            env = self._shim_env(state_dir, shim)
+
+            head_before = run(["git", "rev-parse", "HEAD"], repo).stdout.strip()
+
+            script = repo / "tools/ai-loop/ai_loop.py"
+            result = run(
+                [
+                    sys.executable,
+                    str(script),
+                    "start",
+                    "--branch",
+                    "feature/pr-bootstrap-create-fail",
+                    "--prompt",
+                    "Implement",
+                ],
+                repo,
+                check=False,
+                env=env,
+            )
+
+            self.assertEqual(result.returncode, 1)
+            head_after = run(["git", "rev-parse", "HEAD"], repo).stdout.strip()
+            self.assertNotEqual(head_after, head_before)
+            # The legacy local-*.md commit should still be on the branch.
+            local_logs = list((repo / "docs/ai-loop").glob("local-*.md"))
+            self.assertEqual(len(local_logs), 1)
+            # No pr-*.md created
+            pr_logs = list((repo / "docs/ai-loop").glob("pr-*.md"))
+            self.assertEqual(pr_logs, [])
 
 
 if __name__ == "__main__":

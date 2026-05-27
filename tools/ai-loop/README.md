@@ -81,6 +81,48 @@ python3 tools/ai-loop/ai_loop.py continue --invoke --trigger manual
 
 Use `--dry-run` to force observe-only routing even when invocation is enabled.
 
+### Bootstrap A Draft PR (opt-in)
+
+By default `make ai-loop-start` writes `docs/ai-loop/local-YYYYMMDD-HHMMSS.md`
+and stops there — useful for offline iteration and dry-run validation. To
+match the ADR-0023 MVP shape, opt in with `AI_LOOP_CREATE_PR=1`:
+
+```bash
+AI_LOOP_CREATE_PR=1 make ai-loop-start \
+  AI_LOOP_BRANCH=feature/example \
+  AI_LOOP_PROMPT="Implement the requested change"
+```
+
+When enabled, `start` then:
+
+1. pushes the branch to `origin`
+2. creates a draft PR with a placeholder `[wip] …` title and a minimal body
+3. renames the bootstrap log to `docs/ai-loop/pr-NNNN.md` (zero-padded) and
+   re-renders it with `pr:` metadata
+4. commits the rename as `[ai-loop] Human: bootstrap pr-NNNN`
+5. ensures the `ai-loop` repo label exists and applies it to the new PR
+
+Agents are expected to keep the PR title and body current as the work
+evolves via `gh pr edit` — see `tools/ai-loop/prompts/common.md`.
+
+Enable PR creation for this clone:
+
+```bash
+git config ai-loop.createPr true
+```
+
+Disable with `git config --unset ai-loop.createPr`.
+
+Bootstrap pre-flight refuses to proceed when any of the following is true,
+leaving the local `[ai-loop] Human: start` commit intact so the run can be
+resumed manually after the underlying issue is fixed:
+
+- `gh` is not installed or not on `PATH`
+- `gh auth status` fails (run `gh auth login`)
+- the repository has no `origin` remote
+- the current branch is not a descendant of `origin/main`
+- an open PR already exists for the branch
+
 When a developer-routed agent commits a `needs_review` event, that event is
 handed to Claude Code immediately. When the reviewer commits `needs_fix`, the
 controller dispatches Codex again. The loop repeats until the reviewer commits
@@ -306,10 +348,8 @@ starting the subprocess so terminal and CI logs stay in causal order.
 ## Current Limitations
 
 - Agent invocation is opt-in; default hook behavior remains dry-run.
-- No draft PR creation.
-- No `docs/ai-loop/pr-XXXX.md` bootstrap yet.
-
-ADR-0023 requires committed PR-numbered loop logs for the MVP. The current
-implementation still uses a local run ID first so parser, hook, routing, and
-invocation behavior can be validated before PR-number bootstrap is added.
-The PR-numbered bootstrap is the next planned slice; see Issue #63.
+- PR-numbered bootstrap is opt-in via `AI_LOOP_CREATE_PR=1`; the default
+  remains the offline `docs/ai-loop/local-YYYYMMDD-HHMMSS.md` log.
+- No end-of-loop PR description rewrite or telemetry yet — agents are expected
+  to keep the PR title and body current themselves (see Slice 6 in
+  Issue #63 for the planned controller-driven summary work).
