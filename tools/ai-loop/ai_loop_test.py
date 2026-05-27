@@ -264,6 +264,51 @@ next_agent: codex
         self.assertEqual(ai_loop.max_cycles_for_log(parsed), 3)
         self.assertTrue(ai_loop.should_stop_for_cycle_cap(parsed, latest, route))
 
+    def test_cycle_for_event_requires_explicit_cycle(self) -> None:
+        # Missing cycle metadata on a cap-relevant event must fail loud rather
+        # than silently default to 0, which would bypass the cycle cap.
+        cases = [
+            {"status": "needs_fix"},
+            {"status": "needs_fix", "cycle": ""},
+            {"status": "needs_fix", "cycle": "   "},
+        ]
+        for event in cases:
+            with self.subTest(event=event):
+                with self.assertRaises(ai_loop.AILoopError) as ctx:
+                    ai_loop.cycle_for_event(event)
+                self.assertIn("missing required cycle metadata", str(ctx.exception))
+
+    def test_cycle_for_event_rejects_non_integer(self) -> None:
+        with self.assertRaises(ai_loop.AILoopError):
+            ai_loop.cycle_for_event({"status": "needs_fix", "cycle": "two"})
+
+    def test_should_stop_for_cycle_cap_raises_when_cycle_missing(self) -> None:
+        # The cap check should propagate the cycle_for_event error so a
+        # malformed needs_fix event stops the loop instead of dispatching the
+        # developer at an undefined cycle.
+        parsed = ai_loop.parse_log_text(
+            """# AI Loop
+
+<!-- ai-loop-init
+run_id: local-20260524-120000
+max_cycles: 3
+-->
+
+<!-- ai-loop-event
+agent: claude-code
+role: reviewer
+status: needs_fix
+next_agent: codex
+-->
+"""
+        )
+        latest = parsed.latest_event
+        assert latest is not None
+        route = ai_loop.StateRouter().route_for_event(latest)
+
+        with self.assertRaises(ai_loop.AILoopError):
+            ai_loop.should_stop_for_cycle_cap(parsed, latest, route)
+
 
 class GitContextTests(unittest.TestCase):
     def test_repo_name_supports_ssh_and_https_remotes(self) -> None:
@@ -530,10 +575,18 @@ class CommandProfileTests(unittest.TestCase):
         self.assertEqual(timeout, 7.0)
 
     def test_reject_invalid_agent_timeout(self) -> None:
+        # subprocess.run rejects non-finite timeouts at runtime with an
+        # unwrapped OverflowError (and NaN comparisons are False either way,
+        # so the previous <= 0 guard let NaN slip through). All non-positive
+        # and non-finite values must be rejected here as AILoopError.
         repo = Path("/tmp/repo")
-        with patch.dict(os.environ, {"AI_LOOP_AGENT_TIMEOUT_SECONDS": "0"}):
-            with self.assertRaises(ai_loop.AILoopError):
-                agent_dispatcher(repo).selected_timeout_seconds()
+        cases = ["0", "-1", "not-a-number", "inf", "-inf", "nan", "Infinity", "NaN"]
+        for raw in cases:
+            with self.subTest(raw=raw):
+                with patch.dict(os.environ, {"AI_LOOP_AGENT_TIMEOUT_SECONDS": raw}):
+                    with self.assertRaises(ai_loop.AILoopError) as ctx:
+                        agent_dispatcher(repo).selected_timeout_seconds()
+                self.assertIn("positive, finite number of seconds", str(ctx.exception))
 
 
 class AgentDispatchTests(unittest.TestCase):
@@ -914,6 +967,79 @@ next_agent: codex
             self.assertEqual(log_path.read_text(encoding="utf-8"), log_before)
             parsed = ai_loop.parse_log_file(log_path)
             self.assertEqual(parsed.latest_event["status"], "needs_fix")
+
+    def test_needs_fix_event_without_cycle_fails_loud_and_does_not_dispatch(
+        self,
+    ) -> None:
+        # Defends the cycle cap against missing-metadata bypass: a reviewer
+        # needs_fix event with no cycle field must abort the loop with a clear
+        # error rather than dispatch the developer at an undefined cycle. See
+        # GitHub issue #84 for the broader controller-side cycle hardening.
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            repo = root / "repo"
+            repo.mkdir()
+            init_repo_with_ai_loop_tooling(repo)
+            log_path = write_committed_log(
+                repo,
+                """# AI Loop
+
+<!-- ai-loop-init
+run_id: local-20260524-120000
+max_cycles: 3
+-->
+
+<!-- ai-loop-event
+agent: claude-code
+role: reviewer
+status: needs_fix
+next_agent: codex
+-->
+""",
+            )
+
+            fail_agent = root / "fail_agent.py"
+            calls_path = root / "unexpected_call.txt"
+            fail_agent.write_text(
+                "from pathlib import Path\n"
+                "import sys\n"
+                "Path(sys.argv[1]).write_text('called', encoding='utf-8')\n"
+                "raise SystemExit(17)\n",
+                encoding="utf-8",
+            )
+            env = os.environ.copy()
+            env["AI_LOOP_CODEX_COMMAND"] = (
+                f"{sys.executable} {fail_agent} {calls_path}"
+            )
+
+            head_before = run(["git", "rev-parse", "HEAD"], repo).stdout.strip()
+            log_before = log_path.read_text(encoding="utf-8")
+
+            script = repo / "tools/ai-loop/ai_loop.py"
+            result = run(
+                [
+                    sys.executable,
+                    str(script),
+                    "continue",
+                    "--trigger",
+                    "test",
+                    "--log",
+                    str(log_path),
+                    "--invoke",
+                ],
+                repo,
+                check=False,
+                env=env,
+            )
+
+            self.assertEqual(result.returncode, 1)
+            self.assertIn("missing required cycle metadata", result.stderr)
+            self.assertFalse(calls_path.exists())
+            head_after = run(["git", "rev-parse", "HEAD"], repo).stdout.strip()
+            self.assertEqual(head_after, head_before)
+            self.assertEqual(log_path.read_text(encoding="utf-8"), log_before)
+            status = run(["git", "status", "--porcelain"], repo)
+            self.assertEqual(status.stdout, "")
 
     def test_clarified_event_resumes_named_agent_and_continues(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import math
 import os
 import re
 import shlex
@@ -358,7 +359,19 @@ def max_cycles_for_log(parsed: ParsedLog) -> int:
 
 
 def cycle_for_event(event: dict[str, str]) -> int:
-    raw_value = event.get("cycle", "0").strip() or "0"
+    """Return the cycle number from a cap-relevant event.
+
+    The cycle field is required on any event the cycle cap consults
+    (currently reviewer ``needs_fix`` events). Treating a missing
+    ``cycle:`` as zero would silently bypass the cap, so this helper
+    raises ``AILoopError`` rather than defaulting.
+    """
+    raw_value = event.get("cycle", "").strip()
+    if not raw_value:
+        status = event.get("status", "")
+        raise AILoopError(
+            f"event with status {status!r} is missing required cycle metadata"
+        )
     try:
         cycle = int(raw_value)
     except ValueError as exc:
@@ -535,12 +548,15 @@ class AgentDispatcher:
         except ValueError as exc:
             raise AILoopError(
                 f"unsupported AI loop agent timeout {raw_timeout!r}; "
-                "expected a positive number of seconds"
+                "expected a positive, finite number of seconds"
             ) from exc
-        if timeout_seconds <= 0:
+        # subprocess.run rejects non-finite timeouts at runtime with
+        # OverflowError / undefined behavior on NaN, so reject inf / -inf /
+        # NaN here and wrap the failure as AILoopError instead.
+        if not math.isfinite(timeout_seconds) or timeout_seconds <= 0:
             raise AILoopError(
                 f"unsupported AI loop agent timeout {raw_timeout!r}; "
-                "expected a positive number of seconds"
+                "expected a positive, finite number of seconds"
             )
         return timeout_seconds
 
