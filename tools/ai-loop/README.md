@@ -12,8 +12,13 @@ structured `clarified` event and wakes the controller to resume the asking
 agent. Slice 5 adds the full bounded two-agent loop: the controller now routes
 `needs_review` to the reviewer, `needs_fix` back to the developer, `clarified`
 to the named supported agent, and stops on clean, blocked, failed, paused, or
-cycle-cap states. Invocation remains opt-in so developers can validate routing
-without spending tokens or giving a local CLI write access by accident.
+cycle-cap states. Slice 6 (this slice) adds an end-of-loop summary and
+telemetry: when the loop hits a definitive terminal status (`clean`,
+`max_cycles_reached`, or `failed`), the controller appends a telemetry footer
+to the log, replaces a delimited summary block in the PR body, and — on
+`clean` only — flips the PR from draft to ready-for-review. Invocation
+remains opt-in so developers can validate routing without spending tokens or
+giving a local CLI write access by accident.
 
 ## Setup
 
@@ -350,9 +355,44 @@ Keep dispatch output explicit. Dry-run routing may say `would dispatch`, but a
 real chained handoff should print a flushed `dispatching ...` banner before
 starting the subprocess so terminal and CI logs stay in causal order.
 
+## End-Of-Loop Summary And Telemetry
+
+When the loop ends in a definitive terminal status — `clean`,
+`max_cycles_reached`, or `failed` — the controller finalizes the run before
+returning:
+
+1. It appends an HTML-comment telemetry footer to the AI loop log and
+   commits it as `[ai-loop] Controller: finalize <status>`. The footer
+   carries machine-readable counts: cycles run, developer/reviewer
+   invocations, clarifications, start/end timestamps, duration in
+   seconds, failure reason (when present), and the PR number when known.
+2. If the log has a PR number from `ai-loop-init`, the controller fetches
+   the current PR body via `gh pr view`, replaces (or appends) a
+   delimited summary block, and writes the result back via
+   `gh pr edit --body-file`. The block is bounded by
+   `<!-- ai-loop:summary-start -->` and `<!-- ai-loop:summary-end -->`
+   so re-running on a terminal log produces the same body — any
+   agent-written prose around it is preserved.
+3. On `clean` only, the controller marks the PR ready for review via
+   `gh pr ready`. On `max_cycles_reached` or `failed`, the PR stays in
+   draft so the human can adjudicate before flipping it.
+
+All `gh` calls in the finalize path are fail-tolerant: a missing CLI or a
+failing call logs a warning and the controller continues. The local
+telemetry footer still commits even if the PR mutation can't run, so the
+log carries the final state regardless of network or auth conditions.
+
+`awaiting_human` and `paused` are not terminal — the controller does not
+finalize on those statuses so the loop can resume after a human answer or
+an unpause.
+
 ## Current Limitations
 
 - Agent invocation is opt-in; default hook behavior remains dry-run.
-- No end-of-loop PR description rewrite or telemetry yet — agents are expected
-  to keep the PR title and body current themselves (see Slice 6 in
-  Issue #63 for the planned controller-driven summary work).
+- Cycle accounting still trusts the `cycle:` integer the agents write into
+  their own events. See [#84](https://github.com/kathelix/catvox/issues/84)
+  for the milestone-v2.0 hardening plan to derive the count from log
+  history instead.
+- Option A (a GitHub Actions reviewer pass after the local loop converges)
+  is deferred per ADR-0023; this slice closes the Option B MVP shape
+  described in Issue #63 but leaves Option A as a separate track.
