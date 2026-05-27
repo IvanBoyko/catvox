@@ -3,10 +3,17 @@ set -uo pipefail
 
 repo_root="$(git rev-parse --show-toplevel 2>/dev/null)" || exit 0
 git_dir="$(git rev-parse --git-dir 2>/dev/null)" || exit 0
-commit_message="$(git log -1 --format=%B 2>/dev/null)" || exit 0
+commit_subject="$(git log -1 --format=%s 2>/dev/null)" || exit 0
 
-case "$commit_message" in
-  *"[ai-loop]"*) ;;
+# Match only commits whose *subject line* begins with the literal
+# `[ai-loop] ` prefix (trailing space required). All loop-generated
+# commits use this exact form (e.g. `[ai-loop] Human: start ...`,
+# `[ai-loop] Codex: needs_review`). Matching only the subject — and
+# only the prefix — keeps normal commits whose bodies happen to mention
+# the convention (retrospective lessons, fix notes referencing
+# `[ai-loop] X` in backticks, etc.) from waking the controller.
+case "$commit_subject" in
+  "[ai-loop] "*) ;;
   *) exit 0 ;;
 esac
 
