@@ -29,7 +29,21 @@ This configures:
 git config core.hooksPath tools/ai-loop/hooks
 ```
 
-The hook is repository-controlled, but the Git setting is local to each clone.
+and prints the status of each prerequisite (`git`, `python3`, `codex`,
+`claude`, `gh`, and `gh auth status`). The hook is repository-controlled, but
+the Git setting is local to each clone.
+
+Because `make ai-loop-start` defaults to creating a draft PR (per ADR-0023),
+the GitHub CLI is a runtime prereq:
+
+```bash
+brew install gh    # or your platform's installer
+gh auth login
+```
+
+Setup prints a warning if `gh` is missing or unauthenticated. If you prefer
+the offline-only workflow on this clone, set
+`git config ai-loop.createPr false` and the warnings become advisory.
 
 ## Start A Local Run
 
@@ -39,21 +53,58 @@ make ai-loop-start \
   AI_LOOP_PROMPT="Implement the requested change"
 ```
 
-This creates or switches to `AI_LOOP_BRANCH`, writes a committed bootstrap log
-under:
+By default this:
 
-```text
-docs/ai-loop/local-YYYYMMDD-HHMMSS.md
+1. creates or switches to `AI_LOOP_BRANCH`
+2. writes the bootstrap log under `docs/ai-loop/local-YYYYMMDD-HHMMSS.md` and
+   commits it with `[ai-loop] Human: start <run_id>`
+3. pushes the branch to `origin`
+4. creates a draft PR with a placeholder `[wip] …` title and a minimal body
+5. renames the bootstrap log to `docs/ai-loop/pr-NNNN.md` (zero-padded),
+   re-renders it with `pr:` metadata, and commits the rename as
+   `[ai-loop] Human: bootstrap pr-NNNN`
+6. ensures the `ai-loop` repo label exists and applies it to the new PR
+
+The `post-commit` hook fires on each `[ai-loop]` commit and prints a dry-run
+routing decision. Agents are expected to keep the PR title and body current
+as the work evolves via `gh pr edit` — see `tools/ai-loop/prompts/common.md`.
+
+Bootstrap pre-flight refuses to proceed when any of the following is true,
+leaving the local `[ai-loop] Human: start` commit intact so the run can be
+resumed manually after the underlying issue is fixed:
+
+- `gh` is not installed or not on `PATH`
+- `gh auth status` fails (run `gh auth login`)
+- the repository has no `origin` remote
+- the current branch is not a descendant of `origin/main`
+- an open PR already exists for the branch
+
+### Skip PR Creation (Offline Mode)
+
+For offline iteration, dry-run routing validation, or any time `gh` isn't
+available, pass `--no-create-pr` (or `AI_LOOP_CREATE_PR=0`):
+
+```bash
+AI_LOOP_CREATE_PR=0 make ai-loop-start \
+  AI_LOOP_BRANCH=feature/example \
+  AI_LOOP_PROMPT="Implement the requested change"
 ```
 
-and commits it with:
+The run then stops after the initial `[ai-loop] Human: start <run_id>` commit
+and the log stays at `docs/ai-loop/local-YYYYMMDD-HHMMSS.md`. Persist this
+default for the current clone with:
 
-```text
-[ai-loop] Human: start <run_id>
+```bash
+git config ai-loop.createPr false
 ```
 
-The `post-commit` hook then wakes the controller and prints a dry-run routing
-decision. To let the hook dispatch the routed local agent, opt in explicitly:
+Re-enable PR creation with `git config --unset ai-loop.createPr` or
+`AI_LOOP_CREATE_PR=1`.
+
+### Enable Local Agent Invocation
+
+To let the hook dispatch the routed local agent (not just print the routing
+decision), opt in explicitly:
 
 ```bash
 AI_LOOP_INVOKE_AGENTS=1 make ai-loop-start \
@@ -67,11 +118,7 @@ You can also enable invocation for this clone:
 git config ai-loop.invokeAgents true
 ```
 
-Disable it with:
-
-```bash
-git config --unset ai-loop.invokeAgents
-```
+Disable it with `git config --unset ai-loop.invokeAgents`.
 
 Manual dispatch for the latest `[ai-loop]` commit is also available:
 
@@ -306,9 +353,6 @@ starting the subprocess so terminal and CI logs stay in causal order.
 ## Current Limitations
 
 - Agent invocation is opt-in; default hook behavior remains dry-run.
-- No draft PR creation.
-- No `docs/ai-loop/pr-XXXX.md` bootstrap yet.
-
-ADR-0023 requires committed PR-numbered loop logs for the MVP. The current
-implementation still uses a local run ID first so parser, hook, routing, and
-invocation behavior can be validated before PR-number bootstrap is added.
+- No end-of-loop PR description rewrite or telemetry yet — agents are expected
+  to keep the PR title and body current themselves (see Slice 6 in
+  Issue #63 for the planned controller-driven summary work).

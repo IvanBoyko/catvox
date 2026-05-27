@@ -506,6 +506,8 @@ Do not collapse distinct failure sources into one user message unless the recove
 
 When a feature expands materially beyond its original scope, update the PR title and description promptly so they match the actual branch contents.
 
+When picking the default for a new feature flag, check whether the relevant ADR, HLD, or TRD names one of the on/off states as the MVP form. If it does, that state should be the default; the other state is the opt-in/opt-out escape hatch. Putting the documented MVP behavior behind an opt-in flag — even with a "we'll flip it later" rationale — leaves the slice incomplete and is a predictable reviewer finding. Example: ADR-0023 names `docs/ai-loop/pr-XXXX.md` as the MVP loop-log shape; PR #86 initially shipped that behavior behind `AI_LOOP_CREATE_PR=1` opt-in and was flipped to default-on with explicit opt-out before merge.
+
 ### PR Review Workflow
 
 Open every review with a one-sentence "is this PR right-sized for the bug it claims to fix?" check. Catching scope creep before drilling into findings saves review rounds, and the answer informs the depth of the rest of the review.

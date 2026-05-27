@@ -26,6 +26,12 @@ You are participating in the CatVox local AI implementation/review loop.
   reviewed.
 - Commit AI loop log updates with `[ai-loop]` in the commit message so the hook
   can wake the controller.
+- When invoked, re-check that the PR title and body still reflect the current
+  branch scope and pending work. The bootstrap title and body are placeholders
+  only; if the work has expanded, narrowed, or changed direction since the last
+  agent turn, update them in the same turn via `gh pr edit --title ...` and/or
+  `gh pr edit --body-file ...`. Do this even if the diff itself is small — the
+  PR description is the durable summary for human reviewers.
 
 ## Event Footer Shape
 
