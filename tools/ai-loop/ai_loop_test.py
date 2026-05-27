@@ -1477,6 +1477,45 @@ questions: q1,q2
             status = run(["git", "status", "--porcelain"], repo)
             self.assertEqual(status.stdout, "")
 
+    def test_hook_ignores_commit_with_ai_loop_only_in_body(self) -> None:
+        # Regression guard for the hook's prefix tightening: a normal
+        # commit whose body merely references `[ai-loop]` (e.g. a
+        # retrospective lesson or a fix note explaining the convention)
+        # must NOT wake the controller. Before the prefix fix, the hook
+        # matched `[ai-loop]` anywhere in the full commit message and
+        # tripped on harmless mentions like these.
+        with tempfile.TemporaryDirectory() as tmp:
+            repo = Path(tmp)
+            init_repo_with_ai_loop_tooling(repo)
+            script = repo / "tools/ai-loop/ai_loop.py"
+            run([sys.executable, str(script), "setup"], repo)
+
+            (repo / "notes.md").write_text(
+                "Mention of the `[ai-loop]` convention.\n",
+                encoding="utf-8",
+            )
+            run(["git", "add", "notes.md"], repo)
+            commit = run(
+                [
+                    "git",
+                    "commit",
+                    "-m",
+                    "Add notes",
+                    "-m",
+                    "Body references `[ai-loop] Human: start` in backticks.",
+                ],
+                repo,
+            )
+
+            output = commit.stdout + commit.stderr
+            # Neither the dry-run routing line nor the
+            # "latest commit did not change an AI loop log" failure
+            # should appear: the hook must exit before invoking the
+            # controller at all.
+            self.assertNotIn("ai-loop dry-run", output)
+            self.assertNotIn("ai-loop:", output)
+            self.assertNotIn("lock exists, skipping", output)
+
     def test_hook_dry_run_uses_real_git_dir_in_linked_worktree(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
