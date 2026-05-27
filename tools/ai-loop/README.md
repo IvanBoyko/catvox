@@ -312,3 +312,4 @@ starting the subprocess so terminal and CI logs stay in causal order.
 ADR-0023 requires committed PR-numbered loop logs for the MVP. The current
 implementation still uses a local run ID first so parser, hook, routing, and
 invocation behavior can be validated before PR-number bootstrap is added.
+The PR-numbered bootstrap is the next planned slice; see Issue #63.
