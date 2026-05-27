@@ -1777,6 +1777,29 @@ def append_max_cycles_reached_event(
     )
 
 
+def push_finalized_branch(git: GitContext, branch: str) -> bool:
+    """Push ``branch`` to ``origin`` so the remote PR reflects the loop's
+    local commits before any PR-body or draft-ready mutation runs.
+
+    Fail-tolerant: returns ``True`` on success and ``False`` on any push
+    failure (network blip, no `origin`, push rejected). Callers should
+    short-circuit the subsequent PR mutations on ``False`` so the
+    controller does not half-finalize — flipping a draft PR to
+    ready-for-review against a stale branch is exactly the foot-gun this
+    push exists to prevent.
+    """
+    result = git.run(["push", "origin", branch], check=False)
+    if result.returncode != 0:
+        stderr = (result.stderr or "").strip() or "git push failed"
+        print(
+            f"ai-loop: could not push branch {branch!r}: {stderr}",
+            file=sys.stderr,
+            flush=True,
+        )
+        return False
+    return True
+
+
 def finalize_terminal_log(*, git: GitContext, log_path: Path) -> None:
     """Write the end-of-loop summary + telemetry for a terminal log.
 
@@ -1835,6 +1858,26 @@ def finalize_terminal_log(*, git: GitContext, log_path: Path) -> None:
     )
 
     if telemetry.pr_number is None:
+        return
+
+    # Push the branch before mutating the PR. The local HEAD now carries
+    # the finalize commit plus whatever the agents committed during the
+    # loop — `run_agent_loop` only verifies `HEAD` advanced after each
+    # agent turn, it does not push. Without this push, `gh pr edit` /
+    # `gh pr ready` succeed against the PR object while `origin/<branch>`
+    # still points at the pre-loop bootstrap tip, leaving reviewers
+    # notified on a stale branch. See Codex bot finding B3 on PR #90
+    # (same shape as PR #88's bootstrap-rename push fix on PR #86).
+    branch = git.current_branch()
+    if not push_finalized_branch(git, branch):
+        print(
+            f"ai-loop: skipping PR #{telemetry.pr_number} body and ready "
+            f"updates because pushing {branch!r} failed; the local telemetry "
+            "commit is intact, push the branch manually and re-run finalize "
+            "to retry the PR-side updates",
+            file=sys.stderr,
+            flush=True,
+        )
         return
 
     gh = GhClient(git)

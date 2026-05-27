@@ -2546,6 +2546,20 @@ class FinalizeTerminalLogTests(unittest.TestCase):
         env.pop("AI_LOOP_CREATE_PR", None)
         return env
 
+    def _setup_repo(self, root: Path) -> Path:
+        """Set up a test repo with a bare `origin` so finalize can push.
+
+        Finalize now pushes the current branch before mutating the PR
+        (see PR following Codex bot finding B3 on PR #90). Tests that
+        exercise the PR-mutation path therefore need a real remote;
+        without it, push fails and the PR-side assertions get skipped.
+        """
+        repo = root / "repo"
+        origin = root / "origin.git"
+        repo.mkdir()
+        init_repo_with_bare_origin(repo, origin)
+        return repo
+
     def _write_pr_log(
         self,
         repo: Path,
@@ -2573,9 +2587,7 @@ class FinalizeTerminalLogTests(unittest.TestCase):
     def test_finalize_on_clean_writes_footer_updates_pr_and_marks_ready(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
-            repo = root / "repo"
-            repo.mkdir()
-            init_repo_with_ai_loop_tooling(repo)
+            repo = self._setup_repo(root)
 
             shim = root / "gh_shim.py"
             state_dir = root / "gh_state"
@@ -2639,6 +2651,23 @@ class FinalizeTerminalLogTests(unittest.TestCase):
             self.assertEqual(len(pr_ready), 1)
             self.assertEqual(pr_ready[0][2], "90")
 
+            # Local HEAD must match origin/<branch>. Without the push
+            # step in finalize_terminal_log, the controller's finalize
+            # commit (plus the agent commits that preceded it in a real
+            # loop) would stay local while gh pr edit + gh pr ready
+            # succeed against the PR object, leaving reviewers notified
+            # on a stale branch. Codex bot finding B3 on PR #90; same
+            # shape as PR #88's bootstrap-rename push fix on PR #86.
+            local_head = run(["git", "rev-parse", "HEAD"], repo).stdout.strip()
+            remote_head = run(
+                ["git", "rev-parse", "origin/main"], repo
+            ).stdout.strip()
+            self.assertEqual(
+                local_head,
+                remote_head,
+                "finalize must push branch before mutating the PR",
+            )
+
             new_body = (state_dir / "pr_body.txt").read_text(encoding="utf-8")
             self.assertIn(ai_loop.SUMMARY_BLOCK_START, new_body)
             self.assertIn("Final status: `clean`", new_body)
@@ -2647,9 +2676,7 @@ class FinalizeTerminalLogTests(unittest.TestCase):
     def test_finalize_idempotent_on_already_finalized_log(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
-            repo = root / "repo"
-            repo.mkdir()
-            init_repo_with_ai_loop_tooling(repo)
+            repo = self._setup_repo(root)
 
             shim = root / "gh_shim.py"
             state_dir = root / "gh_state"
@@ -2722,9 +2749,7 @@ class FinalizeTerminalLogTests(unittest.TestCase):
     def test_finalize_on_max_cycles_keeps_pr_draft(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
-            repo = root / "repo"
-            repo.mkdir()
-            init_repo_with_ai_loop_tooling(repo)
+            repo = self._setup_repo(root)
 
             shim = root / "gh_shim.py"
             state_dir = root / "gh_state"
@@ -2794,9 +2819,7 @@ class FinalizeTerminalLogTests(unittest.TestCase):
     def test_finalize_on_failed_keeps_pr_draft(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
-            repo = root / "repo"
-            repo.mkdir()
-            init_repo_with_ai_loop_tooling(repo)
+            repo = self._setup_repo(root)
 
             shim = root / "gh_shim.py"
             state_dir = root / "gh_state"
@@ -2855,9 +2878,7 @@ class FinalizeTerminalLogTests(unittest.TestCase):
     def test_finalize_without_pr_only_writes_footer(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
-            repo = root / "repo"
-            repo.mkdir()
-            init_repo_with_ai_loop_tooling(repo)
+            repo = self._setup_repo(root)
 
             shim = root / "gh_shim.py"
             state_dir = root / "gh_state"
@@ -2919,9 +2940,7 @@ class FinalizeTerminalLogTests(unittest.TestCase):
     def test_finalize_tolerates_missing_gh(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
-            repo = root / "repo"
-            repo.mkdir()
-            init_repo_with_ai_loop_tooling(repo)
+            repo = self._setup_repo(root)
 
             env = os.environ.copy()
             env["AI_LOOP_GH_COMMAND"] = "/nonexistent/gh-binary-does-not-exist"
@@ -2969,9 +2988,7 @@ class FinalizeTerminalLogTests(unittest.TestCase):
     def test_finalize_tolerates_gh_ready_failure(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
-            repo = root / "repo"
-            repo.mkdir()
-            init_repo_with_ai_loop_tooling(repo)
+            repo = self._setup_repo(root)
 
             shim = root / "gh_shim.py"
             state_dir = root / "gh_state"
@@ -3027,9 +3044,7 @@ class FinalizeTerminalLogTests(unittest.TestCase):
     def test_finalize_skipped_on_awaiting_human(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
-            repo = root / "repo"
-            repo.mkdir()
-            init_repo_with_ai_loop_tooling(repo)
+            repo = self._setup_repo(root)
 
             shim = root / "gh_shim.py"
             state_dir = root / "gh_state"
@@ -3078,6 +3093,104 @@ class FinalizeTerminalLogTests(unittest.TestCase):
             self.assertEqual(head_before, head_after)
             updated_log = log_path.read_text(encoding="utf-8")
             self.assertNotIn(ai_loop.TELEMETRY_FOOTER_MARKER, updated_log)
+
+    def test_finalize_skips_pr_updates_when_push_fails(self) -> None:
+        """Codex bot finding B3 on PR #90: when push fails after the
+        finalize commit, the controller must NOT mutate the PR body or
+        flip the draft to ready — doing so would notify reviewers on a
+        stale branch. The local telemetry commit still lands so the
+        run is traceable, and the user can push manually then re-run
+        finalize to retry the PR-side updates.
+        """
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            repo = self._setup_repo(root)
+
+            # Break origin so the push step in finalize fails. The
+            # commit itself is still made locally.
+            run(
+                ["git", "remote", "set-url", "origin", "/nonexistent/origin"],
+                repo,
+            )
+
+            shim = root / "gh_shim.py"
+            state_dir = root / "gh_state"
+            write_gh_shim(shim)
+            state_dir.mkdir(parents=True, exist_ok=True)
+            (state_dir / "pr_body.txt").write_text(
+                "Initial PR body.\n", encoding="utf-8"
+            )
+            env = self._shim_env(state_dir, shim)
+
+            log_path = self._write_pr_log(
+                repo,
+                events=(
+                    "<!-- ai-loop-event\n"
+                    "agent: codex\n"
+                    "role: developer\n"
+                    "cycle: 1\n"
+                    "status: needs_review\n"
+                    "-->\n"
+                ),
+                final_event=(
+                    "<!-- ai-loop-event\n"
+                    "agent: claude-code\n"
+                    "role: reviewer\n"
+                    "cycle: 1\n"
+                    "status: clean\n"
+                    "-->"
+                ),
+            )
+
+            script = repo / "tools/ai-loop/ai_loop.py"
+            result = run(
+                [
+                    sys.executable,
+                    str(script),
+                    "continue",
+                    "--trigger",
+                    "test",
+                    "--log",
+                    str(log_path),
+                    "--invoke",
+                ],
+                repo,
+                env=env,
+            )
+
+            # Local finalize commit still lands so the log is intact.
+            updated_log = log_path.read_text(encoding="utf-8")
+            self.assertIn(ai_loop.TELEMETRY_FOOTER_MARKER, updated_log)
+            commits = run(["git", "log", "--format=%s"], repo).stdout
+            self.assertIn("[ai-loop] Controller: finalize clean", commits)
+
+            # Both warning lines on stderr — the push failure and the
+            # explicit short-circuit explaining what to do next.
+            self.assertIn(
+                "could not push branch",
+                result.stderr,
+            )
+            self.assertIn(
+                "skipping PR #90 body and ready updates",
+                result.stderr,
+            )
+
+            # gh must NOT have been called for body fetch/edit/ready.
+            # gh auth status from setup-time invocations is unrelated;
+            # filter to the finalize-relevant subcommands.
+            calls = read_gh_calls(state_dir)
+            pr_calls = [c for c in calls if c[:1] == ["pr"]]
+            self.assertEqual(
+                pr_calls,
+                [],
+                "no PR-side gh calls expected when push failed",
+            )
+
+            # PR body unchanged.
+            self.assertEqual(
+                (state_dir / "pr_body.txt").read_text(encoding="utf-8"),
+                "Initial PR body.\n",
+            )
 
 
 if __name__ == "__main__":

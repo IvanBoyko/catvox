@@ -366,14 +366,23 @@ returning:
    carries machine-readable counts: cycles run, developer/reviewer
    invocations, clarifications, start/end timestamps, duration in
    seconds, failure reason (when present), and the PR number when known.
-2. If the log has a PR number from `ai-loop-init`, the controller fetches
-   the current PR body via `gh pr view`, replaces (or appends) a
-   delimited summary block, and writes the result back via
-   `gh pr edit --body-file`. The block is bounded by
-   `<!-- ai-loop:summary-start -->` and `<!-- ai-loop:summary-end -->`
-   so re-running on a terminal log produces the same body — any
-   agent-written prose around it is preserved.
-3. On `clean` only, the controller marks the PR ready for review via
+2. If the log has a PR number from `ai-loop-init`, the controller pushes
+   the current branch to `origin` before touching the PR. Without this
+   push, the local finalize commit (plus the agent commits that
+   preceded it) would stay local while `gh pr edit` and `gh pr ready`
+   succeed against the PR object, leaving reviewers notified on a
+   stale branch. If the push fails (no remote, network blip), the
+   controller skips both the body update and the ready transition and
+   prints the recovery hint to stderr: push the branch manually, then
+   re-run `continue --invoke` to retry the PR-side updates.
+3. With the branch in sync, the controller fetches the current PR body
+   via `gh pr view`, replaces (or appends) a delimited summary block,
+   and writes the result back via `gh pr edit --body-file`. The block
+   is bounded by `<!-- ai-loop:summary-start -->` and
+   `<!-- ai-loop:summary-end -->` so re-running on a terminal log
+   produces the same body — any agent-written prose around it is
+   preserved.
+4. On `clean` only, the controller marks the PR ready for review via
    `gh pr ready`. On `max_cycles_reached` or `failed`, the PR stays in
    draft so the human can adjudicate before flipping it.
 
