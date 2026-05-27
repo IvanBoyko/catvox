@@ -957,8 +957,12 @@ class GhClient:
         finally:
             try:
                 os.unlink(body_path)
-            except OSError:
-                pass
+            except OSError as exc:
+                print(
+                    f"ai-loop: could not remove temp PR body file {body_path}: {exc}",
+                    file=sys.stderr,
+                    flush=True,
+                )
         if result.returncode != 0:
             stderr = (result.stderr or "").strip() or "gh pr edit failed"
             print(

@@ -2606,7 +2606,6 @@ class FinalizeTerminalLogTests(unittest.TestCase):
                 ),
             )
 
-            git = ai_loop.GitContext(repo)
             ai_loop_module_dir = repo / "tools/ai-loop"
             # Run finalize in-process via the script entry to mimic real use.
             run(
