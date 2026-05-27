@@ -1238,6 +1238,12 @@ def command_start(args: argparse.Namespace) -> int:
     )
     print(f"renamed to {new_rel_log_path}")
 
+    # Push the rename commit so the remote PR shows the pr-NNNN.md log
+    # rather than the pre-rename local-*.md placeholder. The first push
+    # above carried only the start commit (since the PR needed an
+    # existing remote tip before `gh pr create`).
+    git.push_branch(branch, set_upstream=False)
+
     gh.ensure_label(
         AI_LOOP_LABEL,
         color=AI_LOOP_LABEL_COLOR,
