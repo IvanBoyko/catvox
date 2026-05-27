@@ -133,6 +133,20 @@ python3 tools/ai-loop/ai_loop.py continue --invoke --trigger manual
 
 Use `--dry-run` to force observe-only routing even when invocation is enabled.
 
+`ai-loop-start` holds the same `.git/ai-loop.lock` the post-commit hook uses
+for the entire bootstrap. Hook fires from the `[ai-loop] Human: start …` and
+`[ai-loop] Human: bootstrap pr-NNNN` commits all hit the held lock and skip
+without dispatching — the agent would otherwise run against transient log
+state and either lose its commit (the first fire's `local-*.md` log is about
+to be overwritten by the rename step) or waste an invocation. After the
+bootstrap completes (commits + push + draft PR + rename + label), if
+invocation is enabled, the controller dispatches the agent exactly once via
+an explicit `run_agent_loop` call. If that dispatch fails (e.g. the codex
+CLI reports a usage limit), the bootstrap remains complete — the PR, branch,
+and label are all in place — and the user can fix the underlying issue and
+resume via `python3 tools/ai-loop/ai_loop.py continue --invoke --trigger manual`
+without redoing the bootstrap.
+
 When a developer-routed agent commits a `needs_review` event, that event is
 handed to Claude Code immediately. When the reviewer commits `needs_fix`, the
 controller dispatches Codex again. The loop repeats until the reviewer commits
@@ -366,14 +380,23 @@ returning:
    carries machine-readable counts: cycles run, developer/reviewer
    invocations, clarifications, start/end timestamps, duration in
    seconds, failure reason (when present), and the PR number when known.
-2. If the log has a PR number from `ai-loop-init`, the controller fetches
-   the current PR body via `gh pr view`, replaces (or appends) a
-   delimited summary block, and writes the result back via
-   `gh pr edit --body-file`. The block is bounded by
-   `<!-- ai-loop:summary-start -->` and `<!-- ai-loop:summary-end -->`
-   so re-running on a terminal log produces the same body — any
-   agent-written prose around it is preserved.
-3. On `clean` only, the controller marks the PR ready for review via
+2. If the log has a PR number from `ai-loop-init`, the controller pushes
+   the current branch to `origin` before touching the PR. Without this
+   push, the local finalize commit (plus the agent commits that
+   preceded it) would stay local while `gh pr edit` and `gh pr ready`
+   succeed against the PR object, leaving reviewers notified on a
+   stale branch. If the push fails (no remote, network blip), the
+   controller skips both the body update and the ready transition and
+   prints the recovery hint to stderr: push the branch manually, then
+   re-run `continue --invoke` to retry the PR-side updates.
+3. With the branch in sync, the controller fetches the current PR body
+   via `gh pr view`, replaces (or appends) a delimited summary block,
+   and writes the result back via `gh pr edit --body-file`. The block
+   is bounded by `<!-- ai-loop:summary-start -->` and
+   `<!-- ai-loop:summary-end -->` so re-running on a terminal log
+   produces the same body — any agent-written prose around it is
+   preserved.
+4. On `clean` only, the controller marks the PR ready for review via
    `gh pr ready`. On `max_cycles_reached` or `failed`, the PR stays in
    draft so the human can adjudicate before flipping it.
 
@@ -381,6 +404,14 @@ All `gh` calls in the finalize path are fail-tolerant: a missing CLI or a
 failing call logs a warning and the controller continues. The local
 telemetry footer still commits even if the PR mutation can't run, so the
 log carries the final state regardless of network or auth conditions.
+
+Re-running finalize after a push failure recovers cleanly: only the
+footer commit is gated on the footer marker, so the second pass skips
+the duplicate commit but still pushes, refreshes the PR body, and flips
+to ready on `clean`. The retry re-uses the `ended_at` timestamp from
+the existing footer so the rendered summary block is byte-identical to
+what the first attempt would have produced — `gh pr edit --body-file`
+is a true no-op when the body is already current.
 
 `awaiting_human` and `paused` are not terminal — the controller does not
 finalize on those statuses so the loop can resume after a human answer or

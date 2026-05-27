@@ -130,6 +130,9 @@ SUMMARY_BLOCK_RE = re.compile(
     re.DOTALL,
 )
 TELEMETRY_FOOTER_MARKER = "<!-- ai-loop-telemetry"
+TELEMETRY_FOOTER_RE = re.compile(
+    r"<!--\s*ai-loop-telemetry\s*\n(.*?)\n\s*-->", re.DOTALL
+)
 
 
 class AILoopError(RuntimeError):
@@ -998,6 +1001,60 @@ class GhClient:
         return True
 
 
+def _resolve_git_dir(git: GitContext) -> Path:
+    git_dir_value = git.required_output(["rev-parse", "--git-dir"]).strip()
+    git_dir = Path(git_dir_value)
+    if not git_dir.is_absolute():
+        git_dir = git.repo / git_dir
+    return git_dir
+
+
+def _acquire_ai_loop_lock(git: GitContext) -> Path:
+    """Acquire the ai-loop lock shared with the post-commit hook.
+
+    Used by ``command_start`` to bracket the bootstrap so the
+    post-commit hook fires during the bootstrap commits all hit the
+    same lock and exit early without dispatching the agent. Without
+    this, the first bootstrap commit dispatches against the
+    pre-rename ``local-*.md`` log (whose contents are about to be
+    overwritten by the rename step) and the second dispatches a
+    redundant second invocation — both wasteful, and the first
+    actively loses the agent's commit on success.
+    """
+    lock_dir = _resolve_git_dir(git) / "ai-loop.lock"
+    try:
+        lock_dir.mkdir(exist_ok=False)
+    except FileExistsError as exc:
+        raise AILoopError(
+            f"ai-loop.lock already exists at {lock_dir}; another loop run "
+            "is in progress, or a previous run failed to release the lock. "
+            "Confirm no other ai-loop process is running and remove the "
+            "lock directory manually before retrying."
+        ) from exc
+    return lock_dir
+
+
+def _release_ai_loop_lock(lock_dir: Path) -> None:
+    try:
+        lock_dir.rmdir()
+    except FileNotFoundError:
+        # Already cleaned up (e.g., a parallel hook fire raced us, or a
+        # manual `rmdir` between us creating and releasing). Benign.
+        return
+    except OSError as exc:
+        # Unexpected — most likely the lock directory is non-empty
+        # because something else dropped a file in there, or a
+        # permissions issue. Surface it so the next run isn't wedged
+        # without anyone noticing, but don't raise from this finally
+        # path so we don't mask the underlying error from the work
+        # that ran inside the lock.
+        print(
+            f"ai-loop: could not release lock at {lock_dir}: {exc}",
+            file=sys.stderr,
+            flush=True,
+        )
+
+
 def select_create_pr(git: GitContext, args: argparse.Namespace) -> bool:
     """Decide whether `start` should bootstrap a draft PR.
 
@@ -1484,90 +1541,135 @@ def command_start(args: argparse.Namespace) -> int:
                 f"{branch!r}; close or reuse it before bootstrapping a new loop"
             )
 
-    run_id = make_run_id()
-    rel_log_path = f"docs/ai-loop/{run_id}.md"
-    log_path = repo / rel_log_path
-    if log_path.exists():
-        raise AILoopError(f"AI loop log already exists: {rel_log_path}")
-    log_path.parent.mkdir(parents=True, exist_ok=True)
-    started_at = iso_now_local()
-    display_time = display_now_local()
-    log_path.write_text(
-        render_bootstrap_log(
-            run_id=run_id,
-            log_path=rel_log_path,
-            prompt=prompt,
-            repo=git.repo_name(),
-            branch=git.current_branch(),
-            started_at=started_at,
-            display_time=display_time,
-        ),
-        encoding="utf-8",
-    )
-
-    git.run(["add", rel_log_path], capture_output=True)
-    git.run(
-        ["commit", "-m", f"[ai-loop] Human: start {run_id}"],
-        capture_output=False,
-    )
-    print(f"created {rel_log_path}")
-    print(f"ai-loop run id: {run_id}")
-
-    if not create_pr:
-        return 0
-
-    assert gh is not None
-    git.push_branch(branch)
-    pr_number = gh.create_draft_pr(
-        title=placeholder_pr_title(prompt),
-        body=placeholder_pr_body(branch),
-        base="main",
-        head=branch,
-    )
-    print(f"created draft PR #{pr_number}")
-
-    new_rel_log_path = pr_log_relpath(pr_number)
-    new_log_path = repo / new_rel_log_path
-    if new_log_path.exists():
-        raise AILoopError(
-            f"PR-numbered log already exists: {new_rel_log_path}; "
-            "loop bootstrap cannot rename onto an existing file"
+    # Hold the same lock the post-commit hook uses for the entire
+    # bootstrap. Every `[ai-loop]` commit below would otherwise fire
+    # the hook in-process and dispatch the routed agent against
+    # transient log state — the first hook fire sees the local-*.md
+    # log just before the rename step rewrites it (silently losing any
+    # commit the agent made), and even when the agent is unavailable
+    # the hook still wastes an invocation attempt. With the lock held
+    # here, all nested hook fires during bootstrap commits skip
+    # immediately. After bootstrap completes we dispatch the agent
+    # explicitly (see below) so auto-start is preserved without the
+    # bug.
+    lock_dir = _acquire_ai_loop_lock(git)
+    try:
+        run_id = make_run_id()
+        rel_log_path = f"docs/ai-loop/{run_id}.md"
+        log_path = repo / rel_log_path
+        if log_path.exists():
+            raise AILoopError(f"AI loop log already exists: {rel_log_path}")
+        log_path.parent.mkdir(parents=True, exist_ok=True)
+        started_at = iso_now_local()
+        display_time = display_now_local()
+        log_path.write_text(
+            render_bootstrap_log(
+                run_id=run_id,
+                log_path=rel_log_path,
+                prompt=prompt,
+                repo=git.repo_name(),
+                branch=git.current_branch(),
+                started_at=started_at,
+                display_time=display_time,
+            ),
+            encoding="utf-8",
         )
-    git.run(["mv", rel_log_path, new_rel_log_path], capture_output=False)
-    new_log_path.write_text(
-        render_bootstrap_log(
-            run_id=run_id,
-            log_path=new_rel_log_path,
-            prompt=prompt,
-            repo=git.repo_name(),
-            branch=git.current_branch(),
-            started_at=started_at,
-            display_time=display_time,
-            pr=pr_number,
-        ),
-        encoding="utf-8",
-    )
-    git.run(["add", new_rel_log_path], capture_output=True)
-    git.run(
-        ["commit", "-m", f"[ai-loop] Human: bootstrap pr-{pr_number:04d}"],
-        capture_output=False,
-    )
-    print(f"renamed to {new_rel_log_path}")
 
-    # Push the rename commit so the remote PR shows the pr-NNNN.md log
-    # rather than the pre-rename local-*.md placeholder. The first push
-    # above carried only the start commit (since the PR needed an
-    # existing remote tip before `gh pr create`).
-    git.push_branch(branch, set_upstream=False)
+        git.run(["add", rel_log_path], capture_output=True)
+        git.run(
+            ["commit", "-m", f"[ai-loop] Human: start {run_id}"],
+            capture_output=False,
+        )
+        print(f"created {rel_log_path}")
+        print(f"ai-loop run id: {run_id}")
 
-    gh.ensure_label(
-        AI_LOOP_LABEL,
-        color=AI_LOOP_LABEL_COLOR,
-        description=AI_LOOP_LABEL_DESCRIPTION,
-    )
-    gh.add_label_to_pr(pr_number, AI_LOOP_LABEL)
-    print(f"applied label {AI_LOOP_LABEL!r} to PR #{pr_number}")
-    return 0
+        if create_pr:
+            assert gh is not None
+            git.push_branch(branch)
+            pr_number = gh.create_draft_pr(
+                title=placeholder_pr_title(prompt),
+                body=placeholder_pr_body(branch),
+                base="main",
+                head=branch,
+            )
+            print(f"created draft PR #{pr_number}")
+
+            new_rel_log_path = pr_log_relpath(pr_number)
+            new_log_path = repo / new_rel_log_path
+            if new_log_path.exists():
+                raise AILoopError(
+                    f"PR-numbered log already exists: {new_rel_log_path}; "
+                    "loop bootstrap cannot rename onto an existing file"
+                )
+            git.run(["mv", rel_log_path, new_rel_log_path], capture_output=False)
+            new_log_path.write_text(
+                render_bootstrap_log(
+                    run_id=run_id,
+                    log_path=new_rel_log_path,
+                    prompt=prompt,
+                    repo=git.repo_name(),
+                    branch=git.current_branch(),
+                    started_at=started_at,
+                    display_time=display_time,
+                    pr=pr_number,
+                ),
+                encoding="utf-8",
+            )
+            git.run(["add", new_rel_log_path], capture_output=True)
+            git.run(
+                [
+                    "commit",
+                    "-m",
+                    f"[ai-loop] Human: bootstrap pr-{pr_number:04d}",
+                ],
+                capture_output=False,
+            )
+            print(f"renamed to {new_rel_log_path}")
+
+            # Push the rename commit so the remote PR shows the
+            # pr-NNNN.md log rather than the pre-rename local-*.md
+            # placeholder. The first push above carried only the start
+            # commit (since the PR needed an existing remote tip
+            # before `gh pr create`).
+            git.push_branch(branch, set_upstream=False)
+
+            gh.ensure_label(
+                AI_LOOP_LABEL,
+                color=AI_LOOP_LABEL_COLOR,
+                description=AI_LOOP_LABEL_DESCRIPTION,
+            )
+            gh.add_label_to_pr(pr_number, AI_LOOP_LABEL)
+            print(f"applied label {AI_LOOP_LABEL!r} to PR #{pr_number}")
+
+            log_path = new_log_path
+
+        # Bootstrap is complete. If the caller asked for invocation
+        # (env, git config, or future --invoke flag), dispatch now
+        # while we still hold the lock — agent commits inside the
+        # loop will fire the post-commit hook in their subprocesses,
+        # and those hook fires hit the same lock and skip, so the
+        # only dispatch chain is this explicit one. If the agent
+        # fails (codex usage limit, etc.) the AILoopError raised
+        # here propagates after the PR and branch are already in
+        # place, so the user can fix the underlying issue and retry
+        # via `make ai-loop-continue --invoke` without redoing the
+        # bootstrap.
+        dispatcher = AgentDispatcher(git)
+        if dispatcher.should_invoke(args):
+            git.ensure_dispatch_safe_worktree()
+            router = StateRouter()
+            profile = dispatcher.selected_profile(args)
+            run_agent_loop(
+                git=git,
+                router=router,
+                dispatcher=dispatcher,
+                log_path=log_path,
+                profile=profile,
+                trigger="start",
+            )
+        return 0
+    finally:
+        _release_ai_loop_lock(lock_dir)
 
 
 def command_answer(args: argparse.Namespace) -> int:
@@ -1777,22 +1879,58 @@ def append_max_cycles_reached_event(
     )
 
 
+def push_finalized_branch(git: GitContext, branch: str) -> bool:
+    """Push ``branch`` to ``origin`` so the remote PR reflects the loop's
+    local commits before any PR-body or draft-ready mutation runs.
+
+    Fail-tolerant: returns ``True`` on success and ``False`` on any push
+    failure (network blip, no `origin`, push rejected). Callers should
+    short-circuit the subsequent PR mutations on ``False`` so the
+    controller does not half-finalize — flipping a draft PR to
+    ready-for-review against a stale branch is exactly the foot-gun this
+    push exists to prevent.
+    """
+    result = git.run(["push", "origin", branch], check=False)
+    if result.returncode != 0:
+        stderr = (result.stderr or "").strip() or "git push failed"
+        print(
+            f"ai-loop: could not push branch {branch!r}: {stderr}",
+            file=sys.stderr,
+            flush=True,
+        )
+        return False
+    return True
+
+
 def finalize_terminal_log(*, git: GitContext, log_path: Path) -> None:
     """Write the end-of-loop summary + telemetry for a terminal log.
 
     No-op for non-terminal statuses (``awaiting_human``, ``paused``,
-    unknown). Idempotent: if a telemetry footer already exists in the log
-    (from a previous controller pass), this function returns without
-    making a second commit or PR mutation.
+    unknown). On terminal statuses the controller:
 
-    On terminal statuses, the controller:
+    1. If no telemetry footer is in the log yet, appends one and
+       commits it as ``[ai-loop] Controller: finalize <status>``.
+       The footer commit is gated on the marker so re-runs do not
+       duplicate it.
+    2. If a PR number is known from ``ai-loop-init``, pushes the
+       current branch, then replaces the delimited summary block in
+       the PR body (appends if absent), and on ``clean`` marks the PR
+       ready-for-review.
+    3. On ``max_cycles_reached`` / ``failed`` the PR stays in draft
+       so the human can adjudicate.
 
-    1. Appends a telemetry footer to the log and commits it.
-    2. If a PR number is known from ``ai-loop-init``, replaces the
-       delimited summary block in the PR body (appends if absent).
-    3. If the final status is ``clean``, marks the PR ready-for-review;
-       on ``max_cycles_reached`` / ``failed`` the PR stays in draft so
-       the human can adjudicate.
+    **Recovery semantics.** The PR-side steps run on every call,
+    independent of the footer marker. If a previous run committed
+    the footer locally but failed to push (so PR-side updates were
+    skipped, see ``push_finalized_branch``), the user pushes the
+    branch manually and re-runs ``continue --invoke``; this function
+    sees the footer marker, skips the footer commit, but still
+    pushes (no-op if already in sync), re-reads the PR body, and
+    applies the summary block + ready transition. The PR-side
+    operations are themselves idempotent: ``replace_summary_block``
+    yields the same body for the same telemetry, ``edit_pr_body`` is
+    a no-op when the body has not changed, and ``mark_pr_ready`` is
+    fail-tolerant when the PR is already in the ready state.
 
     All ``gh`` interactions are fail-tolerant: a missing or failing
     ``gh`` logs a warning and the controller continues. The local
@@ -1806,35 +1944,75 @@ def finalize_terminal_log(*, git: GitContext, log_path: Path) -> None:
         return
 
     log_text = log_path.read_text(encoding="utf-8")
-    if TELEMETRY_FOOTER_MARKER in log_text:
+    footer_present = TELEMETRY_FOOTER_MARKER in log_text
+
+    # When the footer is already present we are recovering from an
+    # earlier finalize that committed the footer but failed the
+    # PR-side updates (typically a push failure). Re-use the
+    # ``ended_at`` from the existing footer so the summary block we
+    # render now is byte-identical to the one the first attempt would
+    # have written — that makes the body update an actual no-op on
+    # the gh layer instead of triggering a redundant `pr edit` with a
+    # later timestamp.
+    ended_at = iso_now_local()
+    if footer_present:
+        match = TELEMETRY_FOOTER_RE.search(log_text)
+        if match:
+            try:
+                existing = parse_kv_block(match.group(1))
+            except ValueError:
+                existing = {}
+            ended_at = existing.get("ended_at", "").strip() or ended_at
+
+    telemetry = derive_telemetry(parsed, ended_at=ended_at)
+
+    if not footer_present:
+        git.ensure_dispatch_safe_worktree()
+        footer = render_telemetry_footer(telemetry)
+        rel_log_path = repo_relative_path(git.repo, log_path)
+        with log_path.open("a", encoding="utf-8") as handle:
+            handle.write(footer)
+        git.run(["add", rel_log_path], capture_output=True)
+        git.run(
+            [
+                "commit",
+                "-m",
+                f"[ai-loop] Controller: finalize {telemetry.final_status}",
+            ],
+            capture_output=False,
+        )
         print(
-            f"ai-loop: telemetry footer already present in {log_path.name}; "
-            "finalize is a no-op",
+            f"ai-loop: wrote end-of-loop telemetry footer ({telemetry.final_status})",
             flush=True,
         )
-        return
-
-    git.ensure_dispatch_safe_worktree()
-    telemetry = derive_telemetry(parsed, ended_at=iso_now_local())
-    footer = render_telemetry_footer(telemetry)
-    rel_log_path = repo_relative_path(git.repo, log_path)
-    with log_path.open("a", encoding="utf-8") as handle:
-        handle.write(footer)
-    git.run(["add", rel_log_path], capture_output=True)
-    git.run(
-        [
-            "commit",
-            "-m",
-            f"[ai-loop] Controller: finalize {telemetry.final_status}",
-        ],
-        capture_output=False,
-    )
-    print(
-        f"ai-loop: wrote end-of-loop telemetry footer ({telemetry.final_status})",
-        flush=True,
-    )
+    else:
+        print(
+            f"ai-loop: telemetry footer already present in {log_path.name}; "
+            "skipping footer commit, retrying PR-side updates",
+            flush=True,
+        )
 
     if telemetry.pr_number is None:
+        return
+
+    # Push the branch before mutating the PR. The local HEAD now carries
+    # the finalize commit plus whatever the agents committed during the
+    # loop — `run_agent_loop` only verifies `HEAD` advanced after each
+    # agent turn, it does not push. Without this push, `gh pr edit` /
+    # `gh pr ready` succeed against the PR object while `origin/<branch>`
+    # still points at the pre-loop bootstrap tip, leaving reviewers
+    # notified on a stale branch. See Codex bot finding B3 on PR #90
+    # (same shape as PR #88's bootstrap-rename push fix on PR #86).
+    branch = git.current_branch()
+    if not push_finalized_branch(git, branch):
+        print(
+            f"ai-loop: skipping PR #{telemetry.pr_number} body and ready "
+            f"updates because pushing {branch!r} failed; the local telemetry "
+            "commit is intact, push the branch manually and re-run finalize "
+            "to retry the PR-side updates",
+            file=sys.stderr,
+            flush=True,
+        )
         return
 
     gh = GhClient(git)

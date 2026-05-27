@@ -452,6 +452,8 @@ The rule: when a script or test uses any of those utilities, branch on `uname` (
 
 When posting a verification table for a change that includes shell scripts or shell-based tests, name the host the verification ran on (e.g. "macOS local" or "Linux runner") so reviewers know whether the green is host-specific or platform-portable. A row that says `make scripts-test: pass` without naming the host overstates what was checked.
 
+When an error message, code comment, runbook step, or PR-body validation row documents a recovery path ("push the branch manually and re-run X", "delete the lock and retry", "set the env var and re-invoke"), write a test that exercises that exact recovery sequence end-to-end. A documented recovery path that has not been tested is a guess; the next person to hit the failure mode finds out the documented recovery does not actually work. Example: PR #90's `finalize_terminal_log` shipped a recovery hint on push failure that was actually a no-op — the function's footer-marker early-return blocked any retry from touching the PR. Codex bot caught it as finding B5 on PR #91; the fix landed alongside `test_finalize_recovers_after_push_failure_on_retry` exercising the full broken-origin → manual-fix → retry flow, which fails today if the early-return is restored.
+
 ### Config / Infrastructure Change Workflow
 
 For infra, environment, secrets, build-setting, or runtime-configuration changes, do a small negative-test pass before review. Check missing config, malformed config, unsafe environment names, Release fail-loud behavior, and production-mutation rejection where relevant. Prefer automated tests for safety properties; manual live checks should supplement them, not be the only proof.

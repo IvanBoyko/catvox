@@ -1371,7 +1371,14 @@ class GitIntegrationTests(unittest.TestCase):
                 repo,
             )
             start_output = start.stdout + start.stderr
-            self.assertIn("ai-loop dry-run (post-commit): would dispatch developer agent: codex", start_output)
+            # The bootstrap holds the ai-loop lock, so the post-commit
+            # hook fired by the `[ai-loop] Human: start` commit must
+            # see "lock exists" and skip. Without this guard the hook
+            # used to dispatch the agent against the transient log
+            # state — see the user-reported smoke failure on PR #90
+            # where this fired even when codex was unavailable.
+            self.assertIn("lock exists, skipping continuation", start_output)
+            self.assertNotIn("would dispatch", start_output)
 
             branch = run(["git", "branch", "--show-current"], repo)
             self.assertEqual(branch.stdout.strip(), "feature/ai-loop-test")
@@ -1383,6 +1390,30 @@ class GitIntegrationTests(unittest.TestCase):
 
             commit_message = run(["git", "log", "-1", "--format=%B"], repo)
             self.assertIn("[ai-loop] Human: start", commit_message.stdout)
+
+            # Verify the lock was released when command_start returned.
+            # A subsequent [ai-loop] commit's post-commit hook must
+            # now run normally and print the dry-run routing decision.
+            # If the lock had leaked, this fire would also print
+            # "lock exists" instead, leaving the loop wedged.
+            with logs[0].open("a", encoding="utf-8") as handle:
+                handle.write("\n<!-- regression marker -->\n")
+            run(["git", "add", str(logs[0].relative_to(repo))], repo)
+            post_start = run(
+                [
+                    "git",
+                    "commit",
+                    "-m",
+                    "[ai-loop] Human: regression marker",
+                ],
+                repo,
+            )
+            post_start_output = post_start.stdout + post_start.stderr
+            self.assertIn(
+                "ai-loop dry-run (post-commit): would dispatch developer agent: codex",
+                post_start_output,
+            )
+            self.assertNotIn("lock exists", post_start_output)
 
     def test_hook_invocation_hands_developer_to_reviewer_under_lock(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -1595,12 +1626,47 @@ questions: q1,q2
                 linked,
             )
             start_output = start.stdout + start.stderr
-            self.assertIn("ai-loop dry-run (post-commit): would dispatch developer agent: codex", start_output)
-            self.assertNotIn("lock exists, skipping", start_output)
+            # The bootstrap holds the ai-loop lock (now keyed off the
+            # real gitdir resolved via `git rev-parse --git-dir`, which
+            # in a linked worktree points to .git/worktrees/<name>/),
+            # so the post-commit hook fired during bootstrap must see
+            # "lock exists" and skip. That this works for the linked
+            # worktree as well confirms the lock resolution honors the
+            # real git dir rather than the worktree's stub .git file.
+            self.assertIn("lock exists, skipping continuation", start_output)
+            self.assertNotIn("would dispatch", start_output)
 
             git_dir = run(["git", "rev-parse", "--git-dir"], linked).stdout.strip()
             self.assertNotEqual(git_dir, ".git")
             self.assertTrue(git_dir)
+
+            # Verify the lock was released after bootstrap by making a
+            # follow-up [ai-loop] commit in the linked worktree and
+            # confirming its hook fire runs the dry-run dispatch path
+            # rather than skipping. If `_acquire_ai_loop_lock` had
+            # resolved the git dir incorrectly (e.g., used `.git`
+            # relative path inside the worktree), the lock would have
+            # leaked into the worktree's stub .git file and broken
+            # follow-up hook fires.
+            log_path = sorted((linked / "docs/ai-loop").glob("local-*.md"))[0]
+            with log_path.open("a", encoding="utf-8") as handle:
+                handle.write("\n<!-- regression marker -->\n")
+            run(["git", "add", str(log_path.relative_to(linked))], linked)
+            post_start = run(
+                [
+                    "git",
+                    "commit",
+                    "-m",
+                    "[ai-loop] Human: regression marker",
+                ],
+                linked,
+            )
+            post_start_output = post_start.stdout + post_start.stderr
+            self.assertIn(
+                "ai-loop dry-run (post-commit): would dispatch developer agent: codex",
+                post_start_output,
+            )
+            self.assertNotIn("lock exists", post_start_output)
 
 
 class PlaceholderRenderTests(unittest.TestCase):
@@ -2140,6 +2206,125 @@ class PrBootstrapTests(unittest.TestCase):
             pr_logs = list((repo / "docs/ai-loop").glob("pr-*.md"))
             self.assertEqual(pr_logs, [])
 
+    def test_invoke_agents_dispatches_once_after_bootstrap(self) -> None:
+        """Regression for the user-reported smoke failure on PR #90.
+
+        When ``AI_LOOP_INVOKE_AGENTS=1`` is set and the post-commit
+        hook is installed, ``make ai-loop-start`` previously fired the
+        hook between bootstrap commits — once after
+        ``[ai-loop] Human: start local-...`` and once after
+        ``[ai-loop] Human: bootstrap pr-NNNN``. Each fire dispatched
+        the developer agent against transient log state. The first
+        dispatch operated on the pre-rename ``local-*.md`` log whose
+        content is about to be overwritten by the rename step; on
+        success the agent's commit was silently lost, on failure (e.g.
+        codex usage limit) it just wasted an invocation. The fix is
+        to acquire the same ``.git/ai-loop.lock`` the hook uses for
+        the entire bootstrap and dispatch explicitly at the end —
+        single controlled invocation.
+
+        This test verifies:
+        - bootstrap completes (PR created, branch pushed, label).
+        - the fake developer agent is called **exactly once**, not
+          zero (lock leaked → explicit dispatch never fired) and not
+          twice (lock not held → hook fired during bootstrap).
+        - the single invocation operated on the renamed
+          ``pr-NNNN.md`` log, not on the pre-rename ``local-*.md``,
+          confirming the dispatch happened after the rename rather
+          than via the first bootstrap hook fire.
+        """
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            repo = root / "repo"
+            origin = root / "origin.git"
+            repo.mkdir()
+            init_repo_with_bare_origin(repo, origin)
+
+            # Install the post-commit hook. Without this the lock
+            # check below proves nothing — the test must exercise
+            # the hook firing path that would have dispatched
+            # without the lock.
+            script = repo / "tools/ai-loop/ai_loop.py"
+            run([sys.executable, str(script), "setup"], repo)
+
+            shim = root / "gh_shim.py"
+            state_dir = root / "gh_state"
+            write_gh_shim(shim)
+
+            fake_agent = root / "fake_agent.py"
+            calls_path = root / "agent_calls.txt"
+            sequence_path = root / "agent_sequence.txt"
+            # Single dispatch terminating in awaiting_human so the
+            # explicit run_agent_loop returns after one agent call
+            # without needing a reviewer turn. `awaiting_human` is
+            # not in TERMINAL_FINALIZE_STATUSES, so finalize is also
+            # a no-op — keeps the assertion surface tight.
+            sequence_path.write_text(
+                "developer|1|awaiting_human|\n", encoding="utf-8"
+            )
+            write_fake_sequence_agent(fake_agent)
+
+            env = self._shim_env(state_dir, shim)
+            env["AI_LOOP_INVOKE_AGENTS"] = "1"
+            env["AI_LOOP_CODEX_COMMAND"] = (
+                f"{sys.executable} {fake_agent} developer "
+                f"{calls_path} {sequence_path}"
+            )
+
+            result = run(
+                [
+                    sys.executable,
+                    str(script),
+                    "start",
+                    "--branch",
+                    "feature/pr-bootstrap-invoke",
+                    "--prompt",
+                    "Implement issue under invoke=1",
+                ],
+                repo,
+                env=env,
+            )
+
+            output = result.stdout + result.stderr
+
+            # Bootstrap completed.
+            self.assertIn("created draft PR #1", output)
+            self.assertIn("renamed to docs/ai-loop/pr-0001.md", output)
+            self.assertIn("applied label 'ai-loop' to PR #1", output)
+
+            # Hook fired during bootstrap commits but was suppressed
+            # by the lock — assert the suppression message appears
+            # (and the dispatch decision does NOT appear from a hook
+            # fire, since the hook never reached the dispatch path
+            # while the lock was held).
+            self.assertIn("lock exists, skipping continuation", output)
+
+            # The fake developer agent was dispatched exactly once
+            # via the explicit run_agent_loop after bootstrap. Zero
+            # would mean the explicit dispatch path didn't fire
+            # (lock leaked or should_invoke missed the env var).
+            # Two would mean the lock didn't suppress one of the
+            # bootstrap hook fires.
+            self.assertTrue(calls_path.exists())
+            self.assertEqual(
+                calls_path.read_text(encoding="utf-8").splitlines(),
+                ["developer"],
+            )
+
+            # The one invocation must have operated on the renamed
+            # pr-NNNN.md log. Verify by inspecting the committed log:
+            # the fake event's agent metadata is committed against
+            # the file the agent was given.
+            pr_log = repo / "docs/ai-loop/pr-0001.md"
+            self.assertTrue(pr_log.exists())
+            parsed = ai_loop.parse_log_file(pr_log)
+            self.assertEqual(parsed.latest_event["status"], "awaiting_human")
+            self.assertEqual(parsed.latest_event["agent"], "codex")
+
+            # No stray local-*.md file (the rename step ran cleanly).
+            local_logs = list((repo / "docs/ai-loop").glob("local-*.md"))
+            self.assertEqual(local_logs, [])
+
 
 class SelectCreatePrTests(unittest.TestCase):
     """Cover the precedence rules for ``select_create_pr``.
@@ -2546,6 +2731,20 @@ class FinalizeTerminalLogTests(unittest.TestCase):
         env.pop("AI_LOOP_CREATE_PR", None)
         return env
 
+    def _setup_repo(self, root: Path) -> Path:
+        """Set up a test repo with a bare `origin` so finalize can push.
+
+        Finalize now pushes the current branch before mutating the PR
+        (see PR following Codex bot finding B3 on PR #90). Tests that
+        exercise the PR-mutation path therefore need a real remote;
+        without it, push fails and the PR-side assertions get skipped.
+        """
+        repo = root / "repo"
+        origin = root / "origin.git"
+        repo.mkdir()
+        init_repo_with_bare_origin(repo, origin)
+        return repo
+
     def _write_pr_log(
         self,
         repo: Path,
@@ -2573,9 +2772,7 @@ class FinalizeTerminalLogTests(unittest.TestCase):
     def test_finalize_on_clean_writes_footer_updates_pr_and_marks_ready(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
-            repo = root / "repo"
-            repo.mkdir()
-            init_repo_with_ai_loop_tooling(repo)
+            repo = self._setup_repo(root)
 
             shim = root / "gh_shim.py"
             state_dir = root / "gh_state"
@@ -2639,17 +2836,40 @@ class FinalizeTerminalLogTests(unittest.TestCase):
             self.assertEqual(len(pr_ready), 1)
             self.assertEqual(pr_ready[0][2], "90")
 
+            # Local HEAD must match origin/<branch>. Without the push
+            # step in finalize_terminal_log, the controller's finalize
+            # commit (plus the agent commits that preceded it in a real
+            # loop) would stay local while gh pr edit + gh pr ready
+            # succeed against the PR object, leaving reviewers notified
+            # on a stale branch. Codex bot finding B3 on PR #90; same
+            # shape as PR #88's bootstrap-rename push fix on PR #86.
+            local_head = run(["git", "rev-parse", "HEAD"], repo).stdout.strip()
+            remote_head = run(
+                ["git", "rev-parse", "origin/main"], repo
+            ).stdout.strip()
+            self.assertEqual(
+                local_head,
+                remote_head,
+                "finalize must push branch before mutating the PR",
+            )
+
             new_body = (state_dir / "pr_body.txt").read_text(encoding="utf-8")
             self.assertIn(ai_loop.SUMMARY_BLOCK_START, new_body)
             self.assertIn("Final status: `clean`", new_body)
             self.assertIn("Initial PR body.", new_body)
 
-    def test_finalize_idempotent_on_already_finalized_log(self) -> None:
+    def test_finalize_retries_pr_side_when_footer_already_present(self) -> None:
+        """When the telemetry footer is already in the log, finalize
+        must NOT duplicate the footer commit, but it MUST still retry
+        the PR-side operations. Without this, a previous push failure
+        (which committed the footer locally but skipped the PR
+        updates) leaves the PR in a permanently stale state: the
+        TELEMETRY_FOOTER_MARKER check used to return early and
+        prevent any recovery. See Codex bot finding B5 on PR #91.
+        """
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
-            repo = root / "repo"
-            repo.mkdir()
-            init_repo_with_ai_loop_tooling(repo)
+            repo = self._setup_repo(root)
 
             shim = root / "gh_shim.py"
             state_dir = root / "gh_state"
@@ -2698,8 +2918,18 @@ class FinalizeTerminalLogTests(unittest.TestCase):
             )
             head_after_first = run(["git", "rev-parse", "HEAD"], repo).stdout.strip()
             calls_after_first = read_gh_calls(state_dir)
+            edits_after_first = [
+                c for c in calls_after_first if c[:2] == ["pr", "edit"]
+            ]
+            self.assertEqual(
+                len(edits_after_first),
+                1,
+                "first finalize must call pr edit exactly once",
+            )
 
-            # Re-run on the finalized log — should be a no-op.
+            # Re-run with the footer already present. The footer
+            # commit must be skipped, but PR-side ops must run again
+            # so a previously-failed push can recover (B5).
             result = run(
                 [
                     sys.executable,
@@ -2714,17 +2944,44 @@ class FinalizeTerminalLogTests(unittest.TestCase):
                 repo,
                 env=env,
             )
-            self.assertIn("ai-loop", result.stdout + result.stderr)
+            self.assertIn(
+                "telemetry footer already present", result.stdout + result.stderr
+            )
             head_after_second = run(["git", "rev-parse", "HEAD"], repo).stdout.strip()
-            self.assertEqual(head_after_first, head_after_second)
-            self.assertEqual(read_gh_calls(state_dir), calls_after_first)
+            self.assertEqual(
+                head_after_first,
+                head_after_second,
+                "second finalize must not duplicate the footer commit",
+            )
+
+            # The PR body is now current (replace_summary_block is
+            # idempotent), so no NEW pr edit calls are expected. pr
+            # view / pr ready may repeat on the retry; that is by
+            # design and tolerated.
+            calls_after_second = read_gh_calls(state_dir)
+            edits_after_second = [
+                c for c in calls_after_second if c[:2] == ["pr", "edit"]
+            ]
+            # Account for the same `pr edit` body call on first run
+            # (idempotent — replace_summary_block on the second pass
+            # produces an identical body so the second call is also
+            # a no-op at the gh layer, even if the wrapper short-
+            # circuits before invoking it).
+            body_edits = [
+                c
+                for c in edits_after_second
+                if "--body-file" in c
+            ]
+            self.assertEqual(
+                len(body_edits),
+                1,
+                "pr edit --body-file must not be re-issued when body is current",
+            )
 
     def test_finalize_on_max_cycles_keeps_pr_draft(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
-            repo = root / "repo"
-            repo.mkdir()
-            init_repo_with_ai_loop_tooling(repo)
+            repo = self._setup_repo(root)
 
             shim = root / "gh_shim.py"
             state_dir = root / "gh_state"
@@ -2794,9 +3051,7 @@ class FinalizeTerminalLogTests(unittest.TestCase):
     def test_finalize_on_failed_keeps_pr_draft(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
-            repo = root / "repo"
-            repo.mkdir()
-            init_repo_with_ai_loop_tooling(repo)
+            repo = self._setup_repo(root)
 
             shim = root / "gh_shim.py"
             state_dir = root / "gh_state"
@@ -2855,9 +3110,7 @@ class FinalizeTerminalLogTests(unittest.TestCase):
     def test_finalize_without_pr_only_writes_footer(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
-            repo = root / "repo"
-            repo.mkdir()
-            init_repo_with_ai_loop_tooling(repo)
+            repo = self._setup_repo(root)
 
             shim = root / "gh_shim.py"
             state_dir = root / "gh_state"
@@ -2919,9 +3172,7 @@ class FinalizeTerminalLogTests(unittest.TestCase):
     def test_finalize_tolerates_missing_gh(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
-            repo = root / "repo"
-            repo.mkdir()
-            init_repo_with_ai_loop_tooling(repo)
+            repo = self._setup_repo(root)
 
             env = os.environ.copy()
             env["AI_LOOP_GH_COMMAND"] = "/nonexistent/gh-binary-does-not-exist"
@@ -2969,9 +3220,7 @@ class FinalizeTerminalLogTests(unittest.TestCase):
     def test_finalize_tolerates_gh_ready_failure(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
-            repo = root / "repo"
-            repo.mkdir()
-            init_repo_with_ai_loop_tooling(repo)
+            repo = self._setup_repo(root)
 
             shim = root / "gh_shim.py"
             state_dir = root / "gh_state"
@@ -3027,9 +3276,7 @@ class FinalizeTerminalLogTests(unittest.TestCase):
     def test_finalize_skipped_on_awaiting_human(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
-            repo = root / "repo"
-            repo.mkdir()
-            init_repo_with_ai_loop_tooling(repo)
+            repo = self._setup_repo(root)
 
             shim = root / "gh_shim.py"
             state_dir = root / "gh_state"
@@ -3078,6 +3325,245 @@ class FinalizeTerminalLogTests(unittest.TestCase):
             self.assertEqual(head_before, head_after)
             updated_log = log_path.read_text(encoding="utf-8")
             self.assertNotIn(ai_loop.TELEMETRY_FOOTER_MARKER, updated_log)
+
+    def test_finalize_skips_pr_updates_when_push_fails(self) -> None:
+        """Codex bot finding B3 on PR #90: when push fails after the
+        finalize commit, the controller must NOT mutate the PR body or
+        flip the draft to ready — doing so would notify reviewers on a
+        stale branch. The local telemetry commit still lands so the
+        run is traceable, and the user can push manually then re-run
+        finalize to retry the PR-side updates.
+        """
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            repo = self._setup_repo(root)
+
+            # Break origin so the push step in finalize fails. The
+            # commit itself is still made locally.
+            run(
+                ["git", "remote", "set-url", "origin", "/nonexistent/origin"],
+                repo,
+            )
+
+            shim = root / "gh_shim.py"
+            state_dir = root / "gh_state"
+            write_gh_shim(shim)
+            state_dir.mkdir(parents=True, exist_ok=True)
+            (state_dir / "pr_body.txt").write_text(
+                "Initial PR body.\n", encoding="utf-8"
+            )
+            env = self._shim_env(state_dir, shim)
+
+            log_path = self._write_pr_log(
+                repo,
+                events=(
+                    "<!-- ai-loop-event\n"
+                    "agent: codex\n"
+                    "role: developer\n"
+                    "cycle: 1\n"
+                    "status: needs_review\n"
+                    "-->\n"
+                ),
+                final_event=(
+                    "<!-- ai-loop-event\n"
+                    "agent: claude-code\n"
+                    "role: reviewer\n"
+                    "cycle: 1\n"
+                    "status: clean\n"
+                    "-->"
+                ),
+            )
+
+            script = repo / "tools/ai-loop/ai_loop.py"
+            result = run(
+                [
+                    sys.executable,
+                    str(script),
+                    "continue",
+                    "--trigger",
+                    "test",
+                    "--log",
+                    str(log_path),
+                    "--invoke",
+                ],
+                repo,
+                env=env,
+            )
+
+            # Local finalize commit still lands so the log is intact.
+            updated_log = log_path.read_text(encoding="utf-8")
+            self.assertIn(ai_loop.TELEMETRY_FOOTER_MARKER, updated_log)
+            commits = run(["git", "log", "--format=%s"], repo).stdout
+            self.assertIn("[ai-loop] Controller: finalize clean", commits)
+
+            # Both warning lines on stderr — the push failure and the
+            # explicit short-circuit explaining what to do next.
+            self.assertIn(
+                "could not push branch",
+                result.stderr,
+            )
+            self.assertIn(
+                "skipping PR #90 body and ready updates",
+                result.stderr,
+            )
+
+            # gh must NOT have been called for body fetch/edit/ready.
+            # gh auth status from setup-time invocations is unrelated;
+            # filter to the finalize-relevant subcommands.
+            calls = read_gh_calls(state_dir)
+            pr_calls = [c for c in calls if c[:1] == ["pr"]]
+            self.assertEqual(
+                pr_calls,
+                [],
+                "no PR-side gh calls expected when push failed",
+            )
+
+            # PR body unchanged.
+            self.assertEqual(
+                (state_dir / "pr_body.txt").read_text(encoding="utf-8"),
+                "Initial PR body.\n",
+            )
+
+    def test_finalize_recovers_after_push_failure_on_retry(self) -> None:
+        """Regression for Codex bot finding B5 on PR #91.
+
+        When a transient push failure leaves the telemetry footer
+        committed locally but the PR-side updates skipped, the user
+        is expected to push the branch manually and re-run
+        ``continue --invoke``. Before the B5 fix the retry hit the
+        ``TELEMETRY_FOOTER_MARKER`` early-return and the PR body /
+        ready transition were skipped permanently. After the fix
+        the retry skips only the footer commit and still applies
+        the PR-side updates.
+        """
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            repo = self._setup_repo(root)
+
+            shim = root / "gh_shim.py"
+            state_dir = root / "gh_state"
+            write_gh_shim(shim)
+            state_dir.mkdir(parents=True, exist_ok=True)
+            (state_dir / "pr_body.txt").write_text(
+                "Initial PR body.\n", encoding="utf-8"
+            )
+            env = self._shim_env(state_dir, shim)
+
+            # First call: simulate push failure by pointing origin at
+            # a non-existent path. The footer is committed locally,
+            # PR-side ops are skipped.
+            origin_url = run(
+                ["git", "remote", "get-url", "origin"], repo
+            ).stdout.strip()
+            run(
+                ["git", "remote", "set-url", "origin", "/nonexistent/origin"],
+                repo,
+            )
+
+            log_path = self._write_pr_log(
+                repo,
+                events=(
+                    "<!-- ai-loop-event\n"
+                    "agent: codex\n"
+                    "role: developer\n"
+                    "cycle: 1\n"
+                    "status: needs_review\n"
+                    "-->\n"
+                ),
+                final_event=(
+                    "<!-- ai-loop-event\n"
+                    "agent: claude-code\n"
+                    "role: reviewer\n"
+                    "cycle: 1\n"
+                    "status: clean\n"
+                    "-->"
+                ),
+            )
+
+            script = repo / "tools/ai-loop/ai_loop.py"
+            first = run(
+                [
+                    sys.executable,
+                    str(script),
+                    "continue",
+                    "--trigger",
+                    "test",
+                    "--log",
+                    str(log_path),
+                    "--invoke",
+                ],
+                repo,
+                env=env,
+            )
+
+            # Sanity-check the precondition: footer committed, no PR
+            # mutation yet.
+            self.assertIn(ai_loop.TELEMETRY_FOOTER_MARKER, log_path.read_text(encoding="utf-8"))
+            self.assertIn("could not push branch", first.stderr)
+            self.assertEqual(
+                (state_dir / "pr_body.txt").read_text(encoding="utf-8"),
+                "Initial PR body.\n",
+            )
+            calls_after_first = read_gh_calls(state_dir)
+            self.assertEqual(
+                [c for c in calls_after_first if c[:1] == ["pr"]],
+                [],
+                "first call (push failed) must not issue PR-side gh calls",
+            )
+
+            # Simulate manual recovery: restore origin so the next
+            # push succeeds.
+            run(
+                ["git", "remote", "set-url", "origin", origin_url],
+                repo,
+            )
+
+            second = run(
+                [
+                    sys.executable,
+                    str(script),
+                    "continue",
+                    "--trigger",
+                    "test",
+                    "--log",
+                    str(log_path),
+                    "--invoke",
+                ],
+                repo,
+                env=env,
+            )
+
+            output = second.stdout + second.stderr
+            # Footer was already present; second call must skip the
+            # footer commit but still attempt PR-side ops.
+            self.assertIn("telemetry footer already present", output)
+
+            # Head must not advance (no second finalize commit) — count
+            # the finalize lines explicitly rather than substring-match
+            # on adjacent duplicates, which was a fragile check.
+            finalize_subjects = [
+                line
+                for line in run(
+                    ["git", "log", "--format=%s"], repo
+                ).stdout.splitlines()
+                if line == "[ai-loop] Controller: finalize clean"
+            ]
+            self.assertEqual(
+                len(finalize_subjects),
+                1,
+                "second finalize must not duplicate the controller commit",
+            )
+
+            # PR body now updated with the summary block.
+            updated_body = (state_dir / "pr_body.txt").read_text(encoding="utf-8")
+            self.assertIn(ai_loop.SUMMARY_BLOCK_START, updated_body)
+            self.assertIn("Final status: `clean`", updated_body)
+
+            # PR ready was called (clean status).
+            calls_after_second = read_gh_calls(state_dir)
+            pr_ready = [c for c in calls_after_second if c[:2] == ["pr", "ready"]]
+            self.assertEqual(len(pr_ready), 1)
+            self.assertEqual(pr_ready[0][2], "90")
 
 
 if __name__ == "__main__":
