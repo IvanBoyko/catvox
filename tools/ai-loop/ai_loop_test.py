@@ -3538,13 +3538,20 @@ class FinalizeTerminalLogTests(unittest.TestCase):
             # footer commit but still attempt PR-side ops.
             self.assertIn("telemetry footer already present", output)
 
-            # Head must not advance (no second finalize commit).
-            commits_count = run(
-                ["git", "rev-list", "--count", "HEAD"], repo
-            ).stdout.strip()
-            self.assertNotIn(
-                "[ai-loop] Controller: finalize clean\n[ai-loop] Controller: finalize clean",
-                run(["git", "log", "--format=%s"], repo).stdout,
+            # Head must not advance (no second finalize commit) — count
+            # the finalize lines explicitly rather than substring-match
+            # on adjacent duplicates, which was a fragile check.
+            finalize_subjects = [
+                line
+                for line in run(
+                    ["git", "log", "--format=%s"], repo
+                ).stdout.splitlines()
+                if line == "[ai-loop] Controller: finalize clean"
+            ]
+            self.assertEqual(
+                len(finalize_subjects),
+                1,
+                "second finalize must not duplicate the controller commit",
             )
 
             # PR body now updated with the summary block.
