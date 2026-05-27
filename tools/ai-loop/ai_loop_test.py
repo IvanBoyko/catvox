@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 import importlib.util
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -222,9 +223,43 @@ if subcommand == "pr":
         sys.exit(0)
     if pr_sub == "edit":
         edits_path = state_dir / "pr_edits.log"
+        body_path_arg = None
+        if "--body-file" in argv:
+            idx = argv.index("--body-file")
+            if idx + 1 < len(argv):
+                body_path_arg = argv[idx + 1]
+        entry = {"argv": argv}
+        if body_path_arg:
+            try:
+                entry["body"] = Path(body_path_arg).read_text(encoding="utf-8")
+            except OSError:
+                entry["body"] = None
         with edits_path.open("a", encoding="utf-8") as handle:
-            handle.write(json.dumps({"argv": argv}) + "\\n")
+            handle.write(json.dumps(entry) + "\\n")
+        if body_path_arg:
+            # Mirror real gh behavior: persist new body so subsequent
+            # `pr view` returns it.
+            body_state = state_dir / "pr_body.txt"
+            if entry["body"] is not None:
+                body_state.write_text(entry["body"], encoding="utf-8")
         sys.exit(0)
+    if pr_sub == "view":
+        body_state = state_dir / "pr_body.txt"
+        body = body_state.read_text(encoding="utf-8") if body_state.exists() else ""
+        if "--jq" in argv:
+            sys.stdout.write(body)
+        else:
+            sys.stdout.write(json.dumps({"body": body}))
+        sys.exit(0)
+    if pr_sub == "ready":
+        ready_path = state_dir / "pr_ready.log"
+        with ready_path.open("a", encoding="utf-8") as handle:
+            handle.write(json.dumps({"argv": argv}) + "\\n")
+        rc_path = state_dir / "ready_rc.txt"
+        rc = int(rc_path.read_text(encoding="utf-8").strip()) if rc_path.exists() else 0
+        if rc != 0:
+            sys.stderr.write("gh shim: pr ready simulated failure\\n")
+        sys.exit(rc)
     sys.exit(2)
 
 if subcommand == "label":
@@ -1036,8 +1071,18 @@ next_agent: codex
             self.assertEqual(parsed.latest_event["cycle"], "3")
             self.assertEqual(parsed.latest_event["status"], "max_cycles_reached")
             self.assertIn("stopped_at", parsed.latest_event)
-            commit_message = run(["git", "log", "-1", "--format=%B"], repo)
-            self.assertIn("[ai-loop] Controller: max cycles reached", commit_message.stdout)
+            commit_messages = run(["git", "log", "--format=%s"], repo)
+            self.assertIn(
+                "[ai-loop] Controller: max cycles reached", commit_messages.stdout
+            )
+            self.assertIn(
+                "[ai-loop] Controller: finalize max_cycles_reached",
+                commit_messages.stdout,
+            )
+            self.assertIn(
+                ai_loop.TELEMETRY_FOOTER_MARKER,
+                log_path.read_text(encoding="utf-8"),
+            )
             status = run(["git", "status", "--porcelain"], repo)
             self.assertEqual(status.stdout, "")
 
@@ -2155,6 +2200,885 @@ class SelectCreatePrTests(unittest.TestCase):
                             ai_loop.select_create_pr(git, self._ns(cli)),
                             expected,
                         )
+
+
+def _telemetry_log_text(
+    *,
+    pr: int | None = 90,
+    max_cycles: int = 3,
+    started_at: str = "2026-05-27T14:00:00+00:00",
+    extra_events: str = "",
+    final_event: str = (
+        "<!-- ai-loop-event\n"
+        "agent: claude-code\n"
+        "role: reviewer\n"
+        "cycle: 2\n"
+        "status: clean\n"
+        "-->"
+    ),
+) -> str:
+    pr_line = f"\npr: {pr}" if pr is not None else ""
+    header = (
+        "# AI Loop\n\n"
+        "<!-- ai-loop-init\n"
+        "run_id: local-20260527-140000\n"
+        "repo: kathelix/catvox\n"
+        "branch_at_start: feature/test\n"
+        "log_path: docs/ai-loop/pr-0090.md\n"
+        f"max_cycles: {max_cycles}{pr_line}\n"
+        f"started_at: {started_at}\n"
+        "-->\n"
+    )
+    return f"{header}\n{extra_events}\n{final_event}\n"
+
+
+class TelemetryDerivationTests(unittest.TestCase):
+    def _parse(self, text: str) -> ai_loop.ParsedLog:
+        return ai_loop.parse_log_text(text)
+
+    def test_clean_run_counts_developer_and_reviewer_invocations(self) -> None:
+        events = (
+            "<!-- ai-loop-event\n"
+            "agent: codex\n"
+            "role: developer\n"
+            "cycle: 1\n"
+            "status: needs_review\n"
+            "-->\n\n"
+            "<!-- ai-loop-event\n"
+            "agent: claude-code\n"
+            "role: reviewer\n"
+            "cycle: 1\n"
+            "status: needs_fix\n"
+            "-->\n\n"
+            "<!-- ai-loop-event\n"
+            "agent: codex\n"
+            "role: developer\n"
+            "cycle: 2\n"
+            "status: needs_review\n"
+            "-->"
+        )
+        text = _telemetry_log_text(extra_events=events, started_at="2026-05-27T14:00:00+00:00")
+        parsed = self._parse(text)
+        telemetry = ai_loop.derive_telemetry(
+            parsed, ended_at="2026-05-27T14:23:00+00:00"
+        )
+        self.assertEqual(telemetry.final_status, "clean")
+        self.assertEqual(telemetry.cycles_run, 2)
+        self.assertEqual(telemetry.max_cycles, 3)
+        self.assertEqual(telemetry.developer_invocations, 2)
+        # Final event is also reviewer (the clean event) plus the
+        # mid-loop needs_fix reviewer event = 2.
+        self.assertEqual(telemetry.reviewer_invocations, 2)
+        self.assertEqual(telemetry.clarifications, 0)
+        self.assertEqual(telemetry.pr_number, 90)
+        self.assertEqual(telemetry.duration_seconds, 23 * 60)
+        self.assertIsNone(telemetry.failure_reason)
+
+    def test_clarifications_counted_from_awaiting_human(self) -> None:
+        events = (
+            "<!-- ai-loop-event\n"
+            "agent: codex\n"
+            "role: developer\n"
+            "cycle: 1\n"
+            "status: awaiting_human\n"
+            "-->\n\n"
+            "<!-- ai-loop-event\n"
+            "agent: human\n"
+            "role: owner\n"
+            "status: clarified\n"
+            "next_agent: codex\n"
+            "-->\n\n"
+            "<!-- ai-loop-event\n"
+            "agent: codex\n"
+            "role: developer\n"
+            "cycle: 1\n"
+            "status: awaiting_human\n"
+            "-->\n\n"
+            "<!-- ai-loop-event\n"
+            "agent: human\n"
+            "role: owner\n"
+            "status: clarified\n"
+            "next_agent: codex\n"
+            "-->"
+        )
+        text = _telemetry_log_text(extra_events=events)
+        parsed = self._parse(text)
+        telemetry = ai_loop.derive_telemetry(parsed, ended_at="2026-05-27T14:23:00+00:00")
+        self.assertEqual(telemetry.clarifications, 2)
+
+    def test_max_cycles_reached_uses_cap_in_reason(self) -> None:
+        events = (
+            "<!-- ai-loop-event\n"
+            "agent: claude-code\n"
+            "role: reviewer\n"
+            "cycle: 3\n"
+            "status: needs_fix\n"
+            "-->"
+        )
+        final = (
+            "<!-- ai-loop-event\n"
+            "agent: controller\n"
+            "role: orchestrator\n"
+            "cycle: 3\n"
+            "status: max_cycles_reached\n"
+            "-->"
+        )
+        text = _telemetry_log_text(extra_events=events, final_event=final)
+        parsed = self._parse(text)
+        telemetry = ai_loop.derive_telemetry(parsed, ended_at="2026-05-27T14:23:00+00:00")
+        self.assertEqual(telemetry.final_status, "max_cycles_reached")
+        self.assertEqual(telemetry.cycles_run, 3)
+        self.assertEqual(telemetry.failure_reason, "cycle cap of 3 reached")
+
+    def test_failed_uses_event_reason_when_present(self) -> None:
+        final = (
+            "<!-- ai-loop-event\n"
+            "agent: codex\n"
+            "role: developer\n"
+            "cycle: 1\n"
+            "status: failed\n"
+            "failure_reason: build broke\n"
+            "-->"
+        )
+        text = _telemetry_log_text(final_event=final)
+        parsed = self._parse(text)
+        telemetry = ai_loop.derive_telemetry(parsed, ended_at="2026-05-27T14:05:00+00:00")
+        self.assertEqual(telemetry.final_status, "failed")
+        self.assertEqual(telemetry.failure_reason, "build broke")
+
+    def test_failed_falls_back_to_generic_reason(self) -> None:
+        final = (
+            "<!-- ai-loop-event\n"
+            "agent: codex\n"
+            "role: developer\n"
+            "cycle: 1\n"
+            "status: failed\n"
+            "-->"
+        )
+        text = _telemetry_log_text(final_event=final)
+        parsed = self._parse(text)
+        telemetry = ai_loop.derive_telemetry(parsed, ended_at="2026-05-27T14:05:00+00:00")
+        self.assertEqual(telemetry.failure_reason, "agent reported failure")
+
+    def test_zero_cycles_when_no_cycle_metadata(self) -> None:
+        final = (
+            "<!-- ai-loop-event\n"
+            "agent: claude-code\n"
+            "role: reviewer\n"
+            "status: clean\n"
+            "-->"
+        )
+        text = _telemetry_log_text(final_event=final)
+        parsed = self._parse(text)
+        telemetry = ai_loop.derive_telemetry(parsed, ended_at="2026-05-27T14:05:00+00:00")
+        self.assertEqual(telemetry.cycles_run, 0)
+
+    def test_missing_pr_in_init_yields_none(self) -> None:
+        text = _telemetry_log_text(pr=None)
+        parsed = self._parse(text)
+        telemetry = ai_loop.derive_telemetry(parsed, ended_at="2026-05-27T14:05:00+00:00")
+        self.assertIsNone(telemetry.pr_number)
+
+    def test_duration_none_when_started_unparseable(self) -> None:
+        text = _telemetry_log_text(started_at="not-a-date")
+        parsed = self._parse(text)
+        telemetry = ai_loop.derive_telemetry(parsed, ended_at="2026-05-27T14:05:00+00:00")
+        self.assertIsNone(telemetry.duration_seconds)
+
+
+class SummaryBlockRenderingTests(unittest.TestCase):
+    def _telemetry(self, **overrides: object) -> ai_loop.Telemetry:
+        defaults: dict[str, object] = {
+            "final_status": "clean",
+            "cycles_run": 2,
+            "max_cycles": 3,
+            "developer_invocations": 2,
+            "reviewer_invocations": 2,
+            "clarifications": 0,
+            "started_at": "2026-05-27T14:00:00+00:00",
+            "ended_at": "2026-05-27T14:23:00+00:00",
+            "duration_seconds": 1380,
+            "failure_reason": None,
+            "pr_number": 90,
+            "run_id": "local-20260527-140000",
+            "log_path": "docs/ai-loop/pr-0090.md",
+        }
+        defaults.update(overrides)
+        return ai_loop.Telemetry(**defaults)  # type: ignore[arg-type]
+
+    def test_clean_summary_has_no_stopped_because_line(self) -> None:
+        block = ai_loop.render_summary_block(self._telemetry())
+        self.assertTrue(block.startswith(ai_loop.SUMMARY_BLOCK_START))
+        self.assertTrue(block.rstrip().endswith(ai_loop.SUMMARY_BLOCK_END))
+        self.assertIn("Final status: `clean`", block)
+        self.assertIn("Cycles run: 2 of 3", block)
+        self.assertIn("docs/ai-loop/pr-0090.md", block)
+        self.assertNotIn("Stopped because", block)
+
+    def test_failed_summary_includes_stopped_because(self) -> None:
+        block = ai_loop.render_summary_block(
+            self._telemetry(final_status="failed", failure_reason="build broke")
+        )
+        self.assertIn("Stopped because: build broke", block)
+
+    def test_max_cycles_summary_includes_stopped_because(self) -> None:
+        block = ai_loop.render_summary_block(
+            self._telemetry(
+                final_status="max_cycles_reached",
+                failure_reason="cycle cap of 3 reached",
+                cycles_run=3,
+            )
+        )
+        self.assertIn("Stopped because: cycle cap of 3 reached", block)
+
+    def test_duration_formats_minutes(self) -> None:
+        block = ai_loop.render_summary_block(self._telemetry(duration_seconds=1380))
+        self.assertIn("Duration: 23m", block)
+
+    def test_duration_formats_hours_minutes(self) -> None:
+        block = ai_loop.render_summary_block(self._telemetry(duration_seconds=3700))
+        self.assertIn("Duration: 1h 1m", block)
+
+    def test_duration_unknown_when_missing(self) -> None:
+        block = ai_loop.render_summary_block(self._telemetry(duration_seconds=None))
+        self.assertIn("Duration: unknown", block)
+
+
+class ReplaceSummaryBlockTests(unittest.TestCase):
+    BLOCK_V1 = (
+        ai_loop.SUMMARY_BLOCK_START
+        + "\nold content\n"
+        + ai_loop.SUMMARY_BLOCK_END
+    )
+    BLOCK_V2 = (
+        ai_loop.SUMMARY_BLOCK_START
+        + "\nnew content\n"
+        + ai_loop.SUMMARY_BLOCK_END
+    )
+
+    def test_replace_existing_block_keeps_surrounding_prose(self) -> None:
+        body = f"# Title\n\nIntro line.\n\n{self.BLOCK_V1}\n\nTrailing prose.\n"
+        result = ai_loop.replace_summary_block(body, self.BLOCK_V2)
+        self.assertNotIn("old content", result)
+        self.assertIn("new content", result)
+        self.assertIn("# Title", result)
+        self.assertIn("Trailing prose.", result)
+
+    def test_append_when_no_existing_block(self) -> None:
+        body = "# Title\n\nSome agent-written prose.\n"
+        result = ai_loop.replace_summary_block(body, self.BLOCK_V2)
+        self.assertIn("Some agent-written prose.", result)
+        self.assertTrue(result.rstrip().endswith(ai_loop.SUMMARY_BLOCK_END))
+
+    def test_idempotent_when_block_already_current(self) -> None:
+        body = f"# Title\n\nIntro.\n\n{self.BLOCK_V2}\n"
+        result = ai_loop.replace_summary_block(body, self.BLOCK_V2)
+        self.assertEqual(result, body)
+
+    def test_empty_body_yields_block_only(self) -> None:
+        result = ai_loop.replace_summary_block("", self.BLOCK_V2)
+        self.assertEqual(result.rstrip(), self.BLOCK_V2)
+
+    def test_re_replacement_does_not_duplicate(self) -> None:
+        body = self.BLOCK_V1
+        once = ai_loop.replace_summary_block(body, self.BLOCK_V2)
+        twice = ai_loop.replace_summary_block(once, self.BLOCK_V2)
+        # Block must appear exactly once across re-applications.
+        self.assertEqual(twice.count(ai_loop.SUMMARY_BLOCK_START), 1)
+        self.assertEqual(twice.count(ai_loop.SUMMARY_BLOCK_END), 1)
+
+
+class TelemetryFooterRenderingTests(unittest.TestCase):
+    def _telemetry(self, **overrides: object) -> ai_loop.Telemetry:
+        defaults: dict[str, object] = {
+            "final_status": "clean",
+            "cycles_run": 2,
+            "max_cycles": 3,
+            "developer_invocations": 2,
+            "reviewer_invocations": 2,
+            "clarifications": 0,
+            "started_at": "2026-05-27T14:00:00+00:00",
+            "ended_at": "2026-05-27T14:23:00+00:00",
+            "duration_seconds": 1380,
+            "failure_reason": None,
+            "pr_number": 90,
+            "run_id": "local-20260527-140000",
+            "log_path": "docs/ai-loop/pr-0090.md",
+        }
+        defaults.update(overrides)
+        return ai_loop.Telemetry(**defaults)  # type: ignore[arg-type]
+
+    def test_footer_includes_marker_and_status(self) -> None:
+        footer = ai_loop.render_telemetry_footer(self._telemetry())
+        self.assertIn(ai_loop.TELEMETRY_FOOTER_MARKER, footer)
+        self.assertIn("final_status: clean", footer)
+        self.assertIn("cycles_run: 2", footer)
+        self.assertIn("pr: 90", footer)
+        self.assertIn("run_id: local-20260527-140000", footer)
+
+    def test_footer_omits_pr_when_absent(self) -> None:
+        footer = ai_loop.render_telemetry_footer(self._telemetry(pr_number=None))
+        self.assertNotIn("pr:", footer)
+
+    def test_footer_includes_failure_reason_when_present(self) -> None:
+        footer = ai_loop.render_telemetry_footer(
+            self._telemetry(final_status="failed", failure_reason="build broke")
+        )
+        self.assertIn("failure_reason: build broke", footer)
+
+    def test_footer_parses_back_as_kv_block(self) -> None:
+        footer = ai_loop.render_telemetry_footer(self._telemetry())
+        match = re.search(
+            r"<!--\s*ai-loop-telemetry\s*\n(.*?)\n\s*-->", footer, re.DOTALL
+        )
+        assert match is not None
+        block = ai_loop.parse_kv_block(match.group(1))
+        self.assertEqual(block["final_status"], "clean")
+        self.assertEqual(block["pr"], "90")
+        self.assertEqual(block["duration_seconds"], "1380")
+
+
+class FinalizeTerminalLogTests(unittest.TestCase):
+    def _shim_env(self, state_dir: Path, shim: Path) -> dict[str, str]:
+        env = os.environ.copy()
+        env["AI_LOOP_GH_COMMAND"] = f"{sys.executable} {shim}"
+        env["GH_SHIM_STATE_DIR"] = str(state_dir)
+        env.pop("AI_LOOP_CREATE_PR", None)
+        return env
+
+    def _write_pr_log(
+        self,
+        repo: Path,
+        *,
+        pr: int = 90,
+        events: str,
+        final_event: str,
+        max_cycles: int = 3,
+    ) -> Path:
+        log_path = repo / f"docs/ai-loop/pr-{pr:04d}.md"
+        log_path.parent.mkdir(parents=True, exist_ok=True)
+        log_path.write_text(
+            _telemetry_log_text(
+                pr=pr,
+                max_cycles=max_cycles,
+                extra_events=events,
+                final_event=final_event,
+            ),
+            encoding="utf-8",
+        )
+        run(["git", "add", str(log_path.relative_to(repo))], repo)
+        run(["git", "commit", "-m", "[ai-loop] Test bootstrap"], repo)
+        return log_path
+
+    def test_finalize_on_clean_writes_footer_updates_pr_and_marks_ready(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            repo = root / "repo"
+            repo.mkdir()
+            init_repo_with_ai_loop_tooling(repo)
+
+            shim = root / "gh_shim.py"
+            state_dir = root / "gh_state"
+            write_gh_shim(shim)
+            state_dir.mkdir(parents=True, exist_ok=True)
+            (state_dir / "pr_body.txt").write_text(
+                "Initial PR body.\n", encoding="utf-8"
+            )
+            env = self._shim_env(state_dir, shim)
+
+            log_path = self._write_pr_log(
+                repo,
+                events=(
+                    "<!-- ai-loop-event\n"
+                    "agent: codex\n"
+                    "role: developer\n"
+                    "cycle: 1\n"
+                    "status: needs_review\n"
+                    "-->\n"
+                ),
+                final_event=(
+                    "<!-- ai-loop-event\n"
+                    "agent: claude-code\n"
+                    "role: reviewer\n"
+                    "cycle: 1\n"
+                    "status: clean\n"
+                    "-->"
+                ),
+            )
+
+            git = ai_loop.GitContext(repo)
+            ai_loop_module_dir = repo / "tools/ai-loop"
+            # Run finalize in-process via the script entry to mimic real use.
+            run(
+                [
+                    sys.executable,
+                    str(ai_loop_module_dir / "ai_loop.py"),
+                    "continue",
+                    "--trigger",
+                    "test",
+                    "--log",
+                    str(log_path),
+                    "--invoke",
+                ],
+                repo,
+                env=env,
+            )
+
+            updated_log = log_path.read_text(encoding="utf-8")
+            self.assertIn(ai_loop.TELEMETRY_FOOTER_MARKER, updated_log)
+            self.assertIn("final_status: clean", updated_log)
+
+            commits = run(["git", "log", "--format=%s"], repo).stdout
+            self.assertIn("[ai-loop] Controller: finalize clean", commits)
+
+            # gh edit + ready called
+            calls = read_gh_calls(state_dir)
+            pr_edits = [c for c in calls if c[:2] == ["pr", "edit"]]
+            self.assertEqual(len(pr_edits), 1)
+            self.assertIn("--body-file", pr_edits[0])
+            pr_ready = [c for c in calls if c[:2] == ["pr", "ready"]]
+            self.assertEqual(len(pr_ready), 1)
+            self.assertEqual(pr_ready[0][2], "90")
+
+            new_body = (state_dir / "pr_body.txt").read_text(encoding="utf-8")
+            self.assertIn(ai_loop.SUMMARY_BLOCK_START, new_body)
+            self.assertIn("Final status: `clean`", new_body)
+            self.assertIn("Initial PR body.", new_body)
+
+    def test_finalize_idempotent_on_already_finalized_log(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            repo = root / "repo"
+            repo.mkdir()
+            init_repo_with_ai_loop_tooling(repo)
+
+            shim = root / "gh_shim.py"
+            state_dir = root / "gh_state"
+            write_gh_shim(shim)
+            state_dir.mkdir(parents=True, exist_ok=True)
+            (state_dir / "pr_body.txt").write_text(
+                "Initial PR body.\n", encoding="utf-8"
+            )
+            env = self._shim_env(state_dir, shim)
+
+            log_path = self._write_pr_log(
+                repo,
+                events=(
+                    "<!-- ai-loop-event\n"
+                    "agent: codex\n"
+                    "role: developer\n"
+                    "cycle: 1\n"
+                    "status: needs_review\n"
+                    "-->\n"
+                ),
+                final_event=(
+                    "<!-- ai-loop-event\n"
+                    "agent: claude-code\n"
+                    "role: reviewer\n"
+                    "cycle: 1\n"
+                    "status: clean\n"
+                    "-->"
+                ),
+            )
+
+            script = repo / "tools/ai-loop/ai_loop.py"
+
+            run(
+                [
+                    sys.executable,
+                    str(script),
+                    "continue",
+                    "--trigger",
+                    "test",
+                    "--log",
+                    str(log_path),
+                    "--invoke",
+                ],
+                repo,
+                env=env,
+            )
+            head_after_first = run(["git", "rev-parse", "HEAD"], repo).stdout.strip()
+            calls_after_first = read_gh_calls(state_dir)
+
+            # Re-run on the finalized log — should be a no-op.
+            result = run(
+                [
+                    sys.executable,
+                    str(script),
+                    "continue",
+                    "--trigger",
+                    "test",
+                    "--log",
+                    str(log_path),
+                    "--invoke",
+                ],
+                repo,
+                env=env,
+            )
+            self.assertIn("ai-loop", result.stdout + result.stderr)
+            head_after_second = run(["git", "rev-parse", "HEAD"], repo).stdout.strip()
+            self.assertEqual(head_after_first, head_after_second)
+            self.assertEqual(read_gh_calls(state_dir), calls_after_first)
+
+    def test_finalize_on_max_cycles_keeps_pr_draft(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            repo = root / "repo"
+            repo.mkdir()
+            init_repo_with_ai_loop_tooling(repo)
+
+            shim = root / "gh_shim.py"
+            state_dir = root / "gh_state"
+            write_gh_shim(shim)
+            state_dir.mkdir(parents=True, exist_ok=True)
+            (state_dir / "pr_body.txt").write_text(
+                "Initial PR body.\n", encoding="utf-8"
+            )
+            env = self._shim_env(state_dir, shim)
+
+            log_path = self._write_pr_log(
+                repo,
+                events=(
+                    "<!-- ai-loop-event\n"
+                    "agent: codex\n"
+                    "role: developer\n"
+                    "cycle: 1\n"
+                    "status: needs_review\n"
+                    "-->\n\n"
+                    "<!-- ai-loop-event\n"
+                    "agent: claude-code\n"
+                    "role: reviewer\n"
+                    "cycle: 1\n"
+                    "status: needs_fix\n"
+                    "next_agent: codex\n"
+                    "-->\n"
+                ),
+                final_event=(
+                    "<!-- ai-loop-event\n"
+                    "agent: controller\n"
+                    "role: orchestrator\n"
+                    "cycle: 1\n"
+                    "status: max_cycles_reached\n"
+                    "-->"
+                ),
+                max_cycles=1,
+            )
+
+            script = repo / "tools/ai-loop/ai_loop.py"
+            run(
+                [
+                    sys.executable,
+                    str(script),
+                    "continue",
+                    "--trigger",
+                    "test",
+                    "--log",
+                    str(log_path),
+                    "--invoke",
+                ],
+                repo,
+                env=env,
+            )
+
+            updated_body = (state_dir / "pr_body.txt").read_text(encoding="utf-8")
+            self.assertIn("Final status: `max_cycles_reached`", updated_body)
+            self.assertIn("Stopped because: cycle cap of 1 reached", updated_body)
+
+            calls = read_gh_calls(state_dir)
+            pr_ready = [c for c in calls if c[:2] == ["pr", "ready"]]
+            self.assertEqual(
+                pr_ready,
+                [],
+                "PR must remain draft on max_cycles_reached",
+            )
+
+    def test_finalize_on_failed_keeps_pr_draft(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            repo = root / "repo"
+            repo.mkdir()
+            init_repo_with_ai_loop_tooling(repo)
+
+            shim = root / "gh_shim.py"
+            state_dir = root / "gh_state"
+            write_gh_shim(shim)
+            state_dir.mkdir(parents=True, exist_ok=True)
+            (state_dir / "pr_body.txt").write_text(
+                "Initial PR body.\n", encoding="utf-8"
+            )
+            env = self._shim_env(state_dir, shim)
+
+            log_path = self._write_pr_log(
+                repo,
+                events=(
+                    "<!-- ai-loop-event\n"
+                    "agent: codex\n"
+                    "role: developer\n"
+                    "cycle: 1\n"
+                    "status: needs_review\n"
+                    "-->\n"
+                ),
+                final_event=(
+                    "<!-- ai-loop-event\n"
+                    "agent: claude-code\n"
+                    "role: reviewer\n"
+                    "cycle: 1\n"
+                    "status: failed\n"
+                    "failure_reason: ran out of context\n"
+                    "-->"
+                ),
+            )
+
+            script = repo / "tools/ai-loop/ai_loop.py"
+            run(
+                [
+                    sys.executable,
+                    str(script),
+                    "continue",
+                    "--trigger",
+                    "test",
+                    "--log",
+                    str(log_path),
+                    "--invoke",
+                ],
+                repo,
+                env=env,
+            )
+
+            updated_body = (state_dir / "pr_body.txt").read_text(encoding="utf-8")
+            self.assertIn("Final status: `failed`", updated_body)
+            self.assertIn("Stopped because: ran out of context", updated_body)
+
+            calls = read_gh_calls(state_dir)
+            pr_ready = [c for c in calls if c[:2] == ["pr", "ready"]]
+            self.assertEqual(pr_ready, [])
+
+    def test_finalize_without_pr_only_writes_footer(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            repo = root / "repo"
+            repo.mkdir()
+            init_repo_with_ai_loop_tooling(repo)
+
+            shim = root / "gh_shim.py"
+            state_dir = root / "gh_state"
+            write_gh_shim(shim)
+            env = self._shim_env(state_dir, shim)
+
+            log_path = repo / "docs/ai-loop/local-20260527-140000.md"
+            log_path.parent.mkdir(parents=True, exist_ok=True)
+            log_path.write_text(
+                _telemetry_log_text(
+                    pr=None,
+                    extra_events=(
+                        "<!-- ai-loop-event\n"
+                        "agent: codex\n"
+                        "role: developer\n"
+                        "cycle: 1\n"
+                        "status: needs_review\n"
+                        "-->\n"
+                    ),
+                    final_event=(
+                        "<!-- ai-loop-event\n"
+                        "agent: claude-code\n"
+                        "role: reviewer\n"
+                        "cycle: 1\n"
+                        "status: clean\n"
+                        "-->"
+                    ),
+                ),
+                encoding="utf-8",
+            )
+            run(["git", "add", str(log_path.relative_to(repo))], repo)
+            run(["git", "commit", "-m", "[ai-loop] Bootstrap"], repo)
+
+            script = repo / "tools/ai-loop/ai_loop.py"
+            run(
+                [
+                    sys.executable,
+                    str(script),
+                    "continue",
+                    "--trigger",
+                    "test",
+                    "--log",
+                    str(log_path),
+                    "--invoke",
+                ],
+                repo,
+                env=env,
+            )
+
+            updated_log = log_path.read_text(encoding="utf-8")
+            self.assertIn(ai_loop.TELEMETRY_FOOTER_MARKER, updated_log)
+            calls = read_gh_calls(state_dir)
+            self.assertEqual(
+                calls,
+                [],
+                "no gh calls expected when init has no PR number",
+            )
+
+    def test_finalize_tolerates_missing_gh(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            repo = root / "repo"
+            repo.mkdir()
+            init_repo_with_ai_loop_tooling(repo)
+
+            env = os.environ.copy()
+            env["AI_LOOP_GH_COMMAND"] = "/nonexistent/gh-binary-does-not-exist"
+
+            log_path = self._write_pr_log(
+                repo,
+                events=(
+                    "<!-- ai-loop-event\n"
+                    "agent: codex\n"
+                    "role: developer\n"
+                    "cycle: 1\n"
+                    "status: needs_review\n"
+                    "-->\n"
+                ),
+                final_event=(
+                    "<!-- ai-loop-event\n"
+                    "agent: claude-code\n"
+                    "role: reviewer\n"
+                    "cycle: 1\n"
+                    "status: clean\n"
+                    "-->"
+                ),
+            )
+
+            script = repo / "tools/ai-loop/ai_loop.py"
+            result = run(
+                [
+                    sys.executable,
+                    str(script),
+                    "continue",
+                    "--trigger",
+                    "test",
+                    "--log",
+                    str(log_path),
+                    "--invoke",
+                ],
+                repo,
+                env=env,
+            )
+            self.assertEqual(result.returncode, 0)
+            updated_log = log_path.read_text(encoding="utf-8")
+            self.assertIn(ai_loop.TELEMETRY_FOOTER_MARKER, updated_log)
+            self.assertIn("gh not available", result.stderr)
+
+    def test_finalize_tolerates_gh_ready_failure(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            repo = root / "repo"
+            repo.mkdir()
+            init_repo_with_ai_loop_tooling(repo)
+
+            shim = root / "gh_shim.py"
+            state_dir = root / "gh_state"
+            write_gh_shim(shim)
+            state_dir.mkdir(parents=True, exist_ok=True)
+            (state_dir / "pr_body.txt").write_text(
+                "Initial PR body.\n", encoding="utf-8"
+            )
+            (state_dir / "ready_rc.txt").write_text("1", encoding="utf-8")
+            env = self._shim_env(state_dir, shim)
+
+            log_path = self._write_pr_log(
+                repo,
+                events=(
+                    "<!-- ai-loop-event\n"
+                    "agent: codex\n"
+                    "role: developer\n"
+                    "cycle: 1\n"
+                    "status: needs_review\n"
+                    "-->\n"
+                ),
+                final_event=(
+                    "<!-- ai-loop-event\n"
+                    "agent: claude-code\n"
+                    "role: reviewer\n"
+                    "cycle: 1\n"
+                    "status: clean\n"
+                    "-->"
+                ),
+            )
+
+            script = repo / "tools/ai-loop/ai_loop.py"
+            result = run(
+                [
+                    sys.executable,
+                    str(script),
+                    "continue",
+                    "--trigger",
+                    "test",
+                    "--log",
+                    str(log_path),
+                    "--invoke",
+                ],
+                repo,
+                env=env,
+            )
+            self.assertEqual(result.returncode, 0)
+            # PR body still updated; only the ready flip failed.
+            updated_body = (state_dir / "pr_body.txt").read_text(encoding="utf-8")
+            self.assertIn("Final status: `clean`", updated_body)
+            self.assertIn("could not mark PR #90 ready", result.stderr)
+
+    def test_finalize_skipped_on_awaiting_human(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            repo = root / "repo"
+            repo.mkdir()
+            init_repo_with_ai_loop_tooling(repo)
+
+            shim = root / "gh_shim.py"
+            state_dir = root / "gh_state"
+            write_gh_shim(shim)
+            env = self._shim_env(state_dir, shim)
+
+            log_path = self._write_pr_log(
+                repo,
+                events=(
+                    "<!-- ai-loop-event\n"
+                    "agent: codex\n"
+                    "role: developer\n"
+                    "cycle: 1\n"
+                    "status: needs_review\n"
+                    "-->\n"
+                ),
+                final_event=(
+                    "<!-- ai-loop-event\n"
+                    "agent: codex\n"
+                    "role: developer\n"
+                    "cycle: 1\n"
+                    "status: awaiting_human\n"
+                    "next_agent: human\n"
+                    "-->"
+                ),
+            )
+            head_before = run(["git", "rev-parse", "HEAD"], repo).stdout.strip()
+
+            script = repo / "tools/ai-loop/ai_loop.py"
+            run(
+                [
+                    sys.executable,
+                    str(script),
+                    "continue",
+                    "--trigger",
+                    "test",
+                    "--log",
+                    str(log_path),
+                    "--invoke",
+                ],
+                repo,
+                env=env,
+            )
+
+            head_after = run(["git", "rev-parse", "HEAD"], repo).stdout.strip()
+            self.assertEqual(head_before, head_after)
+            updated_log = log_path.read_text(encoding="utf-8")
+            self.assertNotIn(ai_loop.TELEMETRY_FOOTER_MARKER, updated_log)
 
 
 if __name__ == "__main__":

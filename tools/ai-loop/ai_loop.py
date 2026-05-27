@@ -122,6 +122,15 @@ AI_LOOP_LABEL_DESCRIPTION = (
 AI_LOOP_BASE_REF = "origin/main"
 GH_PR_URL_RE = re.compile(r"/pull/(\d+)\b")
 
+TERMINAL_FINALIZE_STATUSES = {"clean", "max_cycles_reached", "failed"}
+SUMMARY_BLOCK_START = "<!-- ai-loop:summary-start -->"
+SUMMARY_BLOCK_END = "<!-- ai-loop:summary-end -->"
+SUMMARY_BLOCK_RE = re.compile(
+    rf"{re.escape(SUMMARY_BLOCK_START)}.*?{re.escape(SUMMARY_BLOCK_END)}",
+    re.DOTALL,
+)
+TELEMETRY_FOOTER_MARKER = "<!-- ai-loop-telemetry"
+
 
 class AILoopError(RuntimeError):
     """User-facing ai-loop failure."""
@@ -151,6 +160,23 @@ class AgentInvocation:
     command: list[str]
     prompt: str
     timeout_seconds: float
+
+
+@dataclass(frozen=True)
+class Telemetry:
+    final_status: str
+    cycles_run: int
+    max_cycles: int
+    developer_invocations: int
+    reviewer_invocations: int
+    clarifications: int
+    started_at: str
+    ended_at: str
+    duration_seconds: int | None
+    failure_reason: str | None
+    pr_number: int | None
+    run_id: str
+    log_path: str
 
 
 def repo_root_from_cwd() -> Path:
@@ -860,6 +886,113 @@ class GhClient:
     def add_label_to_pr(self, pr_number: int, label: str) -> None:
         self.run(["pr", "edit", str(pr_number), "--add-label", label])
 
+    def _binary_available(self) -> bool:
+        return shutil.which(self.base_command()[0]) is not None
+
+    def fetch_pr_body(self, pr_number: int) -> str | None:
+        """Return the PR body, or ``None`` if ``gh`` is unavailable / fails.
+
+        Fail-tolerant: never raises. The end-of-loop summary path uses this
+        to read the current body before computing the next one.
+        """
+        if not self._binary_available():
+            print(
+                f"ai-loop: gh not available; skipping PR #{pr_number} body fetch",
+                file=sys.stderr,
+                flush=True,
+            )
+            return None
+        result = self.run(
+            [
+                "pr",
+                "view",
+                str(pr_number),
+                "--json",
+                "body",
+                "--jq",
+                ".body",
+            ],
+            check=False,
+        )
+        if result.returncode != 0:
+            stderr = (result.stderr or "").strip() or "gh pr view failed"
+            print(
+                f"ai-loop: could not fetch PR #{pr_number} body: {stderr}",
+                file=sys.stderr,
+                flush=True,
+            )
+            return None
+        return result.stdout
+
+    def edit_pr_body(self, pr_number: int, body: str) -> bool:
+        """Set the PR body via ``gh pr edit --body-file``.
+
+        Fail-tolerant: returns ``False`` on any failure (missing binary,
+        non-zero exit) and logs a warning. Uses a temporary file rather
+        than ``--body`` so the body can contain arbitrary markdown without
+        shell escaping.
+        """
+        if not self._binary_available():
+            print(
+                f"ai-loop: gh not available; skipping PR #{pr_number} body edit",
+                file=sys.stderr,
+                flush=True,
+            )
+            return False
+        import tempfile as _tempfile
+
+        with _tempfile.NamedTemporaryFile(
+            mode="w",
+            encoding="utf-8",
+            suffix=".md",
+            delete=False,
+        ) as handle:
+            handle.write(body)
+            body_path = handle.name
+        try:
+            result = self.run(
+                ["pr", "edit", str(pr_number), "--body-file", body_path],
+                check=False,
+            )
+        finally:
+            try:
+                os.unlink(body_path)
+            except OSError:
+                pass
+        if result.returncode != 0:
+            stderr = (result.stderr or "").strip() or "gh pr edit failed"
+            print(
+                f"ai-loop: could not update PR #{pr_number} body: {stderr}",
+                file=sys.stderr,
+                flush=True,
+            )
+            return False
+        return True
+
+    def mark_pr_ready(self, pr_number: int) -> bool:
+        """Flip a draft PR to ready-for-review.
+
+        Fail-tolerant: returns ``False`` on any failure and logs a warning.
+        """
+        if not self._binary_available():
+            print(
+                f"ai-loop: gh not available; skipping PR #{pr_number} "
+                "ready-for-review flip",
+                file=sys.stderr,
+                flush=True,
+            )
+            return False
+        result = self.run(["pr", "ready", str(pr_number)], check=False)
+        if result.returncode != 0:
+            stderr = (result.stderr or "").strip() or "gh pr ready failed"
+            print(
+                f"ai-loop: could not mark PR #{pr_number} ready: {stderr}",
+                file=sys.stderr,
+                flush=True,
+            )
+            return False
+        return True
+
 
 def select_create_pr(git: GitContext, args: argparse.Namespace) -> bool:
     """Decide whether `start` should bootstrap a draft PR.
@@ -1035,6 +1168,185 @@ Result:
 
 <!-- ai-loop-event
 {render_event_metadata(metadata)}
+-->
+"""
+
+
+def _parse_iso_datetime(value: str) -> datetime | None:
+    value = (value or "").strip()
+    if not value:
+        return None
+    try:
+        return datetime.fromisoformat(value)
+    except ValueError:
+        return None
+
+
+def _safe_int(value: str | None) -> int | None:
+    if value is None:
+        return None
+    raw = value.strip()
+    if not raw:
+        return None
+    try:
+        return int(raw)
+    except ValueError:
+        return None
+
+
+def _format_duration(seconds: int | None) -> str:
+    if seconds is None:
+        return "unknown"
+    if seconds < 60:
+        return f"{seconds}s"
+    minutes, remainder = divmod(seconds, 60)
+    if minutes < 60:
+        return f"{minutes}m {remainder}s" if remainder else f"{minutes}m"
+    hours, minutes = divmod(minutes, 60)
+    if minutes:
+        return f"{hours}h {minutes}m"
+    return f"{hours}h"
+
+
+def derive_telemetry(parsed: ParsedLog, *, ended_at: str) -> Telemetry:
+    """Summarize a parsed AI loop log into a Telemetry record.
+
+    Pure function — depends only on the parsed log shape and the caller's
+    end timestamp. The latest event must carry one of the terminal statuses
+    in ``TERMINAL_FINALIZE_STATUSES``; the controller is responsible for
+    guarding that contract before calling.
+    """
+    init = parsed.init or {}
+    latest = parsed.latest_event or {}
+
+    cycles_seen = [
+        cycle
+        for event in parsed.events
+        if (cycle := _safe_int(event.get("cycle"))) is not None
+    ]
+    cycles_run = max(cycles_seen) if cycles_seen else 0
+
+    developer_invocations = sum(
+        1 for event in parsed.events if event.get("role") == "developer"
+    )
+    reviewer_invocations = sum(
+        1 for event in parsed.events if event.get("role") == "reviewer"
+    )
+    clarifications = sum(
+        1 for event in parsed.events if event.get("status") == "awaiting_human"
+    )
+
+    started_at = init.get("started_at", "")
+    started_dt = _parse_iso_datetime(started_at)
+    ended_dt = _parse_iso_datetime(ended_at)
+    if started_dt and ended_dt:
+        delta = int((ended_dt - started_dt).total_seconds())
+        duration_seconds: int | None = max(delta, 0)
+    else:
+        duration_seconds = None
+
+    final_status = latest.get("status", "")
+    max_cycles = _safe_int(init.get("max_cycles")) or DEFAULT_MAX_CYCLES
+
+    failure_reason: str | None = None
+    if final_status == "failed":
+        failure_reason = (
+            latest.get("failure_reason")
+            or latest.get("reason")
+            or "agent reported failure"
+        ).strip() or "agent reported failure"
+    elif final_status == "max_cycles_reached":
+        failure_reason = f"cycle cap of {max_cycles} reached"
+
+    return Telemetry(
+        final_status=final_status,
+        cycles_run=cycles_run,
+        max_cycles=max_cycles,
+        developer_invocations=developer_invocations,
+        reviewer_invocations=reviewer_invocations,
+        clarifications=clarifications,
+        started_at=started_at,
+        ended_at=ended_at,
+        duration_seconds=duration_seconds,
+        failure_reason=failure_reason,
+        pr_number=_safe_int(init.get("pr")),
+        run_id=init.get("run_id", ""),
+        log_path=init.get("log_path", ""),
+    )
+
+
+def render_summary_block(telemetry: Telemetry) -> str:
+    """Render the delimited PR-body summary block for a terminal log.
+
+    Idempotent: the same telemetry always produces the same block.
+    """
+    lines = [
+        SUMMARY_BLOCK_START,
+        "## AI Loop Summary",
+        "",
+        f"- Final status: `{telemetry.final_status}`",
+        f"- Cycles run: {telemetry.cycles_run} of {telemetry.max_cycles}",
+        f"- Developer invocations: {telemetry.developer_invocations}",
+        f"- Reviewer invocations: {telemetry.reviewer_invocations}",
+        f"- Human clarifications: {telemetry.clarifications}",
+        f"- Started: {telemetry.started_at or 'unknown'}",
+        f"- Ended: {telemetry.ended_at or 'unknown'}",
+        f"- Duration: {_format_duration(telemetry.duration_seconds)}",
+    ]
+    if telemetry.log_path:
+        lines.append(
+            f"- Loop log: [{telemetry.log_path}]({telemetry.log_path})"
+        )
+    if telemetry.failure_reason:
+        lines.append(f"- Stopped because: {telemetry.failure_reason}")
+    lines.append("")
+    lines.append(SUMMARY_BLOCK_END)
+    return "\n".join(lines)
+
+
+def replace_summary_block(body: str, new_block: str) -> str:
+    """Replace an existing summary block in ``body`` or append a new one.
+
+    Idempotent: re-running with the same ``new_block`` yields the same
+    output regardless of whether the body already had a block.
+    """
+    if SUMMARY_BLOCK_RE.search(body):
+        return SUMMARY_BLOCK_RE.sub(new_block, body, count=1)
+    body_trimmed = body.rstrip()
+    if not body_trimmed:
+        return new_block + "\n"
+    return f"{body_trimmed}\n\n{new_block}\n"
+
+
+def render_telemetry_footer(telemetry: Telemetry) -> str:
+    """Render the HTML-comment telemetry footer appended to the log."""
+    fields: list[tuple[str, str]] = [
+        ("final_status", telemetry.final_status),
+        ("cycles_run", str(telemetry.cycles_run)),
+        ("max_cycles", str(telemetry.max_cycles)),
+        ("developer_invocations", str(telemetry.developer_invocations)),
+        ("reviewer_invocations", str(telemetry.reviewer_invocations)),
+        ("clarifications", str(telemetry.clarifications)),
+        ("started_at", telemetry.started_at),
+        ("ended_at", telemetry.ended_at),
+    ]
+    if telemetry.duration_seconds is not None:
+        fields.append(("duration_seconds", str(telemetry.duration_seconds)))
+    if telemetry.failure_reason:
+        fields.append(("failure_reason", telemetry.failure_reason))
+    if telemetry.pr_number is not None:
+        fields.append(("pr", str(telemetry.pr_number)))
+    if telemetry.run_id:
+        fields.append(("run_id", telemetry.run_id))
+    body = "\n".join(f"{key}: {value}" for key, value in fields)
+    display_time = display_now_local()
+    return f"""
+## {display_time} - Controller - Finalize loop ({telemetry.final_status})
+
+The controller wrote the end-of-loop summary and telemetry for this run.
+
+<!-- ai-loop-telemetry
+{body}
 -->
 """
 
@@ -1329,6 +1641,13 @@ def command_continue(args: argparse.Namespace) -> int:
     route = router.route_for_event(latest)
     if not route:
         print(f"ai-loop ({args.trigger}): {router.routing_decision(latest)}")
+        # Finalize when the log already entered command_continue in a
+        # terminal state — happens when the hook fires on the agent's
+        # own terminal commit, or when the user re-runs `continue` on a
+        # previously terminated log. The function is idempotent so a
+        # repeat call is a no-op once the telemetry footer is present.
+        if dispatcher.should_invoke(args):
+            finalize_terminal_log(git=git, log_path=log_path)
         return 0
 
     if not dispatcher.should_invoke(args):
@@ -1385,6 +1704,7 @@ def run_agent_loop(
         decision = routing_decision_for_log(router, parsed, latest)
         if not route:
             print_stop_decision(trigger, decision, is_chained_dispatch)
+            finalize_terminal_log(git=git, log_path=log_path)
             return
 
         if should_stop_for_cycle_cap(parsed, latest, route):
@@ -1395,6 +1715,7 @@ def run_agent_loop(
                 latest=latest,
                 max_cycles=max_cycles_for_log(parsed),
             )
+            finalize_terminal_log(git=git, log_path=log_path)
             return
 
         if is_chained_dispatch:
@@ -1450,6 +1771,91 @@ def append_max_cycles_reached_event(
         ["commit", "-m", "[ai-loop] Controller: max cycles reached"],
         capture_output=False,
     )
+
+
+def finalize_terminal_log(*, git: GitContext, log_path: Path) -> None:
+    """Write the end-of-loop summary + telemetry for a terminal log.
+
+    No-op for non-terminal statuses (``awaiting_human``, ``paused``,
+    unknown). Idempotent: if a telemetry footer already exists in the log
+    (from a previous controller pass), this function returns without
+    making a second commit or PR mutation.
+
+    On terminal statuses, the controller:
+
+    1. Appends a telemetry footer to the log and commits it.
+    2. If a PR number is known from ``ai-loop-init``, replaces the
+       delimited summary block in the PR body (appends if absent).
+    3. If the final status is ``clean``, marks the PR ready-for-review;
+       on ``max_cycles_reached`` / ``failed`` the PR stays in draft so
+       the human can adjudicate.
+
+    All ``gh`` interactions are fail-tolerant: a missing or failing
+    ``gh`` logs a warning and the controller continues. The local
+    telemetry footer is still committed even when the PR mutation
+    cannot be performed.
+    """
+    parsed = parse_log_file(log_path)
+    latest = parsed.latest_event or {}
+    status = latest.get("status", "")
+    if status not in TERMINAL_FINALIZE_STATUSES:
+        return
+
+    log_text = log_path.read_text(encoding="utf-8")
+    if TELEMETRY_FOOTER_MARKER in log_text:
+        print(
+            f"ai-loop: telemetry footer already present in {log_path.name}; "
+            "finalize is a no-op",
+            flush=True,
+        )
+        return
+
+    git.ensure_dispatch_safe_worktree()
+    telemetry = derive_telemetry(parsed, ended_at=iso_now_local())
+    footer = render_telemetry_footer(telemetry)
+    rel_log_path = repo_relative_path(git.repo, log_path)
+    with log_path.open("a", encoding="utf-8") as handle:
+        handle.write(footer)
+    git.run(["add", rel_log_path], capture_output=True)
+    git.run(
+        [
+            "commit",
+            "-m",
+            f"[ai-loop] Controller: finalize {telemetry.final_status}",
+        ],
+        capture_output=False,
+    )
+    print(
+        f"ai-loop: wrote end-of-loop telemetry footer ({telemetry.final_status})",
+        flush=True,
+    )
+
+    if telemetry.pr_number is None:
+        return
+
+    gh = GhClient(git)
+    current_body = gh.fetch_pr_body(telemetry.pr_number)
+    if current_body is None:
+        return
+
+    new_body = replace_summary_block(current_body, render_summary_block(telemetry))
+    if new_body == current_body:
+        print(
+            f"ai-loop: PR #{telemetry.pr_number} body summary already current",
+            flush=True,
+        )
+    elif gh.edit_pr_body(telemetry.pr_number, new_body):
+        print(
+            f"ai-loop: updated PR #{telemetry.pr_number} body with end-of-loop summary",
+            flush=True,
+        )
+
+    if telemetry.final_status == "clean":
+        if gh.mark_pr_ready(telemetry.pr_number):
+            print(
+                f"ai-loop: marked PR #{telemetry.pr_number} ready for review",
+                flush=True,
+            )
 
 
 def command_compose_prompt(args: argparse.Namespace) -> int:
