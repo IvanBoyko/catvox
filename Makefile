@@ -160,7 +160,7 @@ help:
 		'  CATVOX_APP_CHECK_DEBUG_TOKEN=... make functions-integration' \
 		'  CATVOX_TFVARS_PATH=... overrides the local tfvars fallback path for App Check debug tokens' \
 		'  AI_LOOP_INVOKE_AGENTS=1 enables opt-in local AI-loop agent dispatch' \
-		'  AI_LOOP_CREATE_PR=1 enables draft-PR bootstrap during make ai-loop-start (renames log to pr-NNNN.md)' \
+		'  AI_LOOP_CREATE_PR=0 (or git config ai-loop.createPr false) skips draft-PR bootstrap during make ai-loop-start; default is on' \
 		'  AI_LOOP_AGENT_PROFILE=smoke|real selects cheaper smoke or stronger real local AI-loop commands' \
 		'  AI_LOOP_ANSWER="..." answers an AI-loop clarification via make ai-loop-answer' \
 		'  CATVOX_POSTHOG_PROJECT_ID=... overrides the xcconfig PostHog project ID for terraform/posthog/' \

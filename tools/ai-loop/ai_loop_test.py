@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import argparse
 import importlib.util
 import os
 import shutil
@@ -55,6 +56,12 @@ def init_repo_with_ai_loop_tooling(repo: Path) -> None:
     run(["git", "init"], repo)
     run(["git", "config", "user.name", "AI Loop Test"], repo)
     run(["git", "config", "user.email", "ai-loop-test@example.com"], repo)
+    # Tests using this helper validate hook routing / dispatch, not the
+    # default-on PR bootstrap. Pin the opt-out so they don't try to talk to
+    # GitHub when `start` is invoked. PrBootstrapTests build their own
+    # repo via init_repo_with_bare_origin and leave the config unset so
+    # the default-ON path is exercised.
+    run(["git", "config", "ai-loop.createPr", "false"], repo)
     write_minimal_instruction_files(repo)
     shutil.copytree(TOOL_DIR, repo / "tools/ai-loop")
     run(["git", "add", "."], repo)
@@ -1291,6 +1298,9 @@ class GitIntegrationTests(unittest.TestCase):
             run(["git", "init"], repo)
             run(["git", "config", "user.name", "AI Loop Test"], repo)
             run(["git", "config", "user.email", "ai-loop-test@example.com"], repo)
+            # This test exercises hook routing only, not the default-on PR
+            # bootstrap. Opt out so `start` doesn't try to talk to GitHub.
+            run(["git", "config", "ai-loop.createPr", "false"], repo)
 
             shutil.copytree(TOOL_DIR, repo / "tools/ai-loop")
             run(["git", "add", "tools/ai-loop"], repo)
@@ -1477,6 +1487,9 @@ questions: q1,q2
             run(["git", "init"], repo)
             run(["git", "config", "user.name", "AI Loop Test"], repo)
             run(["git", "config", "user.email", "ai-loop-test@example.com"], repo)
+            # This test exercises hook routing in a linked worktree only,
+            # not the default-on PR bootstrap.
+            run(["git", "config", "ai-loop.createPr", "false"], repo)
 
             shutil.copytree(TOOL_DIR, repo / "tools/ai-loop")
             run(["git", "add", "tools/ai-loop"], repo)
@@ -1576,10 +1589,13 @@ class PrBootstrapTests(unittest.TestCase):
         state_dir: Path,
         shim_path: Path,
     ) -> dict[str, str]:
+        # AI_LOOP_CREATE_PR is intentionally unset so these tests exercise
+        # the default-ON behavior. Tests that need to verify the opt-out
+        # path or the explicit truthy/falsy precedence set it themselves.
         env = os.environ.copy()
         env["AI_LOOP_GH_COMMAND"] = f"{sys.executable} {shim_path}"
         env["GH_SHIM_STATE_DIR"] = str(state_dir)
-        env["AI_LOOP_CREATE_PR"] = "1"
+        env.pop("AI_LOOP_CREATE_PR", None)
         return env
 
     def test_create_pr_happy_path_renames_log_and_applies_label(self) -> None:
@@ -1656,7 +1672,7 @@ class PrBootstrapTests(unittest.TestCase):
             self.assertIn("--add-label", pr_edits[0])
             self.assertIn("ai-loop", pr_edits[0])
 
-    def test_default_off_keeps_legacy_local_log_and_skips_gh(self) -> None:
+    def test_opt_out_via_env_keeps_legacy_local_log_and_skips_gh(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             repo = root / "repo"
@@ -1667,10 +1683,8 @@ class PrBootstrapTests(unittest.TestCase):
             shim = root / "gh_shim.py"
             state_dir = root / "gh_state"
             write_gh_shim(shim)
-            env = os.environ.copy()
-            env["AI_LOOP_GH_COMMAND"] = f"{sys.executable} {shim}"
-            env["GH_SHIM_STATE_DIR"] = str(state_dir)
-            env.pop("AI_LOOP_CREATE_PR", None)
+            env = self._shim_env(state_dir, shim)
+            env["AI_LOOP_CREATE_PR"] = "0"
 
             script = repo / "tools/ai-loop/ai_loop.py"
             result = run(
@@ -1679,7 +1693,7 @@ class PrBootstrapTests(unittest.TestCase):
                     str(script),
                     "start",
                     "--branch",
-                    "feature/pr-bootstrap-off",
+                    "feature/pr-bootstrap-opt-out-env",
                     "--prompt",
                     "Implement the requested change",
                 ],
@@ -1690,6 +1704,83 @@ class PrBootstrapTests(unittest.TestCase):
             output = result.stdout + result.stderr
             self.assertNotIn("created draft PR", output)
             self.assertNotIn("renamed to docs/ai-loop/pr-", output)
+
+            local_logs = sorted((repo / "docs/ai-loop").glob("local-*.md"))
+            self.assertEqual(len(local_logs), 1)
+            pr_logs = list((repo / "docs/ai-loop").glob("pr-*.md"))
+            self.assertEqual(pr_logs, [])
+            self.assertEqual(read_gh_calls(state_dir), [])
+
+    def test_opt_out_via_git_config_keeps_legacy_local_log(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            repo = root / "repo"
+            origin = root / "origin.git"
+            repo.mkdir()
+            init_repo_with_bare_origin(repo, origin)
+            run(["git", "config", "ai-loop.createPr", "false"], repo)
+
+            shim = root / "gh_shim.py"
+            state_dir = root / "gh_state"
+            write_gh_shim(shim)
+            env = self._shim_env(state_dir, shim)
+
+            script = repo / "tools/ai-loop/ai_loop.py"
+            result = run(
+                [
+                    sys.executable,
+                    str(script),
+                    "start",
+                    "--branch",
+                    "feature/pr-bootstrap-opt-out-config",
+                    "--prompt",
+                    "Implement the requested change",
+                ],
+                repo,
+                env=env,
+            )
+
+            output = result.stdout + result.stderr
+            self.assertNotIn("created draft PR", output)
+
+            local_logs = sorted((repo / "docs/ai-loop").glob("local-*.md"))
+            self.assertEqual(len(local_logs), 1)
+            pr_logs = list((repo / "docs/ai-loop").glob("pr-*.md"))
+            self.assertEqual(pr_logs, [])
+            self.assertEqual(read_gh_calls(state_dir), [])
+
+    def test_opt_out_via_cli_flag_keeps_legacy_local_log(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            repo = root / "repo"
+            origin = root / "origin.git"
+            repo.mkdir()
+            init_repo_with_bare_origin(repo, origin)
+
+            shim = root / "gh_shim.py"
+            state_dir = root / "gh_state"
+            write_gh_shim(shim)
+            env = self._shim_env(state_dir, shim)
+            env["AI_LOOP_CREATE_PR"] = "1"  # would be on; --no-create-pr wins
+
+            script = repo / "tools/ai-loop/ai_loop.py"
+            result = run(
+                [
+                    sys.executable,
+                    str(script),
+                    "start",
+                    "--branch",
+                    "feature/pr-bootstrap-opt-out-cli",
+                    "--prompt",
+                    "Implement the requested change",
+                    "--no-create-pr",
+                ],
+                repo,
+                env=env,
+            )
+
+            output = result.stdout + result.stderr
+            self.assertNotIn("created draft PR", output)
 
             local_logs = sorted((repo / "docs/ai-loop").glob("local-*.md"))
             self.assertEqual(len(local_logs), 1)
@@ -1709,7 +1800,8 @@ class PrBootstrapTests(unittest.TestCase):
 
             env = os.environ.copy()
             env["AI_LOOP_GH_COMMAND"] = "/nonexistent/gh-binary-does-not-exist"
-            env["AI_LOOP_CREATE_PR"] = "1"
+            # Default is ON; pop in case the test runner inherits an opt-out.
+            env.pop("AI_LOOP_CREATE_PR", None)
 
             script = repo / "tools/ai-loop/ai_loop.py"
             result = run(
@@ -1944,6 +2036,67 @@ class PrBootstrapTests(unittest.TestCase):
             # No pr-*.md created
             pr_logs = list((repo / "docs/ai-loop").glob("pr-*.md"))
             self.assertEqual(pr_logs, [])
+
+
+class SelectCreatePrTests(unittest.TestCase):
+    """Cover the precedence rules for ``select_create_pr``.
+
+    Default is ON because ADR-0023 names docs/ai-loop/pr-XXXX.md as the
+    MVP form of the loop log. CLI > env > git config > default.
+    """
+
+    def _make_repo(self, tmp: Path, config_value: str | None) -> ai_loop.GitContext:
+        repo = tmp / "repo"
+        repo.mkdir()
+        run(["git", "init"], repo)
+        run(["git", "config", "user.name", "AI Loop Test"], repo)
+        run(["git", "config", "user.email", "ai-loop-test@example.com"], repo)
+        if config_value is not None:
+            run(["git", "config", "ai-loop.createPr", config_value], repo)
+        return ai_loop.GitContext(repo)
+
+    def _ns(self, cli: bool | None) -> argparse.Namespace:
+        return argparse.Namespace(create_pr=cli)
+
+    def test_precedence_matrix(self) -> None:
+        cases: list[tuple[bool | None, str | None, str | None, bool, str]] = [
+            (None, None, None, True, "default ON when nothing set"),
+            (None, "1", None, True, "env truthy"),
+            (None, "0", None, False, "env falsy"),
+            (None, "true", None, True, "env true variant"),
+            (None, "false", None, False, "env false variant"),
+            (None, "yes", None, True, "env yes variant"),
+            (None, "no", None, False, "env no variant"),
+            (None, "on", None, True, "env on variant"),
+            (None, "off", None, False, "env off variant"),
+            (None, None, "true", True, "git config truthy"),
+            (None, None, "false", False, "git config falsy"),
+            (None, "1", "false", True, "env on beats git config off"),
+            (None, "0", "true", False, "env off beats git config on"),
+            (True, "0", "false", True, "cli True beats env+config off"),
+            (False, "1", "true", False, "cli False beats env+config on"),
+            (None, "garbage", None, True, "unrecognized env falls through to default"),
+            (
+                None,
+                None,
+                "garbage",
+                True,
+                "unrecognized git config falls through to default",
+            ),
+        ]
+        for cli, env_value, config_value, expected, description in cases:
+            with self.subTest(description=description):
+                with tempfile.TemporaryDirectory() as tmp_str:
+                    tmp = Path(tmp_str)
+                    git = self._make_repo(tmp, config_value)
+                    env: dict[str, str] = {}
+                    if env_value is not None:
+                        env["AI_LOOP_CREATE_PR"] = env_value
+                    with patch.dict(os.environ, env, clear=True):
+                        self.assertEqual(
+                            ai_loop.select_create_pr(git, self._ns(cli)),
+                            expected,
+                        )
 
 
 if __name__ == "__main__":

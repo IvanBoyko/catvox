@@ -107,6 +107,7 @@ INITIAL_PROMPT_RE = re.compile(
     re.DOTALL,
 )
 TRUTHY = {"1", "true", "yes", "on"}
+FALSY = {"0", "false", "no", "off"}
 DEFAULT_MAX_CYCLES = 3
 DEFAULT_AGENT_TIMEOUT_SECONDS = 1800.0
 AGENT_TIMEOUT_ENV = "AI_LOOP_AGENT_TIMEOUT_SECONDS"
@@ -861,17 +862,35 @@ class GhClient:
 
 
 def select_create_pr(git: GitContext, args: argparse.Namespace) -> bool:
-    if getattr(args, "create_pr", False):
-        return True
+    """Decide whether `start` should bootstrap a draft PR.
+
+    Default is ON because ADR-0023 names `docs/ai-loop/pr-XXXX.md` as the
+    MVP shape of the loop log. The opt-out path is for offline iteration
+    and dry-run validation. Precedence (highest first):
+
+    1. CLI flag (``--create-pr`` / ``--no-create-pr``)
+    2. Environment variable (``AI_LOOP_CREATE_PR``)
+    3. Git config (``ai-loop.createPr``)
+    4. Default: True
+    """
+    cli_value = getattr(args, "create_pr", None)
+    if cli_value is not None:
+        return bool(cli_value)
     env_value = os.environ.get(CREATE_PR_ENV, "").strip().lower()
     if env_value in TRUTHY:
         return True
+    if env_value in FALSY:
+        return False
     config_value = (
         git.run(["config", "--get", "ai-loop.createPr"], check=False)
         .stdout.strip()
         .lower()
     )
-    return config_value in TRUTHY
+    if config_value in TRUTHY:
+        return True
+    if config_value in FALSY:
+        return False
+    return True
 
 
 def iso_now_local() -> str:
@@ -1028,6 +1047,34 @@ def verify_tool(name: str, *, required: bool) -> str:
     return f"{prefix}: {name}"
 
 
+def verify_gh_auth_for_setup() -> str:
+    """Return a setup-time status line for gh authentication.
+
+    `start` defaults to creating a draft PR, which requires `gh auth status`
+    to succeed. Surface this at setup time so the prereq is visible up front
+    instead of failing at first bootstrap.
+    """
+    if shutil.which(DEFAULT_GH_COMMAND) is None:
+        return (
+            f"warn: {DEFAULT_GH_COMMAND} missing; install GitHub CLI before "
+            "running `make ai-loop-start` (or pass AI_LOOP_CREATE_PR=0 to "
+            "stay local-only)"
+        )
+    result = subprocess.run(
+        [DEFAULT_GH_COMMAND, "auth", "status"],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    if result.returncode == 0:
+        return "ok: gh authenticated"
+    return (
+        "warn: gh installed but not authenticated; run `gh auth login` "
+        "before `make ai-loop-start` (or pass AI_LOOP_CREATE_PR=0 to "
+        "stay local-only)"
+    )
+
+
 def command_setup(args: argparse.Namespace) -> int:
     repo = Path(args.repo).resolve() if args.repo else repo_root_from_cwd()
     git = GitContext(repo)
@@ -1045,6 +1092,7 @@ def command_setup(args: argparse.Namespace) -> int:
         verify_tool("codex", required=False),
         verify_tool("claude", required=False),
         verify_tool("gh", required=False),
+        verify_gh_auth_for_setup(),
     ]:
         print(message)
     return 0
@@ -1432,11 +1480,14 @@ def build_parser() -> argparse.ArgumentParser:
     start.add_argument("--prompt", help="initial human prompt for the local loop")
     start.add_argument(
         "--create-pr",
-        action="store_true",
+        action=argparse.BooleanOptionalAction,
+        default=None,
         help=(
-            "push the branch, create a draft PR, rename the log to "
-            f"docs/ai-loop/pr-NNNN.md, and apply the {AI_LOOP_LABEL!r} label; "
-            f"defaults to {CREATE_PR_ENV} or ai-loop.createPr git config"
+            "default ON: push the branch, create a draft PR, rename the log "
+            f"to docs/ai-loop/pr-NNNN.md, and apply the {AI_LOOP_LABEL!r} "
+            f"label. Pass --no-create-pr (or {CREATE_PR_ENV}=0 / git config "
+            "ai-loop.createPr false) for offline iteration that keeps the "
+            "local-YYYYMMDD-HHMMSS.md log only."
         ),
     )
     start.set_defaults(func=command_start)
