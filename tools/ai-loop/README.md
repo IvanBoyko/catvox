@@ -405,6 +405,14 @@ failing call logs a warning and the controller continues. The local
 telemetry footer still commits even if the PR mutation can't run, so the
 log carries the final state regardless of network or auth conditions.
 
+Re-running finalize after a push failure recovers cleanly: only the
+footer commit is gated on the footer marker, so the second pass skips
+the duplicate commit but still pushes, refreshes the PR body, and flips
+to ready on `clean`. The retry re-uses the `ended_at` timestamp from
+the existing footer so the rendered summary block is byte-identical to
+what the first attempt would have produced — `gh pr edit --body-file`
+is a true no-op when the body is already current.
+
 `awaiting_human` and `paused` are not terminal — the controller does not
 finalize on those statuses so the loop can resume after a human answer or
 an unpause.

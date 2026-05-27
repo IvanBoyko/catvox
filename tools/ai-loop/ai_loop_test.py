@@ -2858,7 +2858,15 @@ class FinalizeTerminalLogTests(unittest.TestCase):
             self.assertIn("Final status: `clean`", new_body)
             self.assertIn("Initial PR body.", new_body)
 
-    def test_finalize_idempotent_on_already_finalized_log(self) -> None:
+    def test_finalize_retries_pr_side_when_footer_already_present(self) -> None:
+        """When the telemetry footer is already in the log, finalize
+        must NOT duplicate the footer commit, but it MUST still retry
+        the PR-side operations. Without this, a previous push failure
+        (which committed the footer locally but skipped the PR
+        updates) leaves the PR in a permanently stale state: the
+        TELEMETRY_FOOTER_MARKER check used to return early and
+        prevent any recovery. See Codex bot finding B5 on PR #91.
+        """
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             repo = self._setup_repo(root)
@@ -2910,8 +2918,18 @@ class FinalizeTerminalLogTests(unittest.TestCase):
             )
             head_after_first = run(["git", "rev-parse", "HEAD"], repo).stdout.strip()
             calls_after_first = read_gh_calls(state_dir)
+            edits_after_first = [
+                c for c in calls_after_first if c[:2] == ["pr", "edit"]
+            ]
+            self.assertEqual(
+                len(edits_after_first),
+                1,
+                "first finalize must call pr edit exactly once",
+            )
 
-            # Re-run on the finalized log — should be a no-op.
+            # Re-run with the footer already present. The footer
+            # commit must be skipped, but PR-side ops must run again
+            # so a previously-failed push can recover (B5).
             result = run(
                 [
                     sys.executable,
@@ -2926,10 +2944,39 @@ class FinalizeTerminalLogTests(unittest.TestCase):
                 repo,
                 env=env,
             )
-            self.assertIn("ai-loop", result.stdout + result.stderr)
+            self.assertIn(
+                "telemetry footer already present", result.stdout + result.stderr
+            )
             head_after_second = run(["git", "rev-parse", "HEAD"], repo).stdout.strip()
-            self.assertEqual(head_after_first, head_after_second)
-            self.assertEqual(read_gh_calls(state_dir), calls_after_first)
+            self.assertEqual(
+                head_after_first,
+                head_after_second,
+                "second finalize must not duplicate the footer commit",
+            )
+
+            # The PR body is now current (replace_summary_block is
+            # idempotent), so no NEW pr edit calls are expected. pr
+            # view / pr ready may repeat on the retry; that is by
+            # design and tolerated.
+            calls_after_second = read_gh_calls(state_dir)
+            edits_after_second = [
+                c for c in calls_after_second if c[:2] == ["pr", "edit"]
+            ]
+            # Account for the same `pr edit` body call on first run
+            # (idempotent — replace_summary_block on the second pass
+            # produces an identical body so the second call is also
+            # a no-op at the gh layer, even if the wrapper short-
+            # circuits before invoking it).
+            body_edits = [
+                c
+                for c in edits_after_second
+                if "--body-file" in c
+            ]
+            self.assertEqual(
+                len(body_edits),
+                1,
+                "pr edit --body-file must not be re-issued when body is current",
+            )
 
     def test_finalize_on_max_cycles_keeps_pr_draft(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -3376,6 +3423,140 @@ class FinalizeTerminalLogTests(unittest.TestCase):
                 (state_dir / "pr_body.txt").read_text(encoding="utf-8"),
                 "Initial PR body.\n",
             )
+
+    def test_finalize_recovers_after_push_failure_on_retry(self) -> None:
+        """Regression for Codex bot finding B5 on PR #91.
+
+        When a transient push failure leaves the telemetry footer
+        committed locally but the PR-side updates skipped, the user
+        is expected to push the branch manually and re-run
+        ``continue --invoke``. Before the B5 fix the retry hit the
+        ``TELEMETRY_FOOTER_MARKER`` early-return and the PR body /
+        ready transition were skipped permanently. After the fix
+        the retry skips only the footer commit and still applies
+        the PR-side updates.
+        """
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            repo = self._setup_repo(root)
+
+            shim = root / "gh_shim.py"
+            state_dir = root / "gh_state"
+            write_gh_shim(shim)
+            state_dir.mkdir(parents=True, exist_ok=True)
+            (state_dir / "pr_body.txt").write_text(
+                "Initial PR body.\n", encoding="utf-8"
+            )
+            env = self._shim_env(state_dir, shim)
+
+            # First call: simulate push failure by pointing origin at
+            # a non-existent path. The footer is committed locally,
+            # PR-side ops are skipped.
+            origin_url = run(
+                ["git", "remote", "get-url", "origin"], repo
+            ).stdout.strip()
+            run(
+                ["git", "remote", "set-url", "origin", "/nonexistent/origin"],
+                repo,
+            )
+
+            log_path = self._write_pr_log(
+                repo,
+                events=(
+                    "<!-- ai-loop-event\n"
+                    "agent: codex\n"
+                    "role: developer\n"
+                    "cycle: 1\n"
+                    "status: needs_review\n"
+                    "-->\n"
+                ),
+                final_event=(
+                    "<!-- ai-loop-event\n"
+                    "agent: claude-code\n"
+                    "role: reviewer\n"
+                    "cycle: 1\n"
+                    "status: clean\n"
+                    "-->"
+                ),
+            )
+
+            script = repo / "tools/ai-loop/ai_loop.py"
+            first = run(
+                [
+                    sys.executable,
+                    str(script),
+                    "continue",
+                    "--trigger",
+                    "test",
+                    "--log",
+                    str(log_path),
+                    "--invoke",
+                ],
+                repo,
+                env=env,
+            )
+
+            # Sanity-check the precondition: footer committed, no PR
+            # mutation yet.
+            self.assertIn(ai_loop.TELEMETRY_FOOTER_MARKER, log_path.read_text(encoding="utf-8"))
+            self.assertIn("could not push branch", first.stderr)
+            self.assertEqual(
+                (state_dir / "pr_body.txt").read_text(encoding="utf-8"),
+                "Initial PR body.\n",
+            )
+            calls_after_first = read_gh_calls(state_dir)
+            self.assertEqual(
+                [c for c in calls_after_first if c[:1] == ["pr"]],
+                [],
+                "first call (push failed) must not issue PR-side gh calls",
+            )
+
+            # Simulate manual recovery: restore origin so the next
+            # push succeeds.
+            run(
+                ["git", "remote", "set-url", "origin", origin_url],
+                repo,
+            )
+
+            second = run(
+                [
+                    sys.executable,
+                    str(script),
+                    "continue",
+                    "--trigger",
+                    "test",
+                    "--log",
+                    str(log_path),
+                    "--invoke",
+                ],
+                repo,
+                env=env,
+            )
+
+            output = second.stdout + second.stderr
+            # Footer was already present; second call must skip the
+            # footer commit but still attempt PR-side ops.
+            self.assertIn("telemetry footer already present", output)
+
+            # Head must not advance (no second finalize commit).
+            commits_count = run(
+                ["git", "rev-list", "--count", "HEAD"], repo
+            ).stdout.strip()
+            self.assertNotIn(
+                "[ai-loop] Controller: finalize clean\n[ai-loop] Controller: finalize clean",
+                run(["git", "log", "--format=%s"], repo).stdout,
+            )
+
+            # PR body now updated with the summary block.
+            updated_body = (state_dir / "pr_body.txt").read_text(encoding="utf-8")
+            self.assertIn(ai_loop.SUMMARY_BLOCK_START, updated_body)
+            self.assertIn("Final status: `clean`", updated_body)
+
+            # PR ready was called (clean status).
+            calls_after_second = read_gh_calls(state_dir)
+            pr_ready = [c for c in calls_after_second if c[:2] == ["pr", "ready"]]
+            self.assertEqual(len(pr_ready), 1)
+            self.assertEqual(pr_ready[0][2], "90")
 
 
 if __name__ == "__main__":

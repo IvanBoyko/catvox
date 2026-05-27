@@ -130,6 +130,9 @@ SUMMARY_BLOCK_RE = re.compile(
     re.DOTALL,
 )
 TELEMETRY_FOOTER_MARKER = "<!-- ai-loop-telemetry"
+TELEMETRY_FOOTER_RE = re.compile(
+    r"<!--\s*ai-loop-telemetry\s*\n(.*?)\n\s*-->", re.DOTALL
+)
 
 
 class AILoopError(RuntimeError):
@@ -1034,8 +1037,22 @@ def _acquire_ai_loop_lock(git: GitContext) -> Path:
 def _release_ai_loop_lock(lock_dir: Path) -> None:
     try:
         lock_dir.rmdir()
-    except OSError:
-        pass
+    except FileNotFoundError:
+        # Already cleaned up (e.g., a parallel hook fire raced us, or a
+        # manual `rmdir` between us creating and releasing). Benign.
+        return
+    except OSError as exc:
+        # Unexpected — most likely the lock directory is non-empty
+        # because something else dropped a file in there, or a
+        # permissions issue. Surface it so the next run isn't wedged
+        # without anyone noticing, but don't raise from this finally
+        # path so we don't mask the underlying error from the work
+        # that ran inside the lock.
+        print(
+            f"ai-loop: could not release lock at {lock_dir}: {exc}",
+            file=sys.stderr,
+            flush=True,
+        )
 
 
 def select_create_pr(git: GitContext, args: argparse.Namespace) -> bool:
@@ -1889,18 +1906,31 @@ def finalize_terminal_log(*, git: GitContext, log_path: Path) -> None:
     """Write the end-of-loop summary + telemetry for a terminal log.
 
     No-op for non-terminal statuses (``awaiting_human``, ``paused``,
-    unknown). Idempotent: if a telemetry footer already exists in the log
-    (from a previous controller pass), this function returns without
-    making a second commit or PR mutation.
+    unknown). On terminal statuses the controller:
 
-    On terminal statuses, the controller:
+    1. If no telemetry footer is in the log yet, appends one and
+       commits it as ``[ai-loop] Controller: finalize <status>``.
+       The footer commit is gated on the marker so re-runs do not
+       duplicate it.
+    2. If a PR number is known from ``ai-loop-init``, pushes the
+       current branch, then replaces the delimited summary block in
+       the PR body (appends if absent), and on ``clean`` marks the PR
+       ready-for-review.
+    3. On ``max_cycles_reached`` / ``failed`` the PR stays in draft
+       so the human can adjudicate.
 
-    1. Appends a telemetry footer to the log and commits it.
-    2. If a PR number is known from ``ai-loop-init``, replaces the
-       delimited summary block in the PR body (appends if absent).
-    3. If the final status is ``clean``, marks the PR ready-for-review;
-       on ``max_cycles_reached`` / ``failed`` the PR stays in draft so
-       the human can adjudicate.
+    **Recovery semantics.** The PR-side steps run on every call,
+    independent of the footer marker. If a previous run committed
+    the footer locally but failed to push (so PR-side updates were
+    skipped, see ``push_finalized_branch``), the user pushes the
+    branch manually and re-runs ``continue --invoke``; this function
+    sees the footer marker, skips the footer commit, but still
+    pushes (no-op if already in sync), re-reads the PR body, and
+    applies the summary block + ready transition. The PR-side
+    operations are themselves idempotent: ``replace_summary_block``
+    yields the same body for the same telemetry, ``edit_pr_body`` is
+    a no-op when the body has not changed, and ``mark_pr_ready`` is
+    fail-tolerant when the PR is already in the ready state.
 
     All ``gh`` interactions are fail-tolerant: a missing or failing
     ``gh`` logs a warning and the controller continues. The local
@@ -1914,33 +1944,53 @@ def finalize_terminal_log(*, git: GitContext, log_path: Path) -> None:
         return
 
     log_text = log_path.read_text(encoding="utf-8")
-    if TELEMETRY_FOOTER_MARKER in log_text:
+    footer_present = TELEMETRY_FOOTER_MARKER in log_text
+
+    # When the footer is already present we are recovering from an
+    # earlier finalize that committed the footer but failed the
+    # PR-side updates (typically a push failure). Re-use the
+    # ``ended_at`` from the existing footer so the summary block we
+    # render now is byte-identical to the one the first attempt would
+    # have written — that makes the body update an actual no-op on
+    # the gh layer instead of triggering a redundant `pr edit` with a
+    # later timestamp.
+    ended_at = iso_now_local()
+    if footer_present:
+        match = TELEMETRY_FOOTER_RE.search(log_text)
+        if match:
+            try:
+                existing = parse_kv_block(match.group(1))
+            except ValueError:
+                existing = {}
+            ended_at = existing.get("ended_at", "").strip() or ended_at
+
+    telemetry = derive_telemetry(parsed, ended_at=ended_at)
+
+    if not footer_present:
+        git.ensure_dispatch_safe_worktree()
+        footer = render_telemetry_footer(telemetry)
+        rel_log_path = repo_relative_path(git.repo, log_path)
+        with log_path.open("a", encoding="utf-8") as handle:
+            handle.write(footer)
+        git.run(["add", rel_log_path], capture_output=True)
+        git.run(
+            [
+                "commit",
+                "-m",
+                f"[ai-loop] Controller: finalize {telemetry.final_status}",
+            ],
+            capture_output=False,
+        )
         print(
-            f"ai-loop: telemetry footer already present in {log_path.name}; "
-            "finalize is a no-op",
+            f"ai-loop: wrote end-of-loop telemetry footer ({telemetry.final_status})",
             flush=True,
         )
-        return
-
-    git.ensure_dispatch_safe_worktree()
-    telemetry = derive_telemetry(parsed, ended_at=iso_now_local())
-    footer = render_telemetry_footer(telemetry)
-    rel_log_path = repo_relative_path(git.repo, log_path)
-    with log_path.open("a", encoding="utf-8") as handle:
-        handle.write(footer)
-    git.run(["add", rel_log_path], capture_output=True)
-    git.run(
-        [
-            "commit",
-            "-m",
-            f"[ai-loop] Controller: finalize {telemetry.final_status}",
-        ],
-        capture_output=False,
-    )
-    print(
-        f"ai-loop: wrote end-of-loop telemetry footer ({telemetry.final_status})",
-        flush=True,
-    )
+    else:
+        print(
+            f"ai-loop: telemetry footer already present in {log_path.name}; "
+            "skipping footer commit, retrying PR-side updates",
+            flush=True,
+        )
 
     if telemetry.pr_number is None:
         return
