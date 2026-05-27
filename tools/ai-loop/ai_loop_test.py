@@ -1652,6 +1652,25 @@ class PrBootstrapTests(unittest.TestCase):
                 "origin/feature/pr-bootstrap-happy", remote_branches
             )
 
+            # Both bootstrap commits (start local-..., bootstrap pr-NNNN)
+            # must be on origin. The first push happens before `gh pr
+            # create`, but the rename commit needs a second explicit push
+            # — without it, the remote PR shows the pre-rename
+            # local-*.md log instead of pr-NNNN.md (see PR #86 smoke
+            # finding F5).
+            local_head = run(
+                ["git", "rev-parse", "HEAD"], repo
+            ).stdout.strip()
+            remote_head = run(
+                ["git", "rev-parse", "origin/feature/pr-bootstrap-happy"],
+                repo,
+            ).stdout.strip()
+            self.assertEqual(
+                local_head,
+                remote_head,
+                "bootstrap rename commit should be pushed to origin",
+            )
+
             calls = read_gh_calls(state_dir)
             pr_create = [c for c in calls if c[:2] == ["pr", "create"]]
             self.assertEqual(len(pr_create), 1)
