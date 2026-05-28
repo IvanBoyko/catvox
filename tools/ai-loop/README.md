@@ -1,24 +1,50 @@
 # CatVox Local AI Loop
 
-This directory contains the local AI loop for Option B from ADR-0023.
+This directory contains the local AI loop — the Option B half of the
+hybrid agent review architecture described in ADR-0023. The loop runs
+two AI agents (Codex as developer, Claude Code as reviewer) on the
+developer's machine, with the post-commit hook waking a Python
+controller between turns. Each run bootstraps a draft PR and writes
+the agent conversation into a single committed Markdown log under
+`docs/ai-loop/pr-NNNN.md`, so the PR diff carries the full
+implementation/review history without spraying noisy bot comments
+across the PR thread.
 
-Slice 1 created committed loop logs and dry-run routing. Slice 2 added
-role-aware prompt composition and optional local agent invocation for Codex and
-Claude Code. Slice 3 added the first automatic reviewer handoff: when a
-developer invocation commits a `needs_review` event, the controller dispatches
-the reviewer once and then stops. Slice 4 adds human clarification answers:
-when an agent stops with `awaiting_human`, `make ai-loop-answer` appends a
-structured `clarified` event and wakes the controller to resume the asking
-agent. Slice 5 adds the full bounded two-agent loop: the controller now routes
-`needs_review` to the reviewer, `needs_fix` back to the developer, `clarified`
-to the named supported agent, and stops on clean, blocked, failed, paused, or
-cycle-cap states. Slice 6 (this slice) adds an end-of-loop summary and
-telemetry: when the loop hits a definitive terminal status (`clean`,
-`max_cycles_reached`, or `failed`), the controller appends a telemetry footer
-to the log, replaces a delimited summary block in the PR body, and — on
-`clean` only — flips the PR from draft to ready-for-review. Invocation
-remains opt-in so developers can validate routing without spending tokens or
-giving a local CLI write access by accident.
+## What the loop does
+
+- **Bootstraps a draft PR on start.** `make ai-loop-start` creates
+  the branch and the bootstrap log, pushes, creates the draft PR,
+  renames the log to `docs/ai-loop/pr-NNNN.md`, and applies the
+  `ai-loop` label.
+- **Runs a bounded developer/reviewer cycle.** Codex commits on
+  `needs_developer` / `needs_fix`, Claude Code commits on
+  `needs_review`. The loop stops on `clean`, `failed`,
+  `awaiting_human`, `paused`, or when the configured cycle cap is
+  reached.
+- **Pauses for human clarification.** When an agent emits
+  `awaiting_human`, `make ai-loop-answer` appends a structured
+  `clarified` event and resumes the agent that asked.
+- **Finalizes on terminal status.** On `clean`,
+  `max_cycles_reached`, or `failed`, the controller appends a
+  telemetry footer to the log, pushes the branch, replaces a
+  delimited summary block in the PR body, and — on `clean` only —
+  flips the PR from draft to ready-for-review.
+- **Suppresses redundant dispatches.** The controller holds
+  `.git/ai-loop.lock` during bootstrap and dispatch, so nested
+  post-commit hook fires inside agent subprocesses can't trigger
+  parallel agent invocations against transient log state.
+- **Supports profile-based agent commands.** `real` / `smoke`
+  profiles select model and effort; full command overrides are
+  available per profile, with a per-call timeout.
+- **Captures the start-time environment with default-redact.** The
+  bootstrap log records the `AI_LOOP_*` env vars that drove the
+  run; non-allowlisted vars (command overrides, future additions)
+  are scrubbed before the log lands in git.
+
+Agent invocation is opt-in. Without `AI_LOOP_INVOKE_AGENTS=1` (or
+`git config ai-loop.invokeAgents true`) the controller still routes
+correctly but never spawns a CLI subprocess — useful for
+validating routing without spending tokens.
 
 ## Setup
 
@@ -70,8 +96,9 @@ By default this:
    `[ai-loop] Human: bootstrap pr-NNNN`
 6. ensures the `ai-loop` repo label exists and applies it to the new PR
 
-The `post-commit` hook fires on each `[ai-loop]` commit and prints a dry-run
-routing decision. Agents are expected to keep the PR title and body current
+The `post-commit` hook is a wake-up trigger only — see
+[Extending Dispatch Chaining](#extending-dispatch-chaining) below for the
+lock semantics. Agents are expected to keep the PR title and body current
 as the work evolves via `gh pr edit` — see `tools/ai-loop/prompts/common.md`.
 
 Bootstrap pre-flight refuses to proceed when any of the following is true,
@@ -95,9 +122,11 @@ AI_LOOP_CREATE_PR=0 make ai-loop-start \
   AI_LOOP_PROMPT="Implement the requested change"
 ```
 
-The run then stops after the initial `[ai-loop] Human: start <run_id>` commit
-and the log stays at `docs/ai-loop/local-YYYYMMDD-HHMMSS.md`. Persist this
-default for the current clone with:
+After the initial `[ai-loop] Human: start <run_id>` commit the log stays at
+`docs/ai-loop/local-YYYYMMDD-HHMMSS.md`. If `AI_LOOP_INVOKE_AGENTS=1` is
+also set, the explicit dispatch still runs against that local log;
+otherwise the bootstrap exits with just the start commit on the branch.
+Persist this default for the current clone with:
 
 ```bash
 git config ai-loop.createPr false
@@ -419,11 +448,23 @@ an unpause.
 
 ## Current Limitations
 
-- Agent invocation is opt-in; default hook behavior remains dry-run.
-- Cycle accounting still trusts the `cycle:` integer the agents write into
+- Agent invocation is opt-in by design. Without
+  `AI_LOOP_INVOKE_AGENTS=1` (or `git config ai-loop.invokeAgents true`)
+  the controller routes correctly but never spawns a CLI subprocess.
+- Cycle accounting trusts the `cycle:` integer the agents write into
   their own events. See [#84](https://github.com/kathelix/catvox/issues/84)
-  for the milestone-v2.0 hardening plan to derive the count from log
-  history instead.
-- Option A (a GitHub Actions reviewer pass after the local loop converges)
-  is deferred per ADR-0023; this slice closes the Option B MVP shape
-  described in Issue #63 but leaves Option A as a separate track.
+  for the milestone-v2.0 hardening plan to derive the count from
+  committed log history instead.
+- **Option A** (a GitHub Actions reviewer pass after the local loop
+  converges) is deferred per ADR-0023. The Option B local loop is
+  meant to converge on a clean PR before any cloud-side review runs;
+  Option A would land as a label-triggered overlay, not a
+  replacement.
+- **Option C** (a LangGraph-backed orchestrator) is the strategic
+  long-term migration path if the custom Python controller grows
+  beyond what this directory can comfortably maintain — multi-agent
+  branching, durable pause/resume, cross-repository orchestration, or
+  a dashboard layer would push that direction. Until those needs
+  appear concretely, the local Python state machine stays simpler to
+  read and debug, so Option C remains a future-option per ADR-0023
+  rather than active work.
