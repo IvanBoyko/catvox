@@ -393,11 +393,16 @@ next_agent: claude-code
             log_path="docs/ai-loop/local-20260524-120000.md",
             prompt="Implement the thing",
             repo="kathelix/catvox",
-            branch="feature/test",
+            commit_at_start="deadbeefcafef00d1234567890abcdef12345678",
             started_at="2026-05-24T12:00:00+02:00",
         )
         parsed = ai_loop.parse_log_text(log)
         self.assertEqual(parsed.init["run_id"], "local-20260524-120000")
+        self.assertEqual(
+            parsed.init["commit_at_start"],
+            "deadbeefcafef00d1234567890abcdef12345678",
+        )
+        self.assertNotIn("branch_at_start", parsed.init)
         self.assertEqual(parsed.latest_event["status"], "needs_developer")
         self.assertEqual(parsed.latest_event["next_agent"], "codex")
 
@@ -1703,18 +1708,26 @@ class PlaceholderRenderTests(unittest.TestCase):
             log_path="docs/ai-loop/pr-0086.md",
             prompt="Implement the thing",
             repo="kathelix/catvox",
-            branch="feature/test",
+            commit_at_start="deadbeefcafef00d1234567890abcdef12345678",
             started_at="2026-05-24T12:00:00+02:00",
             display_time="2026-05-24 12:00 CEST",
             pr=86,
         )
         self.assertIn("# AI Loop - PR #0086", log)
         self.assertIn("- PR: #0086", log)
+        self.assertIn(
+            "- Commit at start: deadbeefcafef00d1234567890abcdef12345678", log
+        )
         parsed = ai_loop.parse_log_text(log)
         assert parsed.init is not None
         self.assertEqual(parsed.init["pr"], "86")
         self.assertEqual(parsed.init["log_path"], "docs/ai-loop/pr-0086.md")
         self.assertEqual(parsed.init["run_id"], "local-20260524-120000")
+        self.assertEqual(
+            parsed.init["commit_at_start"],
+            "deadbeefcafef00d1234567890abcdef12345678",
+        )
+        self.assertNotIn("branch_at_start", parsed.init)
 
     def test_render_bootstrap_log_without_pr_keeps_legacy_shape(self) -> None:
         log = ai_loop.render_bootstrap_log(
@@ -1722,7 +1735,7 @@ class PlaceholderRenderTests(unittest.TestCase):
             log_path="docs/ai-loop/local-20260524-120000.md",
             prompt="Implement the thing",
             repo="kathelix/catvox",
-            branch="feature/test",
+            commit_at_start="deadbeefcafef00d1234567890abcdef12345678",
             started_at="2026-05-24T12:00:00+02:00",
             display_time="2026-05-24 12:00 CEST",
         )
@@ -1731,6 +1744,157 @@ class PlaceholderRenderTests(unittest.TestCase):
         parsed = ai_loop.parse_log_text(log)
         assert parsed.init is not None
         self.assertNotIn("pr", parsed.init)
+        self.assertEqual(
+            parsed.init["commit_at_start"],
+            "deadbeefcafef00d1234567890abcdef12345678",
+        )
+
+    def test_render_bootstrap_log_includes_env_vars_when_supplied(self) -> None:
+        log = ai_loop.render_bootstrap_log(
+            run_id="local-20260524-120000",
+            log_path="docs/ai-loop/pr-0093.md",
+            prompt="Smoke test",
+            repo="kathelix/catvox",
+            commit_at_start="deadbeefcafef00d1234567890abcdef12345678",
+            started_at="2026-05-24T12:00:00+02:00",
+            env_vars=[
+                ("AI_LOOP_AGENT_PROFILE", "smoke"),
+                ("AI_LOOP_BRANCH", "smoke/eol-summary-clean-2026-05-27"),
+                ("AI_LOOP_INVOKE_AGENTS", "1"),
+            ],
+            pr=93,
+        )
+        self.assertIn("### Environment variables at start", log)
+        self.assertIn("AI_LOOP_INVOKE_AGENTS=1", log)
+        self.assertIn("AI_LOOP_AGENT_PROFILE=smoke", log)
+        self.assertIn(
+            "AI_LOOP_BRANCH=smoke/eol-summary-clean-2026-05-27", log
+        )
+
+    def test_render_bootstrap_log_omits_env_section_when_empty(self) -> None:
+        log = ai_loop.render_bootstrap_log(
+            run_id="local-20260524-120000",
+            log_path="docs/ai-loop/local-20260524-120000.md",
+            prompt="Implement the thing",
+            repo="kathelix/catvox",
+            commit_at_start="deadbeefcafef00d1234567890abcdef12345678",
+            started_at="2026-05-24T12:00:00+02:00",
+            env_vars=[],
+        )
+        self.assertNotIn("Environment variables at start", log)
+
+
+class CollectAiLoopEnvVarsTests(unittest.TestCase):
+    def test_filters_to_ai_loop_prefix_and_sorts(self) -> None:
+        env = {
+            "PATH": "/usr/bin",
+            "AI_LOOP_INVOKE_AGENTS": "1",
+            "AI_LOOP_AGENT_PROFILE": "smoke",
+            "AI_LOOP_BRANCH": "smoke/eol",
+            "HOME": "/Users/test",
+        }
+        pairs = ai_loop.collect_ai_loop_env_vars(env)
+        # Sorted alphabetically; non-AI_LOOP_ vars filtered out.
+        self.assertEqual(
+            pairs,
+            [
+                ("AI_LOOP_AGENT_PROFILE", "smoke"),
+                ("AI_LOOP_BRANCH", "smoke/eol"),
+                ("AI_LOOP_INVOKE_AGENTS", "1"),
+            ],
+        )
+
+    def test_excludes_content_vars(self) -> None:
+        env = {
+            "AI_LOOP_PROMPT": "Implement the thing",
+            "AI_LOOP_ANSWER": "q1 A",
+            "AI_LOOP_NEXT_AGENT": "codex",
+            "AI_LOOP_AGENT_PROFILE": "smoke",
+        }
+        pairs = ai_loop.collect_ai_loop_env_vars(env)
+        keys = [key for key, _ in pairs]
+        self.assertEqual(keys, ["AI_LOOP_AGENT_PROFILE"])
+        self.assertNotIn("AI_LOOP_PROMPT", keys)
+        self.assertNotIn("AI_LOOP_ANSWER", keys)
+        self.assertNotIn("AI_LOOP_NEXT_AGENT", keys)
+
+    def test_returns_empty_when_no_ai_loop_vars_set(self) -> None:
+        self.assertEqual(
+            ai_loop.collect_ai_loop_env_vars(
+                {"PATH": "/usr/bin", "HOME": "/Users/test"}
+            ),
+            [],
+        )
+
+    def test_command_override_vars_are_redacted(self) -> None:
+        """Codex bot finding B8 on PR #94: command-override env vars
+        can contain inline tokens or custom CLI wrappers with
+        credentials. Their values must NEVER end up in a committed
+        log; the key still surfaces so the human knows the var was
+        set, but the value is replaced with the redaction
+        placeholder.
+        """
+        env = {
+            "AI_LOOP_CODEX_REAL_COMMAND": "codex --api-key sk-secret123 exec",
+            "AI_LOOP_CLAUDE_SMOKE_COMMAND": "claude --token tk-secret456",
+            "AI_LOOP_GH_COMMAND": "/path/to/gh-wrapper-with-token.sh",
+            "AI_LOOP_AGENT_PROFILE": "smoke",
+        }
+        pairs = ai_loop.collect_ai_loop_env_vars(env)
+        as_dict = dict(pairs)
+        # Allowlisted operational knob renders the real value.
+        self.assertEqual(as_dict["AI_LOOP_AGENT_PROFILE"], "smoke")
+        # Non-allowlisted vars all redact, regardless of which
+        # particular *_COMMAND variant is set.
+        self.assertEqual(
+            as_dict["AI_LOOP_CODEX_REAL_COMMAND"],
+            ai_loop.AI_LOOP_ENV_REDACTED_PLACEHOLDER,
+        )
+        self.assertEqual(
+            as_dict["AI_LOOP_CLAUDE_SMOKE_COMMAND"],
+            ai_loop.AI_LOOP_ENV_REDACTED_PLACEHOLDER,
+        )
+        self.assertEqual(
+            as_dict["AI_LOOP_GH_COMMAND"],
+            ai_loop.AI_LOOP_ENV_REDACTED_PLACEHOLDER,
+        )
+        # No raw secret material leaked into any value.
+        for _, value in pairs:
+            self.assertNotIn("sk-secret123", value)
+            self.assertNotIn("tk-secret456", value)
+            self.assertNotIn("gh-wrapper-with-token.sh", value)
+
+    def test_unknown_ai_loop_var_defaults_to_redacted(self) -> None:
+        """Default-deny: any new AI_LOOP_* var added to the codebase
+        is redacted until it is explicitly added to the safe-vars
+        allowlist after a review confirming the value is
+        non-sensitive.
+        """
+        env = {"AI_LOOP_NEW_FUTURE_VAR": "potentially-sensitive-value"}
+        pairs = ai_loop.collect_ai_loop_env_vars(env)
+        self.assertEqual(
+            pairs,
+            [
+                (
+                    "AI_LOOP_NEW_FUTURE_VAR",
+                    ai_loop.AI_LOOP_ENV_REDACTED_PLACEHOLDER,
+                )
+            ],
+        )
+
+    def test_all_safe_allowlist_vars_pass_through_verbatim(self) -> None:
+        """Sanity-check that every allowlisted var renders its real
+        value, so the section stays useful for the operational
+        knobs the developer actually wants to see.
+        """
+        env = {key: "value-for-" + key for key in ai_loop.AI_LOOP_ENV_SAFE_VARS}
+        pairs = ai_loop.collect_ai_loop_env_vars(env)
+        for key, value in pairs:
+            self.assertEqual(
+                value,
+                "value-for-" + key,
+                f"safe-allowlist var {key} must render its real value",
+            )
 
 
 class PrBootstrapTests(unittest.TestCase):
@@ -1789,6 +1953,38 @@ class PrBootstrapTests(unittest.TestCase):
             assert parsed.init is not None
             self.assertEqual(parsed.init["pr"], "1")
             self.assertEqual(parsed.init["log_path"], "docs/ai-loop/pr-0001.md")
+
+            # PR #93 review finding V1: commit_at_start replaces
+            # branch_at_start. The value must be a real SHA from the
+            # repo (origin/main tip at bootstrap time).
+            commit_at_start = parsed.init["commit_at_start"]
+            self.assertNotIn("branch_at_start", parsed.init)
+            self.assertEqual(len(commit_at_start), 40)
+            origin_main_sha = run(
+                ["git", "rev-parse", "origin/main"], repo
+            ).stdout.strip()
+            self.assertEqual(commit_at_start, origin_main_sha)
+
+            # PR #93 review finding V2 (env vars block) + PR #94
+            # Codex bot finding B8 (redact unsafe values). The shim
+            # env in this test sets AI_LOOP_GH_COMMAND to the python
+            # interpreter + shim script path — a fake "custom CLI
+            # wrapper" — and that value MUST NOT appear in the
+            # committed log. The key still surfaces so the human
+            # knows the var was set, but the value renders as
+            # `<redacted>`. Non-AI_LOOP_* env vars (like
+            # GH_SHIM_STATE_DIR) must not appear at all.
+            log_text = new_log.read_text(encoding="utf-8")
+            self.assertIn("### Environment variables at start", log_text)
+            self.assertIn(
+                f"AI_LOOP_GH_COMMAND={ai_loop.AI_LOOP_ENV_REDACTED_PLACEHOLDER}",
+                log_text,
+            )
+            # The actual shim path must NOT have leaked into the
+            # committed log.
+            self.assertNotIn(sys.executable, log_text)
+            self.assertNotIn("gh_shim.py", log_text)
+            self.assertNotIn("GH_SHIM_STATE_DIR=", log_text)
 
             commits = run(["git", "log", "--format=%s"], repo).stdout.splitlines()
             self.assertEqual(commits[0], "[ai-loop] Human: bootstrap pr-0001")
@@ -2408,7 +2604,7 @@ def _telemetry_log_text(
         "<!-- ai-loop-init\n"
         "run_id: local-20260527-140000\n"
         "repo: kathelix/catvox\n"
-        "branch_at_start: feature/test\n"
+        "commit_at_start: deadbeefcafef00d1234567890abcdef12345678\n"
         "log_path: docs/ai-loop/pr-0090.md\n"
         f"max_cycles: {max_cycles}{pr_line}\n"
         f"started_at: {started_at}\n"

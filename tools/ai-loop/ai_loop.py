@@ -1103,14 +1103,100 @@ def pr_log_relpath(pr_number: int) -> str:
     return f"docs/ai-loop/pr-{pr_number:04d}.md"
 
 
+AI_LOOP_ENV_VAR_PREFIX = "AI_LOOP_"
+# Env vars that hold *content* (the prompt, a human clarification
+# answer, the next-agent override for `answer`) rather than
+# operational configuration. Skipped from the bootstrap log's
+# Environment block so the section stays focused on "how the loop
+# was started" and so we don't duplicate the prompt — it already
+# renders verbatim under "Initial user prompt".
+AI_LOOP_ENV_CONTENT_VARS = frozenset(
+    {
+        "AI_LOOP_PROMPT",
+        "AI_LOOP_ANSWER",
+        "AI_LOOP_NEXT_AGENT",
+    }
+)
+# Allowlist of AI_LOOP_* env vars whose values are safe to render
+# verbatim in the committed bootstrap log. These are operational
+# knobs — invocation mode, agent profile, branch, model/effort
+# selection, cycle cap, timeout — that take a constrained
+# vocabulary and never contain user secrets. Everything not on
+# this allowlist (including all `*_COMMAND` overrides and any
+# future AI_LOOP_* var added to the codebase) renders with a
+# `<redacted>` placeholder so the committed log can never leak
+# inline tokens, custom CLI wrappers, or anything else a user
+# might stash in an override. See Codex bot finding B8 on PR #94.
+AI_LOOP_ENV_SAFE_VARS = frozenset(
+    {
+        "AI_LOOP_AGENT_PROFILE",
+        "AI_LOOP_AGENT_TIMEOUT_SECONDS",
+        "AI_LOOP_BRANCH",
+        "AI_LOOP_CLAUDE_REAL_EFFORT",
+        "AI_LOOP_CLAUDE_REAL_MODEL",
+        "AI_LOOP_CLAUDE_SMOKE_EFFORT",
+        "AI_LOOP_CLAUDE_SMOKE_MODEL",
+        "AI_LOOP_CODEX_REAL_EFFORT",
+        "AI_LOOP_CODEX_REAL_MODEL",
+        "AI_LOOP_CODEX_SMOKE_EFFORT",
+        "AI_LOOP_CODEX_SMOKE_MODEL",
+        "AI_LOOP_CREATE_PR",
+        "AI_LOOP_INVOKE_AGENTS",
+        "AI_LOOP_MAX_CYCLES",
+    }
+)
+AI_LOOP_ENV_REDACTED_PLACEHOLDER = "<redacted>"
+
+
+def collect_ai_loop_env_vars(
+    environ: "os._Environ[str] | dict[str, str] | None" = None,
+) -> list[tuple[str, str]]:
+    """Return the operational ``AI_LOOP_*`` env vars in sorted order,
+    with non-allowlisted values redacted before they reach a
+    committed log.
+
+    Used by the bootstrap log so the run records exactly which env
+    vars the user (or test harness) had set when ``ai-loop-start``
+    fired — answers "how was this loop started?" durably in the
+    committed log. Content-flavored vars (``AI_LOOP_PROMPT``,
+    ``AI_LOOP_ANSWER``, ``AI_LOOP_NEXT_AGENT``) are filtered out
+    entirely; the prompt already renders verbatim in its own
+    section, and the other two do not apply to ``start``.
+
+    Values for vars in ``AI_LOOP_ENV_SAFE_VARS`` (the allowlist of
+    operational knobs) are returned verbatim. Everything else with
+    the ``AI_LOOP_`` prefix is returned with its value replaced by
+    ``AI_LOOP_ENV_REDACTED_PLACEHOLDER`` — the human reader still
+    sees that the var was set (useful for debugging), but the value
+    never lands in git history. This is a default-deny posture: new
+    AI_LOOP_* env vars added to the codebase are automatically
+    redacted until explicitly added to the allowlist after a review
+    confirming the value is non-sensitive.
+    """
+    source = environ if environ is not None else os.environ
+    pairs: list[tuple[str, str]] = []
+    for key, value in source.items():
+        if not key.startswith(AI_LOOP_ENV_VAR_PREFIX):
+            continue
+        if key in AI_LOOP_ENV_CONTENT_VARS:
+            continue
+        if key in AI_LOOP_ENV_SAFE_VARS:
+            pairs.append((key, value))
+        else:
+            pairs.append((key, AI_LOOP_ENV_REDACTED_PLACEHOLDER))
+    pairs.sort()
+    return pairs
+
+
 def render_bootstrap_log(
     *,
     run_id: str,
     log_path: str,
     prompt: str,
     repo: str,
-    branch: str,
+    commit_at_start: str,
     started_at: str,
+    env_vars: list[tuple[str, str]] | None = None,
     display_time: str | None = None,
     pr: int | None = None,
 ) -> str:
@@ -1118,6 +1204,17 @@ def render_bootstrap_log(
     title = f"PR #{pr:04d}" if pr is not None else run_id
     pr_config_line = f"\n- PR: #{pr:04d}" if pr is not None else ""
     pr_init_line = f"\npr: {pr}" if pr is not None else ""
+    if env_vars:
+        env_lines = "\n".join(f"{key}={value}" for key, value in env_vars)
+        env_section = f"""
+### Environment variables at start
+
+```text
+{env_lines}
+```
+"""
+    else:
+        env_section = ""
     return f"""# AI Loop - {title}
 
 ## Initial user prompt
@@ -1127,17 +1224,17 @@ def render_bootstrap_log(
 ## Configuration
 
 - Repository: {repo}
-- Branch at start: {branch}
+- Commit at start: {commit_at_start}
 - Log path: {log_path}{pr_config_line}
 - Max cycles: 3
 - Developer agent: Codex
 - Reviewer agent: Claude Code
 - Started at: {started_at}
-
+{env_section}
 <!-- ai-loop-init
 run_id: {run_id}
 repo: {repo}
-branch_at_start: {branch}
+commit_at_start: {commit_at_start}
 log_path: {log_path}{pr_init_line}
 max_cycles: 3
 developer_agent: codex
@@ -1147,8 +1244,9 @@ started_at: {started_at}
 
 ## {display_time} - Human - Start local AI loop
 
-Started the local AI loop. Default mode uses dry-run routing; no agent is
-invoked unless local agent invocation is enabled explicitly.
+Started the local AI loop. The Environment block above records the
+``AI_LOOP_*`` env vars set when ``ai-loop-start`` ran — copy them
+back into a shell to re-create or debug this run.
 
 Result:
 - status: needs_developer
@@ -1562,14 +1660,24 @@ def command_start(args: argparse.Namespace) -> int:
         log_path.parent.mkdir(parents=True, exist_ok=True)
         started_at = iso_now_local()
         display_time = display_now_local()
+        # Capture HEAD now — before the first bootstrap commit — so
+        # ``commit_at_start`` records the SHA the new branch was
+        # based off (origin/main tip, or whatever the user had
+        # checked out). Recording the SHA rather than the branch
+        # name (per PR #93 review finding V1) survives later main
+        # rebases and gives `git show <sha>` as a direct debug
+        # entry point.
+        commit_at_start = git.required_output(["rev-parse", "HEAD"])
+        env_vars = collect_ai_loop_env_vars()
         log_path.write_text(
             render_bootstrap_log(
                 run_id=run_id,
                 log_path=rel_log_path,
                 prompt=prompt,
                 repo=git.repo_name(),
-                branch=git.current_branch(),
+                commit_at_start=commit_at_start,
                 started_at=started_at,
+                env_vars=env_vars,
                 display_time=display_time,
             ),
             encoding="utf-8",
@@ -1608,8 +1716,9 @@ def command_start(args: argparse.Namespace) -> int:
                     log_path=new_rel_log_path,
                     prompt=prompt,
                     repo=git.repo_name(),
-                    branch=git.current_branch(),
+                    commit_at_start=commit_at_start,
                     started_at=started_at,
+                    env_vars=env_vars,
                     display_time=display_time,
                     pr=pr_number,
                 ),
