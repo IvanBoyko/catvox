@@ -1244,9 +1244,7 @@ started_at: {started_at}
 
 ## {display_time} - Human - Start local AI loop
 
-Started the local AI loop. The Environment block above records the
-``AI_LOOP_*`` env vars set when ``ai-loop-start`` ran — copy them
-back into a shell to re-create or debug this run.
+Started the local AI loop.
 
 Result:
 - status: needs_developer
