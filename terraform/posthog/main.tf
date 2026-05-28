@@ -10,13 +10,11 @@
 # with prefix `posthog/state`, alongside the GCP infrastructure state at
 # prefix `catvox/state`. There is no separate state bucket for PostHog.
 #
-# This slice (issue #37 Slice 3) intentionally declares no PostHog resources.
-# Credentials and project access are first exercised by Slice 4, which imports
-# the existing `CatVox Dev` PostHog project. If GitHub Environment PostHog
-# secrets are misconfigured, the Slice 4 plan will fail loudly with a clear
-# provider error — accepting one slice of delayed credential validation
-# avoided embedding a personal email (the only credential-touching data source
-# the provider exposes is `posthog_user`, which requires a target email).
+# Slice 4 of issue #37 brings the existing `CatVox Dev` PostHog project, its
+# wizard-created "Analytics basics" dashboard, and its 5 wizard insights under
+# Terraform management via import {} blocks. Resource definitions for the
+# dashboard, dashboard layout, and insights live in dashboard.tf and
+# insights.tf alongside their import blocks.
 ###############################################################################
 
 terraform {
@@ -40,4 +38,18 @@ provider "posthog" {
   host            = var.posthog_api_host
   project_id      = var.posthog_project_id
   organization_id = var.posthog_organization_id
+}
+
+# CatVox <Environment> PostHog project. Per ADR-0019/ADR-0020 each environment
+# manages its own project; this state targets exactly one environment, selected
+# at init time. The display name follows the `CatVox <Environment>` convention
+# from ADR-0019 so future Prod replay reuses this definition unchanged.
+resource "posthog_project" "this" {
+  name     = "CatVox ${title(var.environment_name)}"
+  timezone = "UTC"
+}
+
+import {
+  to = posthog_project.this
+  id = "${var.posthog_organization_id}/${var.posthog_project_id}"
 }
