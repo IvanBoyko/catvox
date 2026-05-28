@@ -18,6 +18,17 @@ from unittest.mock import patch
 
 sys.dont_write_bytecode = True
 
+# git auto-gc (gc.autoDetach) forks a background process that keeps writing to
+# .git/objects after the foreground git command returns, racing the
+# tempfile.TemporaryDirectory teardown these tests rely on and intermittently
+# failing rmtree with "OSError: [Errno 39] Directory not empty: 'objects'".
+# Disable background maintenance for every git subprocess the suite spawns;
+# run() inherits os.environ, so this covers all repo-init sites.
+os.environ["GIT_CONFIG_COUNT"] = "3"
+os.environ["GIT_CONFIG_KEY_0"], os.environ["GIT_CONFIG_VALUE_0"] = "gc.auto", "0"
+os.environ["GIT_CONFIG_KEY_1"], os.environ["GIT_CONFIG_VALUE_1"] = "gc.autoDetach", "false"
+os.environ["GIT_CONFIG_KEY_2"], os.environ["GIT_CONFIG_VALUE_2"] = "maintenance.auto", "false"
+
 REPO_ROOT = Path(__file__).resolve().parents[2]
 TOOL_DIR = REPO_ROOT / "tools/ai-loop"
 AI_LOOP_PATH = TOOL_DIR / "ai_loop.py"
