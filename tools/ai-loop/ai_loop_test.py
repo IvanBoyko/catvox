@@ -1826,6 +1826,76 @@ class CollectAiLoopEnvVarsTests(unittest.TestCase):
             [],
         )
 
+    def test_command_override_vars_are_redacted(self) -> None:
+        """Codex bot finding B8 on PR #94: command-override env vars
+        can contain inline tokens or custom CLI wrappers with
+        credentials. Their values must NEVER end up in a committed
+        log; the key still surfaces so the human knows the var was
+        set, but the value is replaced with the redaction
+        placeholder.
+        """
+        env = {
+            "AI_LOOP_CODEX_REAL_COMMAND": "codex --api-key sk-secret123 exec",
+            "AI_LOOP_CLAUDE_SMOKE_COMMAND": "claude --token tk-secret456",
+            "AI_LOOP_GH_COMMAND": "/path/to/gh-wrapper-with-token.sh",
+            "AI_LOOP_AGENT_PROFILE": "smoke",
+        }
+        pairs = ai_loop.collect_ai_loop_env_vars(env)
+        as_dict = dict(pairs)
+        # Allowlisted operational knob renders the real value.
+        self.assertEqual(as_dict["AI_LOOP_AGENT_PROFILE"], "smoke")
+        # Non-allowlisted vars all redact, regardless of which
+        # particular *_COMMAND variant is set.
+        self.assertEqual(
+            as_dict["AI_LOOP_CODEX_REAL_COMMAND"],
+            ai_loop.AI_LOOP_ENV_REDACTED_PLACEHOLDER,
+        )
+        self.assertEqual(
+            as_dict["AI_LOOP_CLAUDE_SMOKE_COMMAND"],
+            ai_loop.AI_LOOP_ENV_REDACTED_PLACEHOLDER,
+        )
+        self.assertEqual(
+            as_dict["AI_LOOP_GH_COMMAND"],
+            ai_loop.AI_LOOP_ENV_REDACTED_PLACEHOLDER,
+        )
+        # No raw secret material leaked into any value.
+        for _, value in pairs:
+            self.assertNotIn("sk-secret123", value)
+            self.assertNotIn("tk-secret456", value)
+            self.assertNotIn("gh-wrapper-with-token.sh", value)
+
+    def test_unknown_ai_loop_var_defaults_to_redacted(self) -> None:
+        """Default-deny: any new AI_LOOP_* var added to the codebase
+        is redacted until it is explicitly added to the safe-vars
+        allowlist after a review confirming the value is
+        non-sensitive.
+        """
+        env = {"AI_LOOP_NEW_FUTURE_VAR": "potentially-sensitive-value"}
+        pairs = ai_loop.collect_ai_loop_env_vars(env)
+        self.assertEqual(
+            pairs,
+            [
+                (
+                    "AI_LOOP_NEW_FUTURE_VAR",
+                    ai_loop.AI_LOOP_ENV_REDACTED_PLACEHOLDER,
+                )
+            ],
+        )
+
+    def test_all_safe_allowlist_vars_pass_through_verbatim(self) -> None:
+        """Sanity-check that every allowlisted var renders its real
+        value, so the section stays useful for the operational
+        knobs the developer actually wants to see.
+        """
+        env = {key: "value-for-" + key for key in ai_loop.AI_LOOP_ENV_SAFE_VARS}
+        pairs = ai_loop.collect_ai_loop_env_vars(env)
+        for key, value in pairs:
+            self.assertEqual(
+                value,
+                "value-for-" + key,
+                f"safe-allowlist var {key} must render its real value",
+            )
+
 
 class PrBootstrapTests(unittest.TestCase):
     def _shim_env(
@@ -1895,15 +1965,25 @@ class PrBootstrapTests(unittest.TestCase):
             ).stdout.strip()
             self.assertEqual(commit_at_start, origin_main_sha)
 
-            # PR #93 review finding V2: the AI_LOOP_* env vars set
-            # at bootstrap time are rendered in the log so a human
-            # reader can reconstruct how the loop was started. The
-            # shim env in this test sets AI_LOOP_GH_COMMAND, which
-            # must appear in the Environment block; non-AI_LOOP_*
-            # env vars (like GH_SHIM_STATE_DIR) must not.
+            # PR #93 review finding V2 (env vars block) + PR #94
+            # Codex bot finding B8 (redact unsafe values). The shim
+            # env in this test sets AI_LOOP_GH_COMMAND to the python
+            # interpreter + shim script path — a fake "custom CLI
+            # wrapper" — and that value MUST NOT appear in the
+            # committed log. The key still surfaces so the human
+            # knows the var was set, but the value renders as
+            # `<redacted>`. Non-AI_LOOP_* env vars (like
+            # GH_SHIM_STATE_DIR) must not appear at all.
             log_text = new_log.read_text(encoding="utf-8")
             self.assertIn("### Environment variables at start", log_text)
-            self.assertIn("AI_LOOP_GH_COMMAND=", log_text)
+            self.assertIn(
+                f"AI_LOOP_GH_COMMAND={ai_loop.AI_LOOP_ENV_REDACTED_PLACEHOLDER}",
+                log_text,
+            )
+            # The actual shim path must NOT have leaked into the
+            # committed log.
+            self.assertNotIn(sys.executable, log_text)
+            self.assertNotIn("gh_shim.py", log_text)
             self.assertNotIn("GH_SHIM_STATE_DIR=", log_text)
 
             commits = run(["git", "log", "--format=%s"], repo).stdout.splitlines()

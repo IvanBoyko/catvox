@@ -1117,28 +1117,73 @@ AI_LOOP_ENV_CONTENT_VARS = frozenset(
         "AI_LOOP_NEXT_AGENT",
     }
 )
+# Allowlist of AI_LOOP_* env vars whose values are safe to render
+# verbatim in the committed bootstrap log. These are operational
+# knobs — invocation mode, agent profile, branch, model/effort
+# selection, cycle cap, timeout — that take a constrained
+# vocabulary and never contain user secrets. Everything not on
+# this allowlist (including all `*_COMMAND` overrides and any
+# future AI_LOOP_* var added to the codebase) renders with a
+# `<redacted>` placeholder so the committed log can never leak
+# inline tokens, custom CLI wrappers, or anything else a user
+# might stash in an override. See Codex bot finding B8 on PR #94.
+AI_LOOP_ENV_SAFE_VARS = frozenset(
+    {
+        "AI_LOOP_AGENT_PROFILE",
+        "AI_LOOP_AGENT_TIMEOUT_SECONDS",
+        "AI_LOOP_BRANCH",
+        "AI_LOOP_CLAUDE_REAL_EFFORT",
+        "AI_LOOP_CLAUDE_REAL_MODEL",
+        "AI_LOOP_CLAUDE_SMOKE_EFFORT",
+        "AI_LOOP_CLAUDE_SMOKE_MODEL",
+        "AI_LOOP_CODEX_REAL_EFFORT",
+        "AI_LOOP_CODEX_REAL_MODEL",
+        "AI_LOOP_CODEX_SMOKE_EFFORT",
+        "AI_LOOP_CODEX_SMOKE_MODEL",
+        "AI_LOOP_CREATE_PR",
+        "AI_LOOP_INVOKE_AGENTS",
+        "AI_LOOP_MAX_CYCLES",
+    }
+)
+AI_LOOP_ENV_REDACTED_PLACEHOLDER = "<redacted>"
 
 
 def collect_ai_loop_env_vars(
     environ: "os._Environ[str] | dict[str, str] | None" = None,
 ) -> list[tuple[str, str]]:
-    """Return the operational ``AI_LOOP_*`` env vars in sorted order.
+    """Return the operational ``AI_LOOP_*`` env vars in sorted order,
+    with non-allowlisted values redacted before they reach a
+    committed log.
 
     Used by the bootstrap log so the run records exactly which env
     vars the user (or test harness) had set when ``ai-loop-start``
     fired — answers "how was this loop started?" durably in the
     committed log. Content-flavored vars (``AI_LOOP_PROMPT``,
-    ``AI_LOOP_ANSWER``, ``AI_LOOP_NEXT_AGENT``) are filtered out;
-    the prompt already renders verbatim in its own section, and the
-    other two do not apply to ``start``.
+    ``AI_LOOP_ANSWER``, ``AI_LOOP_NEXT_AGENT``) are filtered out
+    entirely; the prompt already renders verbatim in its own
+    section, and the other two do not apply to ``start``.
+
+    Values for vars in ``AI_LOOP_ENV_SAFE_VARS`` (the allowlist of
+    operational knobs) are returned verbatim. Everything else with
+    the ``AI_LOOP_`` prefix is returned with its value replaced by
+    ``AI_LOOP_ENV_REDACTED_PLACEHOLDER`` — the human reader still
+    sees that the var was set (useful for debugging), but the value
+    never lands in git history. This is a default-deny posture: new
+    AI_LOOP_* env vars added to the codebase are automatically
+    redacted until explicitly added to the allowlist after a review
+    confirming the value is non-sensitive.
     """
     source = environ if environ is not None else os.environ
-    pairs = [
-        (key, value)
-        for key, value in source.items()
-        if key.startswith(AI_LOOP_ENV_VAR_PREFIX)
-        and key not in AI_LOOP_ENV_CONTENT_VARS
-    ]
+    pairs: list[tuple[str, str]] = []
+    for key, value in source.items():
+        if not key.startswith(AI_LOOP_ENV_VAR_PREFIX):
+            continue
+        if key in AI_LOOP_ENV_CONTENT_VARS:
+            continue
+        if key in AI_LOOP_ENV_SAFE_VARS:
+            pairs.append((key, value))
+        else:
+            pairs.append((key, AI_LOOP_ENV_REDACTED_PLACEHOLDER))
     pairs.sort()
     return pairs
 
