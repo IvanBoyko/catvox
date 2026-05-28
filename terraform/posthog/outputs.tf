@@ -1,10 +1,9 @@
 ###############################################################################
 # CatVox AI — PostHog Terraform Outputs
 #
-# Slice 3 scope: the root declares no PostHog resources yet, so it only
-# surfaces the environment identity it was initialised for. Slice 4 and Slice 5
-# of issue #37 will add outputs for the imported project, dashboards, and
-# insights.
+# Surfaces environment identity plus the imported project, dashboard, and
+# insight IDs so consumers can cross-check Terraform state against the live
+# PostHog UI without re-querying.
 ###############################################################################
 
 output "environment_name" {
@@ -25,4 +24,25 @@ output "posthog_project_id" {
 output "posthog_organization_id" {
   description = "PostHog organization ID this state targets."
   value       = var.posthog_organization_id
+}
+
+output "project_id" {
+  description = "Numeric ID of the imported PostHog project."
+  value       = posthog_project.this.id
+}
+
+output "analytics_basics_dashboard_id" {
+  description = "Numeric ID of the imported Analytics basics dashboard."
+  value       = posthog_dashboard.analytics_basics.id
+}
+
+output "insight_ids" {
+  description = "Numeric IDs of the imported wizard-created insights keyed by HCL resource name."
+  value = {
+    scan_conversion_funnel = posthog_insight.scan_conversion_funnel.id
+    daily_scan_volume      = posthog_insight.daily_scan_volume.id
+    top_cat_personas       = posthog_insight.top_cat_personas.id
+    quota_pressure         = posthog_insight.quota_pressure.id
+    scan_share_actions     = posthog_insight.scan_share_actions.id
+  }
 }
