@@ -67,12 +67,12 @@ presentation.
 
 These links are Dev-only references for the current `CatVox Dev` project. The
 dashboard and all 5 insights are Terraform-managed under `terraform/posthog/`
-as of issue #37 Slice 4 — see `dashboard.tf` and `insights.tf` for the
-authoritative HCL definitions, and `terraform/posthog/README.md` for the
-import recipe used to replay this into a future `CatVox Prod` project. Slice 5
-will normalise the imported definitions into a reusable per-environment form
-and rewrite share-semantics insights to use corrected event names. See
-ADR-0019 and ADR-0020.
+— see `dashboard.tf` and `insights.tf` for the authoritative HCL definitions,
+and `terraform/posthog/README.md` for the per-environment provisioning
+sequence (HCL → `terraform apply` → PostHog; no UI wizard, no import). Slice 5
+will normalise the definitions into a reusable per-environment form and
+rewrite share-semantics insights to use corrected event names. See ADR-0019
+and ADR-0020.
 
 ## Dashboard Refresh Notes
 
