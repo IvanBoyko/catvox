@@ -57,46 +57,44 @@ and runs `apply` on push to `main`. It targets the `dev` GitHub Environment,
 reads GCP auth identity from xcconfig, and reads the PostHog API key secret from
 the GitHub Environment.
 
-## Slice scope
+## Scope
 
 This root manages the `CatVox <Environment>` PostHog project, the
-"Analytics basics" dashboard, its dashboard layout, and 5 wizard-created
-insights (issue #37 Slice 4). The HCL mirrors the live wizard configuration
-verbatim — including the deliberately-mis-labelled "Share sheet" series on
-`scan_share_actions` that uses `scan_shared` instead of `share_sheet_opened`.
-Slice 5 will rewrite share semantics and normalise tile ordering for shared
-Dev/Prod reuse; Slice 4 only captures current state with zero drift.
+"Analytics basics" dashboard, its dashboard layout, and 5 insights. The
+insight definitions still reflect the original wizard choices — including the
+mis-labelled "Share sheet" series on `scan_share_actions` that uses
+`scan_shared` instead of `share_sheet_opened`. Slice 5 will rewrite share
+semantics and normalise tile ordering so the same definitions cover every
+environment with the corrected event taxonomy.
 
-## Replaying the import in a new environment
+## Provisioning a new environment
 
-When future Prod GCP provisioning unblocks the Prod PostHog state bucket, the
-same HCL covers Prod with three steps — no code changes:
+Terraform is the source of truth — new environments are provisioned by
+`terraform apply` against fresh per-environment state, which creates the
+project, dashboard, layout, and insights directly from the HCL in this root.
+No PostHog UI clicks, no wizard, no import. Sequence:
 
-1. Resolve the wizard insight short IDs to numeric IDs by querying the PostHog
-   API. With `POSTHOG_API_KEY` scoped to the target project (read-only is
-   sufficient):
+1. Bootstrap the new environment's GCP/Firebase foundation and the
+   `posthog/state` prefix in its state bucket — covered by
+   `docs/CREATE_NEW_ENVIRONMENT.md`.
+2. Make sure `config/environments/<env>.xcconfig` carries the new
+   environment's `CATVOX_POSTHOG_API_HOST_NAME` and
+   `CATVOX_POSTHOG_ORGANIZATION_ID`. `CATVOX_POSTHOG_PROJECT_ID` and
+   `CATVOX_POSTHOG_PROJECT_TOKEN` are populated *after* the first apply (see
+   step 4).
+3. Run `make posthog-terraform-plan CATVOX_ENVIRONMENT=<env>` with a
+   `POSTHOG_API_KEY` scoped to the target organisation. Expected output:
+   `Plan: 8 to add, 0 to change, 0 to destroy` — the project, dashboard,
+   layout, and 5 insights.
+4. Apply the plan. Read back the created project ID (`terraform output
+   project_id`) and the project ingestion token (visible in the PostHog UI
+   under Project Settings) and commit them into the matching
+   `config/environments/<env>.xcconfig`. The token is the public ingestion
+   key the iOS app sends events to; it is safe to commit by design.
 
-   ```bash
-   for sid in HpsroXVQ 3ZD4bnzS kB5Hjls2 brptiNF5 5dK5T6k9; do
-     curl -sS -H "Authorization: Bearer $POSTHOG_API_KEY" \
-       "https://us.posthog.com/api/projects/<project_id>/insights/?short_id=$sid" \
-     | jq -r --arg sid "$sid" '.results[0] | "\($sid)\t\(.id)\t\(.name)"'
-   done
-   ```
-
-2. Update the literal numeric IDs in `insights.tf` (the `import { id = ... }`
-   blocks) and the dashboard ID in `dashboard.tf` to match the new
-   environment's wizard-created resources.
-
-3. Run `make posthog-terraform-plan CATVOX_ENVIRONMENT=<env>`. Triage any
-   drift by adjusting HCL field values to mirror server state; the goal is a
-   zero-change plan before merging.
-
-The `import {}` blocks are intentionally left in source after first apply.
-Terraform skips them on subsequent runs once state already contains the
-target resource, so they double as durable documentation of where each
-resource originated. They may be removed in a later cleanup PR once the
-import history is no longer load-bearing.
+The original Dev import (issue #37 Slice 4) used `import {}` blocks to adopt
+the wizard-created Dev state; those blocks were removed after first apply.
+No environment after Dev replays the import path.
 
 ## Drift triage gotchas
 

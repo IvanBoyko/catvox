@@ -14,6 +14,12 @@ export const deferredProdKeys = new Set([
   'CATVOX_FIREBASE_API_KEY',
   'CATVOX_SIGNED_UPLOAD_URL_HOST',
   'CATVOX_ANALYSE_VIDEO_HOST',
+  // Populated after the first terraform apply for the Prod PostHog project
+  // creates the project ID and emits its ingestion token. Until then they
+  // stay as `replace-with-prod-*` placeholders so the iOS Release build
+  // would noisily fail rather than silently send events to the wrong target.
+  'CATVOX_POSTHOG_PROJECT_TOKEN',
+  'CATVOX_POSTHOG_PROJECT_ID',
 ]);
 
 const requiredProdKeys = [

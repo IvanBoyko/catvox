@@ -1,12 +1,11 @@
 ###############################################################################
-# CatVox AI — PostHog wizard-created insights for the Analytics basics dashboard.
-# Imported from the live CatVox Dev project for issue #37 Slice 4.
+# CatVox AI — PostHog insights for the Analytics basics dashboard.
 #
-# Each `query_json` mirrors the current server query verbatim so the first plan
-# shows zero drift. The wizard semantics deliberately preserve their original
-# event choices — including the mis-labelled "Share sheet" series on
-# scan_share_actions, which uses `scan_shared` rather than `share_sheet_opened`.
-# Slice 5 will rewrite share semantics; Slice 4 only captures current state.
+# Each `query_json` is the authoritative query definition for its insight. The
+# definitions still reflect the original wizard choices — including the
+# mis-labelled "Share sheet" series on `scan_share_actions` that actually
+# captures `scan_shared` (completed shares) rather than `share_sheet_opened`
+# (sheet presentations). Slice 5 will rewrite share semantics.
 ###############################################################################
 
 resource "posthog_insight" "scan_conversion_funnel" {
@@ -41,11 +40,6 @@ resource "posthog_insight" "scan_conversion_funnel" {
   })
 }
 
-import {
-  to = posthog_insight.scan_conversion_funnel
-  id = "${var.posthog_project_id}/8262447"
-}
-
 resource "posthog_insight" "daily_scan_volume" {
   name          = "Daily scan volume"
   description   = "Number of analyses completed per day — the primary usage metric."
@@ -78,11 +72,6 @@ resource "posthog_insight" "daily_scan_volume" {
       filterTestAccounts = false
     }
   })
-}
-
-import {
-  to = posthog_insight.daily_scan_volume
-  id = "${var.posthog_project_id}/8262449"
 }
 
 resource "posthog_insight" "top_cat_personas" {
@@ -123,11 +112,6 @@ resource "posthog_insight" "top_cat_personas" {
   })
 }
 
-import {
-  to = posthog_insight.top_cat_personas
-  id = "${var.posthog_project_id}/8262450"
-}
-
 resource "posthog_insight" "quota_pressure" {
   name          = "Quota pressure & upgrade intent"
   description   = "Tracks quota_exceeded events alongside upgrade_to_pro_tapped — key monetisation signal."
@@ -163,11 +147,6 @@ resource "posthog_insight" "quota_pressure" {
   })
 }
 
-import {
-  to = posthog_insight.quota_pressure
-  id = "${var.posthog_project_id}/8262452"
-}
-
 resource "posthog_insight" "scan_share_actions" {
   name          = "Scan share actions"
   description   = "Share sheet opens vs. Photos saves — measures post-scan engagement and viral potential."
@@ -201,9 +180,4 @@ resource "posthog_insight" "scan_share_actions" {
       filterTestAccounts = false
     }
   })
-}
-
-import {
-  to = posthog_insight.scan_share_actions
-  id = "${var.posthog_project_id}/8262453"
 }

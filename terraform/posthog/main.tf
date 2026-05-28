@@ -10,11 +10,12 @@
 # with prefix `posthog/state`, alongside the GCP infrastructure state at
 # prefix `catvox/state`. There is no separate state bucket for PostHog.
 #
-# Slice 4 of issue #37 brings the existing `CatVox Dev` PostHog project, its
-# wizard-created "Analytics basics" dashboard, and its 5 wizard insights under
-# Terraform management via import {} blocks. Resource definitions for the
-# dashboard, dashboard layout, and insights live in dashboard.tf and
-# insights.tf alongside their import blocks.
+# The `CatVox <Environment>` project, the "Analytics basics" dashboard, the
+# dashboard layout, and 5 insights are all managed declaratively from this
+# root. Terraform is the source of truth: new environments are provisioned by
+# `terraform apply` against fresh state, not by importing wizard-created
+# resources. The original Dev import (issue #37 Slice 4) was a one-shot
+# bootstrap; the `import {}` blocks were removed after first apply.
 ###############################################################################
 
 terraform {
@@ -43,13 +44,8 @@ provider "posthog" {
 # CatVox <Environment> PostHog project. Per ADR-0019/ADR-0020 each environment
 # manages its own project; this state targets exactly one environment, selected
 # at init time. The display name follows the `CatVox <Environment>` convention
-# from ADR-0019 so future Prod replay reuses this definition unchanged.
+# from ADR-0019 so the same definition covers every environment unchanged.
 resource "posthog_project" "this" {
   name     = "CatVox ${title(var.environment_name)}"
   timezone = "UTC"
-}
-
-import {
-  to = posthog_project.this
-  id = "${var.posthog_organization_id}/${var.posthog_project_id}"
 }
