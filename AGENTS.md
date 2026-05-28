@@ -466,6 +466,8 @@ When designing isolation boundaries for shared infrastructure — Terraform root
 
 When a safety, security, auth, or environment boundary is introduced or changed, extract the predicate/gate into a pure function with explicit inputs where practical and cover it with focused unit tests. Examples include mutation gates, service-account derivation, allowed-environment checks, Release config validation, and config-file parsing.
 
+When a feature captures any subset of user-controlled state (shell env vars, command-line arguments, local file contents, ad hoc git config) into an artifact that will be committed or pushed (a log file, generated config, debug dump, telemetry record), audit the captured set from a secret-leak perspective before shipping. Ask: "could any reasonable user have set a secret here?" If yes, switch to an allowlist of known-safe keys/values rather than a deny-list. Default-deny on unknown shapes — a new env var or config key added later should redact, not pass through silently. Example: PR #94 first captured every `AI_LOOP_*` env var verbatim into the committed bootstrap log, with an exclusion list for content vars. The exclusion list missed that `AI_LOOP_CODEX_REAL_COMMAND` (and similar override env vars) could contain an inline API key in a user's custom wrapper. Codex bot caught this as P1 finding B8 before merge; the fix flipped to an allowlist of operational knobs (mode/profile/model/effort/timeout/etc) with default-redact for anything else.
+
 ### Product Feature Workflow
 
 For user-facing product changes, use this order unless the user explicitly asks otherwise:
