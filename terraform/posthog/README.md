@@ -97,3 +97,26 @@ Terraform skips them on subsequent runs once state already contains the
 target resource, so they double as durable documentation of where each
 resource originated. They may be removed in a later cleanup PR once the
 import history is no longer load-bearing.
+
+## Drift triage gotchas
+
+Three constraints in the PostHog provider (verified against
+`PostHog/terraform-provider-posthog` v1.0.11 source) that decide whether the
+first plan-after-import is zero-drift or has multiple iteration rounds. Check
+each before writing HCL for a new replay:
+
+1. **Strip server-injected fields from `posthog_insight.query_json`.** The
+   provider's `Read` strips `version`, `result`, `hogql`, and `is_cached` from
+   the API response before comparing against your HCL string. Mirror the
+   stripped form, not the raw API response. Recipe:
+   `jq -cS '.query | walk(if type == "object" then del(.version, .result, .hogql, .is_cached) else . end)'`.
+2. **Match `posthog_dashboard_layout.tiles` to API order on first import.**
+   The provider's `mapTilesToState` notes "Import case: return all tiles in
+   API order." For empty-layout dashboards (no explicit positions set), the
+   API order is descending `tile_id` (newest-first). HCL declared in a
+   different order produces phantom diffs from positional `ListNestedAttribute`
+   comparison. Re-ordering for narrative readability is a follow-up apply.
+3. **Omit `layouts_json` for tiles with no explicit layout.** The provider's
+   `apiTileToTFModel` checks `len(t.Layouts) > 0` and sets `LayoutsJSON` to
+   null when false. HCL with `layouts_json = jsonencode({})` would produce
+   drift on every plan; leave the field unset instead.
