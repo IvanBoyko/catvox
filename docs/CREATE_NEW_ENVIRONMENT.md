@@ -288,3 +288,5 @@ them after confirming the recreation behavior. Importing preserves an App
 Store-registered app ID and avoids Firestore soft-delete/recreate delays. Run the
 preview phases first (`RUN_TERRAFORM_APPLY=0`), import the pre-existing resources,
 then apply.
+
+> **Automation in progress — #38 Step 3 (S5–S6).** This manual flow is being automated: idempotent Terraform imports of pre-existing resources in `scripts/create-environment.sh` (S5), and a protected Prod CI path for ongoing `terraform apply` and Functions deploys (`workflow_dispatch` + `environment: prod`, `main` only) (S6). Until that lands, follow the manual import-then-apply steps above; the first protected-environment `terraform apply` is operator-local because it creates the WIF pool and CI service account that CI later authenticates as.
