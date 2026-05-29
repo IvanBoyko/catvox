@@ -75,6 +75,23 @@ variable "app_check_token_ttl" {
   default     = "3600s"
 }
 
+variable "firestore_app_check_enforcement" {
+  description = <<-EOT
+    App Check enforcement mode for Cloud Firestore in this environment.
+    ENFORCED rejects Firebase client SDK requests without a valid App Check
+    token; service-account / Admin SDK access (catvox-backend-sa, CI probes via
+    @google-cloud/firestore) bypasses App Check and is unaffected. The value for
+    each environment is set in config/environments/<env>.xcconfig as
+    CATVOX_FIREBASE_FIRESTORE_APP_CHECK_ENFORCEMENT. See ADR-0025.
+  EOT
+  type        = string
+
+  validation {
+    condition     = contains(["OFF", "UNENFORCED", "ENFORCED"], var.firestore_app_check_enforcement)
+    error_message = "firestore_app_check_enforcement must be OFF, UNENFORCED, or ENFORCED. Set CATVOX_FIREBASE_FIRESTORE_APP_CHECK_ENFORCEMENT in the matching xcconfig."
+  }
+}
+
 variable "firebase_ios_bundle_id" {
   description = "Firebase iOS app bundle ID for this environment. Sourced from CATVOX_IOS_BUNDLE_ID in config/environments/<env>.xcconfig."
   type        = string
@@ -131,6 +148,19 @@ variable "github_repo" {
   description = "GitHub repository in 'owner/repo' format, used to scope the WIF token binding on catvox-ci-sa."
   type        = string
   default     = "kathelix/catvox"
+}
+
+variable "github_ref" {
+  description = <<-EOT
+    Optional Git ref the WIF provider trusts, for example refs/heads/main.
+    When non-empty, the provider attribute_condition additionally requires
+    assertion.ref to equal this value, restricting CI auth to that branch/tag.
+    Leave empty to trust any ref for this environment. The value for each
+    environment is set in config/environments/<env>.xcconfig as
+    CATVOX_GCP_WIF_GITHUB_REF. See ADR-0024.
+  EOT
+  type        = string
+  default     = ""
 }
 
 variable "tf_state_bucket" {

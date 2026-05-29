@@ -13,6 +13,7 @@ variables {
   firebase_apple_team_id           = "TEAMID"
   alert_email                      = "test@test.com"
   manage_gcf_sources_bucket_iam    = "false"
+  firestore_app_check_enforcement  = "UNENFORCED"
 }
 
 run "null_token" {

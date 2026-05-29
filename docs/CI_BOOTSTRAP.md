@@ -29,18 +29,19 @@ Use GitHub Environments to scope cloud secrets by target environment:
 | `dev` | Unprotected or lightly protected. PR/main deploy paths target Dev. |
 | `prod` | Protected. Require explicit approval before any production deploy. |
 
-The current workflows target the `dev` GitHub Environment. A future Prod slice
-must add separate protected workflow jobs instead of reusing the Dev deploy path.
-When cloning Dev workflow shape for Prod, remove the App Check debug-token
-secret, keep mutable integration-test allowlists Dev-only, and keep Firebase iOS
-app deletion policy set to `ABANDON` in `config/environments/prod.xcconfig`.
+The current workflows target the `dev` GitHub Environment. A protected
+environment must add separate protected workflow jobs instead of reusing a
+mutable environment's deploy path. For a protected environment, do not set the
+App Check debug-token secret, keep mutable integration-test allowlists out of it,
+and keep the Firebase iOS app deletion policy set to `ABANDON` in its
+`config/environments/<env>.xcconfig`.
 
 Required secrets per environment:
 
 | Secret | Purpose |
 |---|---|
 | `TF_VAR_ALERT_EMAIL` | Terraform alert recipient. |
-| `TF_VAR_APP_CHECK_DEBUG_TOKEN` | Dev/integration-safe environments only. |
+| `TF_VAR_APP_CHECK_DEBUG_TOKEN` | Mutable / integration-safe environments only. |
 | `POSTHOG_API_KEY` | PostHog scoped personal API key for this environment's PostHog project. |
 
 Non-secret environment values are committed in
@@ -51,12 +52,17 @@ those values before WIF authentication. See ADR-0021 and ADR-0022.
 ## WIF Trust Model
 
 Each GCP project gets its own `catvox-ci-sa`, WIF pool, and OIDC provider. The
-provider trusts only GitHub Actions tokens from `kathelix/catvox` through the
-repository attribute condition:
+provider trusts only GitHub Actions tokens from `kathelix/catvox` running in the
+GitHub Environment matching `CATVOX_ENVIRONMENT`, and — when the environment pins
+one — a specific ref. The attribute condition combines these claims:
 
 ```text
-assertion.repository == "kathelix/catvox"
+assertion.repository == "kathelix/catvox" && assertion.environment == "<env>"
 ```
+
+The optional per-environment ref pin is set via `CATVOX_GCP_WIF_GITHUB_REF`, and
+the `catvox-ci-sa` binding is scoped to `attribute.environment/<env>`. See
+ADR-0024.
 
 Terraform manages the per-project WIF pool/provider and the
 `roles/iam.workloadIdentityUser` binding. Environment creation still has to
@@ -67,8 +73,8 @@ because Terraform cannot manage the bucket that stores its own state.
 
 1. Confirm GitHub Actions is enabled for the repository.
 2. Create the `dev` GitHub Environment.
-3. For future Prod, create a separate protected `prod` GitHub Environment with
-   required reviewers.
+3. For a protected environment, create a separate protected GitHub Environment
+   (named to match the environment) with required reviewers.
 4. Keep repository-level cloud secrets empty or legacy-only; active cloud deploy
    secrets should live on GitHub Environments.
 5. Do not store GCP service account keys in GitHub, locally, or in Terraform

@@ -57,6 +57,15 @@ CATVOX_ANALYSE_VIDEO_ENDPOINT ?= https://$(CATVOX_ANALYSE_VIDEO_HOST)
 CATVOX_FIREBASE_APP_ID ?= replace-with-dev-firebase-app-id
 CATVOX_FIREBASE_API_KEY ?= replace-with-dev-firebase-api-key
 CATVOX_IOS_BUNDLE_ID ?= replace-with-dev-bundle-id
+# WIF ref pin fallback (empty = trust any ref). The per-environment value lives
+# in config/environments/<env>.xcconfig as CATVOX_GCP_WIF_GITHUB_REF.
+CATVOX_GCP_WIF_GITHUB_REF ?=
+# Firestore App Check enforcement mode. Real environments set this in xcconfig;
+# the fresh-checkout fallback is the non-enforcing, non-destructive UNENFORCED.
+CATVOX_FIREBASE_FIRESTORE_APP_CHECK_ENFORCEMENT ?= UNENFORCED
+# Environment security tier (ADR-0026). Fresh-checkout fallback is the
+# non-protected (mutable) tier; protected environments set true in xcconfig.
+CATVOX_ENVIRONMENT_PROTECTED ?= false
 CATVOX_INTEGRATION_MUTATIONS_ALLOWED ?= 1
 CATVOX_INTEGRATION_SAFE_ENVIRONMENTS ?= dev
 CATVOX_TF_VARS_FILE ?= terraform/env/$(CATVOX_ENVIRONMENT).tfvars
@@ -82,7 +91,7 @@ CATVOX_POSTHOG_TF_INIT_FLAGS ?= -reconfigure
 catvox_tf_vars_rel = $(patsubst terraform/%,%,$(CATVOX_TF_VARS_FILE))
 catvox_tf_backend_args = -backend-config="bucket=$(CATVOX_TF_STATE_BUCKET)" -backend-config="prefix=$(CATVOX_TF_STATE_PREFIX)"
 catvox_tf_var_file_arg = $(if $(wildcard $(CATVOX_TF_VARS_FILE)),-var-file="$(catvox_tf_vars_rel)",)
-catvox_tf_env_args = TF_VAR_environment_name="$(CATVOX_ENVIRONMENT)" TF_VAR_project_id="$(CATVOX_PROJECT_ID)" TF_VAR_region="$(CATVOX_FUNCTION_REGION)" TF_VAR_firestore_location="$(CATVOX_FIRESTORE_LOCATION)" TF_VAR_tf_state_bucket="$(CATVOX_TF_STATE_BUCKET)" TF_VAR_firebase_ios_bundle_id="$(CATVOX_IOS_BUNDLE_ID)" TF_VAR_firebase_ios_app_display_name="$(CATVOX_FIREBASE_IOS_APP_DISPLAY_NAME)" TF_VAR_firebase_ios_app_deletion_policy="$(CATVOX_FIREBASE_IOS_APP_DELETION_POLICY)" TF_VAR_firebase_apple_team_id="$(CATVOX_FIREBASE_APPLE_TEAM_ID)" TF_VAR_manage_gcf_sources_bucket_iam="$(CATVOX_MANAGE_GCF_SOURCES_BUCKET_IAM)"
+catvox_tf_env_args = TF_VAR_environment_name="$(CATVOX_ENVIRONMENT)" TF_VAR_project_id="$(CATVOX_PROJECT_ID)" TF_VAR_region="$(CATVOX_FUNCTION_REGION)" TF_VAR_firestore_location="$(CATVOX_FIRESTORE_LOCATION)" TF_VAR_tf_state_bucket="$(CATVOX_TF_STATE_BUCKET)" TF_VAR_firebase_ios_bundle_id="$(CATVOX_IOS_BUNDLE_ID)" TF_VAR_firebase_ios_app_display_name="$(CATVOX_FIREBASE_IOS_APP_DISPLAY_NAME)" TF_VAR_firebase_ios_app_deletion_policy="$(CATVOX_FIREBASE_IOS_APP_DELETION_POLICY)" TF_VAR_firebase_apple_team_id="$(CATVOX_FIREBASE_APPLE_TEAM_ID)" TF_VAR_manage_gcf_sources_bucket_iam="$(CATVOX_MANAGE_GCF_SOURCES_BUCKET_IAM)" TF_VAR_github_ref="$(CATVOX_GCP_WIF_GITHUB_REF)" TF_VAR_firestore_app_check_enforcement="$(CATVOX_FIREBASE_FIRESTORE_APP_CHECK_ENFORCEMENT)"
 
 catvox_posthog_tf_vars_rel = $(patsubst terraform/posthog/%,%,$(CATVOX_POSTHOG_TF_VARS_FILE))
 catvox_posthog_tf_backend_args = -backend-config="bucket=$(CATVOX_POSTHOG_TF_STATE_BUCKET)" -backend-config="prefix=$(CATVOX_POSTHOG_TF_STATE_PREFIX)"
@@ -99,12 +108,12 @@ endef
 .PHONY: help doctor scripts-test \
 	setup-local-ai-loop ai-loop-start ai-loop-answer \
 	ios-generate ios-build ios-build-only ios-test ios-test-only ios-ui-test ios-ui-test-only ios-ci ios-device-launch ios-device-console app-deploy \
-	ios-validate-env-config ios-validate-prod-env-config-structure ios-validate-env-config-drift ios-analytics-guard \
+	ios-validate-env-config ios-validate-env-config-structure ios-validate-env-config-drift ios-analytics-guard \
 	functions-install functions-build functions-test functions-deploy functions-integration functions-ci \
 	backend-build backend-deploy backend-integration \
 	terraform-check-env-paths terraform-fmt-check terraform-init terraform-validate terraform-test terraform-plan terraform-ci-plan terraform-apply terraform-ci-apply terraform-output-firebase-plist \
 	posthog-terraform-check-env-paths posthog-terraform-fmt-check posthog-terraform-init posthog-terraform-validate posthog-terraform-plan posthog-terraform-ci-plan posthog-terraform-apply posthog-terraform-ci-apply \
-	prod-smoke environment-create bootstrap-remote-state bootstrap-wif
+	smoke environment-create bootstrap-remote-state bootstrap-wif
 
 help:
 	@printf '%s\n' \
@@ -119,7 +128,7 @@ help:
 		'  make ios-test               Generate project and run iOS unit tests' \
 		'  make ios-ui-test            Generate project and run iOS XCUITests' \
 		'  make ios-validate-env-config Validate selected Firebase plist and xcconfig values' \
-		'  make ios-validate-prod-env-config-structure Validate Prod xcconfig structure before plist lands' \
+		'  make ios-validate-env-config-structure Validate <env> xcconfig structure before plist lands' \
 		'  make ios-validate-env-config-drift Compare committed Firebase plist to Terraform output' \
 		'  make ios-analytics-guard    Verify PostHog SDK usage stays behind AnalyticsService' \
 		'  make ios-ci                 Generate, build, and test like CI' \
@@ -141,7 +150,7 @@ help:
 		'  make posthog-terraform-apply Plan, then interactively apply PostHog Terraform; requires CONFIRM=apply' \
 		'  make posthog-terraform-ci-apply CI-only auto-approved PostHog Terraform apply' \
 		'' \
-		'  make prod-smoke             Run non-invasive Prod smoke checks' \
+		'  make smoke CATVOX_ENVIRONMENT=<env> Run non-invasive environment smoke checks' \
 		'  make environment-create     Bootstrap a named GCP/Firebase environment' \
 		'  make bootstrap-remote-state Legacy helper for Terraform state bucket bootstrap' \
 		'  make bootstrap-wif          Legacy helper; WIF is Terraform-managed for new envs' \
@@ -199,6 +208,7 @@ doctor:
 scripts-test:
 	@bash scripts/test/emit-xcconfig-env.test.sh
 	@bash scripts/test/makefile-env-cache.test.sh
+	@node --test scripts/test/validate-environment-config.test.mjs
 	@python3 tools/ai-loop/ai_loop_test.py
 
 setup-local-ai-loop:
@@ -222,9 +232,10 @@ ios-validate-env-config:
 	 CATVOX_IOS_BUNDLE_ID="$(CATVOX_IOS_BUNDLE_ID)" \
 	 node scripts/validate-firebase-ios-config.mjs
 
-ios-validate-prod-env-config-structure:
-	@CATVOX_ENV_CONFIG="config/environments/prod.xcconfig" \
-	 node scripts/validate-prod-environment-config.mjs
+ios-validate-env-config-structure:
+	@CATVOX_ENVIRONMENT="$(CATVOX_ENVIRONMENT)" \
+	 CATVOX_ENV_CONFIG="$(CATVOX_ENV_CONFIG)" \
+	 node scripts/validate-environment-config.mjs "$(CATVOX_ENVIRONMENT)"
 
 ios-validate-env-config-drift:
 	@tmpdir="$$(mktemp -d)"; \
@@ -444,10 +455,10 @@ posthog-terraform-apply: posthog-terraform-check-env-paths
 posthog-terraform-ci-apply: posthog-terraform-check-env-paths
 	@cd terraform/posthog && $(catvox_posthog_tf_env_args) terraform apply -auto-approve -no-color $(catvox_posthog_tf_var_file_arg)
 
-prod-smoke:
-	@CATVOX_ENVIRONMENT=prod \
-	 CATVOX_ENV_CONFIG=config/environments/prod.xcconfig \
-	 node scripts/prod-smoke.mjs
+smoke:
+	@CATVOX_ENVIRONMENT="$(CATVOX_ENVIRONMENT)" \
+	 CATVOX_ENV_CONFIG="$(CATVOX_ENV_CONFIG)" \
+	 node scripts/smoke.mjs
 
 terraform-output-firebase-plist:
 	@mkdir -p "$$(dirname "$(CATVOX_FIREBASE_PLIST_OUTPUT)")"
