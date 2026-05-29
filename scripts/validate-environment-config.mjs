@@ -15,8 +15,8 @@
 //     of the integration-safe list (ADR-0024, ADR-0025)
 //
 // The only literals here are generic key names and enum values. Literal
-// environment names ("dev"/"prod") belong in the CI/CD promotion pipeline, not
-// in this validator.
+// environment names belong only in the CI/CD promotion pipeline, not in this
+// validator.
 
 import { existsSync, readdirSync } from 'node:fs';
 import { basename, dirname, join, resolve } from 'node:path';

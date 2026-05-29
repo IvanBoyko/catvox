@@ -183,10 +183,11 @@ resource "google_firebase_app_check_app_attest_config" "ios" {
 
 # ── App Check — Cloud Firestore enforcement ─────────────────────────────────
 # ADR-0025 — enforce App Check on Firestore so Firebase client SDK access
-# requires a valid App Attest (Prod) or debug (Dev) token. Service-account and
-# Admin SDK access — the catvox-backend-sa runtime and CI integration probes via
-# @google-cloud/firestore — bypasses App Check and is unaffected. Enforcement is
-# per environment: Prod ENFORCED (secure-by-default), Dev UNENFORCED.
+# requires a valid App Check token. Service-account and Admin SDK access — the
+# catvox-backend-sa runtime and CI integration probes via @google-cloud/firestore
+# — bypasses App Check and is unaffected. The enforcement mode for each
+# environment is configured in config/environments/<env>.xcconfig
+# (CATVOX_FIREBASE_FIRESTORE_APP_CHECK_ENFORCEMENT).
 resource "google_firebase_app_check_service_config" "firestore" {
   provider = google-beta
   project  = var.project_id

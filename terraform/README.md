@@ -10,8 +10,8 @@ CatVox's Terraform layout has three kinds of directories under `terraform/`:
 
 The two Terraform roots share the same per-environment GCS state bucket
 (`catvox-tf-state-<gcp-project-id>`); only the prefix differs. Active Dev
-points at `kathelix-catvox-dev`; future Prod will use a separate state/config
-set for the preserved `kathelix-catvox-prod` project. See ADR-0017, ADR-0018,
+points at `kathelix-catvox-dev`; each additional environment uses its own
+state/config set for its own GCP project. See ADR-0017, ADR-0018,
 ADR-0020, and `docs/CREATE_NEW_ENVIRONMENT.md`.
 
 ## Provider Lock Files

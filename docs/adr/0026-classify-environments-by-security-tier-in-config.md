@@ -10,14 +10,13 @@
 
 ## Context
 
-CatVox is growing from one live environment (Dev) toward several (Prod now, and
-plausibly Staging later). Environments fall into two security tiers:
+CatVox is growing from one live environment toward several, and may add more
+later. Environments fall into two security tiers:
 
-- **Mutable / integration-safe** (Dev-like): debug App Check token allowed, App
-  Check may be unenforced, WIF trusts any ref, Firestore-mutating integration
-  tests permitted.
-- **Protected** (Prod/Staging-like): no debug token, App Check enforced, WIF ref
-  pinned, protected GitHub Environment, non-invasive smoke only.
+- **Mutable / integration-safe**: debug App Check token allowed, App Check may be
+  unenforced, WIF trusts any ref, Firestore-mutating integration tests permitted.
+- **Protected**: no debug token, App Check enforced, WIF ref pinned, protected
+  GitHub Environment, non-invasive smoke only.
 
 AGENTS.md already says to treat the environment name as data (ADR-0017). In
 practice some tooling had drifted from that: env-specific script files
@@ -56,7 +55,7 @@ duplicates values that already live in `config/environments/<env>.xcconfig`.
 
 ## Rationale
 
-- A future Staging environment inherits the entire protected posture by setting
+- A new protected environment inherits the entire protected posture by setting
   `CATVOX_ENVIRONMENT_PROTECTED=true` and the matching config values — no new
   code, no new script, no new golden map.
 - Behaviour differences live in reviewable committed config, consistent with

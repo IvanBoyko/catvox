@@ -82,7 +82,7 @@ The MVP also supports on-demand creation of a funny shareable result video deriv
 * The infrastructure model is intended to be reproducible and rebuildable.
 * The project uses three distinct CI/CD pipelines: iOS build validation, infrastructure delivery, and backend function delivery.
 * CI/CD authentication uses keyless GitHub Actions federation.
-* Until public launch, `kathelix-catvox-dev` is the active Dev / integration-testing project. `kathelix-catvox-prod` is preserved for the future real production environment; pre-split Dev leftovers have been cleaned from that preserved project before real Prod provisioning. See ADR-0017 and ADR-0018.
+* `kathelix-catvox-dev` is the active Dev / integration-testing project. `kathelix-catvox-prod` is the Prod environment project, being provisioned for production; pre-split Dev leftovers were cleaned from it beforehand. See ADR-0017 and ADR-0018.
 
 ## 7. MVP Boundaries / Non-goals
 * No direct client-side access to privileged GCP services.

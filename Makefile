@@ -57,7 +57,8 @@ CATVOX_ANALYSE_VIDEO_ENDPOINT ?= https://$(CATVOX_ANALYSE_VIDEO_HOST)
 CATVOX_FIREBASE_APP_ID ?= replace-with-dev-firebase-app-id
 CATVOX_FIREBASE_API_KEY ?= replace-with-dev-firebase-api-key
 CATVOX_IOS_BUNDLE_ID ?= replace-with-dev-bundle-id
-# WIF ref pin (empty = trust any ref for this environment). Prod pins refs/heads/main.
+# WIF ref pin fallback (empty = trust any ref). The per-environment value lives
+# in config/environments/<env>.xcconfig as CATVOX_GCP_WIF_GITHUB_REF.
 CATVOX_GCP_WIF_GITHUB_REF ?=
 # Firestore App Check enforcement mode. Real environments set this in xcconfig;
 # the fresh-checkout fallback is the non-enforcing, non-destructive UNENFORCED.

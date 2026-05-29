@@ -7,7 +7,7 @@
 // objects, invoke mutating Cloud Function paths, start Cloud Build, or register
 // App Check debug tokens. Intended for protected environments before/after a
 // deploy, but safe to run against any environment. See
-// docs/PROD_SMOKE_CHECKLIST.md.
+// docs/SMOKE_CHECKLIST.md.
 import { existsSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { spawnSync } from 'node:child_process';

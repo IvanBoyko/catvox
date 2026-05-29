@@ -212,7 +212,7 @@ percentage. See ADR-0010 and ADR-0012.
 
 ### 6.1 Infrastructure as Code (Terraform)
 * **Provider:** Google Cloud Platform (GCP).
-* **Current Deployed Project:** Active Dev runs in GCP/Firebase project ID `kathelix-catvox-dev`. Region remains `us-central1`; Firestore location remains `nam5` (US multi-region). The old `kathelix-catvox-prod` project is preserved for the future real Prod slice and must not be deleted; pre-split Dev leftovers were cleaned on 2026-05-16. See ADR-0017, ADR-0018, and `docs/archive/LEGACY_PRESPLIT_CLEANUP_REPORT_2026-05-16.md`.
+* **GCP/Firebase Projects:** Dev runs in project ID `kathelix-catvox-dev`. Region is `us-central1`; Firestore location is `nam5` (US multi-region). `kathelix-catvox-prod` is the Prod environment project (being provisioned) and must not be deleted; pre-split Dev leftovers were cleaned on 2026-05-16. Each environment's identity lives in `config/environments/<env>.xcconfig`. See ADR-0017, ADR-0018, and `docs/archive/LEGACY_PRESPLIT_CLEANUP_REPORT_2026-05-16.md`.
 * **Terraform State:** Remote state is stored in a per-environment GCS bucket (`us-central1`, object versioning enabled) and is never stored locally or committed to source control. Active Dev uses `gs://catvox-tf-state-kathelix-catvox-dev/catvox/state`. The `Makefile` dynamically injects the backend configuration inline via `-backend-config` flags during `terraform init`, pulling bucket coordinates from the current environment's `xcconfig` file.
 * **Resource Scope:**
     * **Project Services:** Enablement of `aiplatform`, `cloudfunctions`, `cloudbuild`, `run`, `eventarc`, `pubsub`, `firestore`, `storage`, `secretmanager`, `artifactregistry`, `firebase`, `firebaseextensions`, `firebaseappcheck`, `compute`, `monitoring`, `clouderrorreporting`, and `iam`.
@@ -366,7 +366,7 @@ Firebase plist convention:
 * `make ios-validate-env-config` and the app target pre-build script validate that the selected plist matches the selected environment project ID, Firebase app ID, API key, and bundle ID.
 * Until the real Prod plist lands, CI must still run structural Prod config validation against `config/environments/prod.xcconfig`. That structural check may allow only the explicitly deferred Step 3 values for Firebase app ID, Firebase API key, and backend endpoint hosts.
 
-Mutable live integration tests may run only against environments explicitly marked integration-safe with `CATVOX_INTEGRATION_SAFE_ENVIRONMENTS`. Production deployments get protected non-invasive smoke tests only through `CATVOX_ENVIRONMENT=prod make smoke` and `docs/PROD_SMOKE_CHECKLIST.md`.
+Mutable live integration tests may run only against environments explicitly marked integration-safe with `CATVOX_INTEGRATION_SAFE_ENVIRONMENTS`. Protected environments get non-invasive smoke tests only through `CATVOX_ENVIRONMENT=<env> make smoke` and `docs/SMOKE_CHECKLIST.md`.
 
 ---
 

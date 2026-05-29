@@ -88,8 +88,10 @@ locals {
   # WIF trust is scoped per environment: every CI job that authenticates must
   # run in the GitHub Environment matching CATVOX_ENVIRONMENT (assertion
   # .environment), and may be further pinned to a branch/tag (assertion.ref)
-  # when github_ref is set (Prod pins refs/heads/main). The repository check is
-  # always present so only kathelix/catvox tokens reach this pool. See ADR-0024.
+  # when github_ref is set. Per-environment values are set in
+  # config/environments/<env>.xcconfig (CATVOX_GCP_WIF_GITHUB_REF). The
+  # repository check is always present so only the configured repository's tokens
+  # reach this pool. See ADR-0024.
   wif_git_ref = trimspace(var.github_ref)
   wif_attribute_condition = join(" && ", concat(
     [

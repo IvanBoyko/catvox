@@ -1,8 +1,9 @@
 # Create a New CatVox Environment
 
-This is the authoritative runbook for creating a named CatVox environment such as
-`dev`, `prod`, `staging`, or another future name. Environment names are data:
-scripts and code must not assume only `dev` and `prod` exist.
+This is the authoritative runbook for creating any named CatVox environment.
+Environment names are data: scripts and code must not assume a fixed set of
+environments exists. Behaviour differences between environments come from
+`config/environments/<env>.xcconfig`, not from environment-specific code.
 
 For one-time repository and GitHub Actions setup, see
 `docs/CI_BOOTSTRAP.md`.
@@ -17,19 +18,20 @@ Each environment owns these artifacts:
 | Firebase iOS plist | `CatVox/Resources/Firebase/GoogleService-Info-<env>.plist` | Committed only after validation. The app loads the plist matching `CATVOX_ENVIRONMENT`. |
 
 | Terraform variables | `terraform/env/<env>.tfvars` | Ignored. Contains only true secrets or deliberately private values: `app_check_debug_token` and `alert_email`. Commit only `.example` files. |
-| GitHub Environment | `<env>` | Stores environment-scoped Actions secrets only. Dev can be unprotected; future Prod must be explicitly protected. |
-| Bundle ID | Terraform + xcconfig | Dev currently uses `com.kathelix.catvox.dev`; future App Store Prod uses `com.kathelix.catvox`. |
+| GitHub Environment | `<env>` | Stores environment-scoped Actions secrets only. Mutable environments may be unprotected; protected environments must use a protected GitHub Environment. |
+| Bundle ID | Terraform + xcconfig | Each environment sets its own bundle ID via `CATVOX_IOS_BUNDLE_ID`. |
 | Apple Developer App ID | Apple Developer team | Conditional. Required only when the environment introduces a new iOS bundle ID that will be installed on physical devices or use App Attest. |
-| App Check | Terraform | Dev may have a Debug Provider token. Prod must not have mutable integration debug tokens and should use protected smoke checks only. |
+| App Check | Terraform | Mutable environments may have a Debug Provider token. Protected environments must not register debug tokens and use protected smoke checks only. |
 | Backend URLs | `config/environments/<env>.xcconfig` | Set after Functions deploy from the deployed Gen 2 Function URLs. |
 | PostHog config | `config/environments/<env>.xcconfig` | App-visible project token (`CATVOX_POSTHOG_PROJECT_TOKEN`), ingestion hostname (`CATVOX_POSTHOG_HOST_NAME`), Terraform API hostname (`CATVOX_POSTHOG_API_HOST_NAME`), PostHog project ID (`CATVOX_POSTHOG_PROJECT_ID`), and PostHog organization ID (`CATVOX_POSTHOG_ORGANIZATION_ID`). Create the environment's PostHog project before enabling real production analytics traffic. |
 | PostHog Terraform state | `gs://catvox-tf-state-<gcp-project-id>/posthog/state` | Same GCS bucket as the GCP root, different prefix. No new bucket. See ADR-0020. |
 
 PostHog environment isolation is project-based and maps 1:1 to CatVox
-environments. Dev uses the `CatVox Dev` PostHog project, and real production
-analytics require a dedicated `CatVox Prod` PostHog project before App Store
-production traffic is enabled. Do not point a real environment at the existing
-Dev PostHog project as a stopgap. See ADR-0019 and ADR-0020.
+environments: each environment uses its own PostHog project, identified by the
+PostHog values in `config/environments/<env>.xcconfig`
+(`CATVOX_POSTHOG_PROJECT_TOKEN`, `CATVOX_POSTHOG_PROJECT_ID`). Never point one
+environment at another environment's PostHog project as a stopgap. See ADR-0019
+and ADR-0020.
 
 Keep personal/API credentials and private operator values out of app config.
 `POSTHOG_API_KEY`, `TF_VAR_APP_CHECK_DEBUG_TOKEN`, and `TF_VAR_ALERT_EMAIL` live
@@ -56,7 +58,7 @@ Pick explicit values before running the script:
 | `CATVOX_TF_STATE_PREFIX` | `catvox/state` | Yes |
 | `CATVOX_IOS_BUNDLE_ID` | `com.kathelix.catvox.dev` | Yes |
 | `CATVOX_FIREBASE_IOS_APP_DISPLAY_NAME` | `CatVox Dev iOS` | Yes |
-| `CATVOX_FIREBASE_IOS_APP_DELETION_POLICY` | `ABANDON` | Yes. Use `ABANDON` for Prod-like environments; use `DELETE` only for disposable Dev-like environments. |
+| `CATVOX_FIREBASE_IOS_APP_DELETION_POLICY` | `ABANDON` | Yes. Use `ABANDON` for protected environments; use `DELETE` only for disposable mutable environments. |
 | `CATVOX_FIREBASE_APPLE_TEAM_ID` | `QYT76L5836` | Yes |
 | `CATVOX_MANAGE_GCF_SOURCES_BUCKET_IAM` | `true` for Dev bootstrap | Yes. Use lowercase `true` or `false` only. |
 | `APP_CHECK_DEBUG_TOKEN` | UUID4 token | Optional. Presence registers the token. |
@@ -117,7 +119,7 @@ Create or update the GitHub Environment named `<env>` and set:
 | Secret | Value |
 |---|---|
 | `TF_VAR_ALERT_EMAIL` | same value as `alert_email` in ignored tfvars |
-| `TF_VAR_APP_CHECK_DEBUG_TOKEN` | Dev/integration-safe environments only |
+| `TF_VAR_APP_CHECK_DEBUG_TOKEN` | Mutable / integration-safe environments only |
 | `POSTHOG_API_KEY` | PostHog scoped personal API key with project-write scope limited to this environment's PostHog project. |
 
 Example:
@@ -129,10 +131,10 @@ gh secret set TF_VAR_APP_CHECK_DEBUG_TOKEN --env <env>
 gh secret set POSTHOG_API_KEY --env <env>
 ```
 
-Future Prod must use a protected GitHub Environment and must not reuse Dev debug
-tokens or mutable integration settings. Each environment's `POSTHOG_API_KEY`
-must be a scoped PostHog personal API key limited to that environment's PostHog
-project — never a shared org-admin key.
+Protected environments must use a protected GitHub Environment and must not reuse
+mutable-environment debug tokens or integration settings. Each environment's
+`POSTHOG_API_KEY` must be a scoped PostHog personal API key limited to that
+environment's PostHog project — never a shared org-admin key.
 
 ## Committed Environment Config
 
@@ -142,18 +144,18 @@ After Terraform apply and Functions deploy, update
 ```xcconfig
 CATVOX_PROJECT_ID = <project-id>
 CATVOX_ENVIRONMENT = <env>
-CATVOX_ENVIRONMENT_PROTECTED = <true for protected envs like Prod/Staging; false for Dev-like>
+CATVOX_ENVIRONMENT_PROTECTED = <true for protected environments; false for mutable environments>
 CATVOX_FUNCTION_REGION = <region>
 CATVOX_FIRESTORE_LOCATION = <firestore-location>
 CATVOX_TF_STATE_BUCKET = catvox-tf-state-<project-id>
 CATVOX_GCP_CI_SERVICE_ACCOUNT = <terraform output -raw ci_service_account_email>
 CATVOX_GCP_WIF_PROVIDER = <terraform output -raw github_actions_wif_provider>
-CATVOX_GCP_WIF_GITHUB_REF = <empty for any ref; refs/heads/main for protected Prod>
+CATVOX_GCP_WIF_GITHUB_REF = <empty for any ref; a ref such as refs/heads/main for protected environments>
 CATVOX_IOS_BUNDLE_ID = <bundle-id>
 CATVOX_FIREBASE_IOS_APP_DISPLAY_NAME = <display-name>
 CATVOX_FIREBASE_IOS_APP_DELETION_POLICY = ABANDON
 CATVOX_FIREBASE_APPLE_TEAM_ID = QYT76L5836
-CATVOX_FIREBASE_FIRESTORE_APP_CHECK_ENFORCEMENT = <UNENFORCED for Dev-like; ENFORCED for Prod>
+CATVOX_FIREBASE_FIRESTORE_APP_CHECK_ENFORCEMENT = <UNENFORCED for mutable environments; ENFORCED for protected environments>
 
 CATVOX_MANAGE_GCF_SOURCES_BUCKET_IAM = true
 CATVOX_SIGNED_UPLOAD_URL_HOST = <getSignedUploadURL Cloud Run host only>
@@ -169,20 +171,20 @@ Committed boolean values must be lowercase `true` or `false`; do not use `1`,
 the GitHub Environment whose name equals `CATVOX_ENVIRONMENT` (ADR-0024), so the
 GitHub Environment name must match the CatVox environment name and every CI job
 that authenticates must declare the matching `environment:`. Leave this key empty
-to trust any ref (Dev). Set it to `refs/heads/main` for a protected environment
-like Prod so CI auth additionally requires `assertion.ref == refs/heads/main`.
+to trust any ref. Set it to a ref such as `refs/heads/main` for a protected
+environment so CI auth additionally requires `assertion.ref` to match.
 
 **Firestore App Check (`CATVOX_FIREBASE_FIRESTORE_APP_CHECK_ENFORCEMENT`).** One
-of `OFF`, `UNENFORCED`, or `ENFORCED` (ADR-0025). Use `ENFORCED` for Prod-like
+of `OFF`, `UNENFORCED`, or `ENFORCED` (ADR-0025). Use `ENFORCED` for protected
 environments (secure-by-default; Firebase client SDK access needs a valid App
-Attest token) and `UNENFORCED` for Dev-like environments so the debug-token path
+Attest token) and `UNENFORCED` for mutable environments so the debug-token path
 stays frictionless. Service-account / Admin SDK access (the backend SA and CI
 integration probes via `@google-cloud/firestore`) bypasses App Check regardless
 of this setting.
 
 **Environment security tier (`CATVOX_ENVIRONMENT_PROTECTED`).** `true` for
-protected environments (Prod/Staging-like), `false` for mutable Dev-like
-environments (ADR-0026). When `true`, `make ios-validate-env-config-structure`
+protected environments, `false` for mutable environments (ADR-0026). When
+`true`, `make ios-validate-env-config-structure`
 (via `scripts/validate-environment-config.mjs`) enforces the protected posture:
 App Check `ENFORCED`, a pinned `CATVOX_GCP_WIF_GITHUB_REF`, the `ABANDON`
 deletion policy, and that the environment is absent from
@@ -270,51 +272,19 @@ Makefile rejects mismatched tfvars paths.
 Also run a real Debug device scan before retiring or cleaning any previous Dev
 backend.
 
-For future Prod:
+For protected environments:
 
-- Do not include Prod in `CATVOX_INTEGRATION_SAFE_ENVIRONMENTS`.
-- Do not run Firestore-mutating integration tests.
-- Use only the protected, non-invasive smoke path in
-  `docs/PROD_SMOKE_CHECKLIST.md`.
-- When creating real Prod in preserved `kathelix-catvox-prod`, start from
-  `docs/archive/LEGACY_PRESPLIT_CLEANUP_REPORT_2026-05-16.md`: the Firebase iOS app
-  for `com.kathelix.catvox` and the empty Firestore `(default)` database were
-  intentionally preserved, so the Prod slice must either import them into
-  Terraform state or deliberately delete/recreate them after confirming the
-  recreation behavior.
+- Do not include the environment in `CATVOX_INTEGRATION_SAFE_ENVIRONMENTS`.
+- Do not run Firestore-mutating integration tests against it.
+- Use only the protected, non-invasive smoke path in `docs/SMOKE_CHECKLIST.md`.
 
-## Legacy Pre-Split Project Cleanup
+## Provisioning Into a Project That Already Has Resources
 
-Do not delete `kathelix-catvox-prod`. Keeping the project container avoids any
-project-ID deletion and recreation delay before the future real Prod slice.
-
-After the new Dev environment has passed deploy, integration, and a Debug device
-scan:
-
-1. Verify active code and workflows no longer point at `kathelix-catvox-prod`
-   except legacy cleanup docs/scripts:
-   ```bash
-   rg "kathelix-catvox-prod" \
-     --glob '!docs/CREATE_NEW_ENVIRONMENT.md' \
-     --glob '!scripts/cleanup-legacy-presplit-project.sh'
-   ```
-2. Verify the GitHub Environment `dev` secrets point at the new Dev project.
-3. Confirm the ignored legacy tfvars file exists while the old state bucket still exists:
-   `terraform/env/legacy-presplit.tfvars`.
-4. Run an explicit old-project destroy using the legacy tfvars (the Makefile will auto-inject the backend bucket args):
-   ```bash
-   CATVOX_ENVIRONMENT=legacy-presplit \
-   CATVOX_PROJECT_ID=kathelix-catvox-prod \
-   CATVOX_TF_VARS_FILE=terraform/env/legacy-presplit.tfvars \
-   make terraform-plan
-
-   CATVOX_ENVIRONMENT=legacy-presplit \
-   CATVOX_PROJECT_ID=kathelix-catvox-prod \
-   CATVOX_TF_VARS_FILE=terraform/env/legacy-presplit.tfvars \
-   terraform -chdir=terraform destroy -var-file=env/legacy-presplit.tfvars
-   ```
-5. Sweep non-Terraform leftovers without deleting the project:
-   ```bash
-   CONFIRM=cleanup-kathelix-catvox-prod ./scripts/cleanup-legacy-presplit-project.sh
-   ```
-6. Record a cleanup report before future Prod work. The report should confirm no old debug tokens, Functions, CatVox custom service accounts, CatVox buckets, active state objects, or GitHub Dev secrets remain tied to `kathelix-catvox-prod`.
+When an environment's GCP project already contains resources Terraform would
+manage — a Firebase iOS app, a Firestore `(default)` database, buckets, or
+service accounts (for example a project that was preserved or previously used) —
+import them into Terraform state before the first apply, or deliberately recreate
+them after confirming the recreation behavior. Importing preserves an App
+Store-registered app ID and avoids Firestore soft-delete/recreate delays. Run the
+preview phases first (`RUN_TERRAFORM_APPLY=0`), import the pre-existing resources,
+then apply.
