@@ -111,7 +111,7 @@ endef
 	ios-validate-env-config ios-validate-env-config-structure ios-validate-env-config-drift ios-analytics-guard \
 	functions-install functions-build functions-test functions-deploy functions-integration functions-ci \
 	backend-build backend-deploy backend-integration \
-	terraform-check-env-paths terraform-fmt-check terraform-init terraform-validate terraform-test terraform-plan terraform-ci-plan terraform-apply terraform-ci-apply terraform-output-firebase-plist \
+	terraform-check-env-paths terraform-fmt-check terraform-init terraform-validate terraform-test terraform-plan terraform-ci-plan terraform-apply terraform-ci-apply terraform-import terraform-output-firebase-plist \
 	posthog-terraform-check-env-paths posthog-terraform-fmt-check posthog-terraform-init posthog-terraform-validate posthog-terraform-plan posthog-terraform-ci-plan posthog-terraform-apply posthog-terraform-ci-apply \
 	smoke environment-create bootstrap-remote-state bootstrap-wif
 
@@ -208,7 +208,8 @@ doctor:
 scripts-test:
 	@bash scripts/test/emit-xcconfig-env.test.sh
 	@bash scripts/test/makefile-env-cache.test.sh
-	@node --test scripts/test/validate-environment-config.test.mjs
+	@bash scripts/test/import-preexisting-resources.test.sh
+	@node --test scripts/test/validate-environment-config.test.mjs scripts/test/find-firebase-ios-app-id.test.mjs
 	@python3 tools/ai-loop/ai_loop_test.py
 
 setup-local-ai-loop:
@@ -421,6 +422,17 @@ terraform-apply: terraform-check-env-paths
 
 terraform-ci-apply: terraform-check-env-paths
 	@cd terraform && $(catvox_tf_env_args) GOOGLE_CLOUD_QUOTA_PROJECT="$(CATVOX_PROJECT_ID)" terraform apply -auto-approve -no-color $(catvox_tf_var_file_arg)
+
+# Import a single existing resource into Terraform state. Used by
+# scripts/import-preexisting-resources.sh for idempotent provisioning into a
+# project that already has resources (issue #38 Step 3, S5). Run after
+# terraform-init; the caller is responsible for the in-state idempotency guard.
+terraform-import: terraform-check-env-paths
+	@if [[ -z "$(ADDRESS)" || -z "$(ID)" ]]; then \
+		printf 'terraform-import requires ADDRESS=<resource address> and ID=<import id>; run after terraform-init.\n' >&2; \
+		exit 1; \
+	fi
+	@cd terraform && $(catvox_tf_env_args) GOOGLE_CLOUD_QUOTA_PROJECT="$(CATVOX_PROJECT_ID)" terraform import -no-color $(catvox_tf_var_file_arg) "$(ADDRESS)" "$(ID)"
 
 posthog-terraform-fmt-check:
 	@cd terraform/posthog && terraform fmt -check -recursive

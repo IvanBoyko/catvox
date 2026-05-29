@@ -281,12 +281,40 @@ For protected environments:
 ## Provisioning Into a Project That Already Has Resources
 
 When an environment's GCP project already contains resources Terraform would
-manage — a Firebase iOS app, a Firestore `(default)` database, buckets, or
-service accounts (for example a project that was preserved or previously used) —
-import them into Terraform state before the first apply, or deliberately recreate
-them after confirming the recreation behavior. Importing preserves an App
-Store-registered app ID and avoids Firestore soft-delete/recreate delays. Run the
-preview phases first (`RUN_TERRAFORM_APPLY=0`), import the pre-existing resources,
-then apply.
+manage — most commonly a Firebase iOS app and the Firestore `(default)` database
+(for example a project that was preserved or previously used) — those resources
+must be imported into Terraform state before the first apply. Otherwise apply
+fails with `ALREADY_EXISTS` when it tries to create them. Importing also
+preserves an App Store-registered Firebase app ID and avoids Firestore
+soft-delete/recreate delays.
 
-> **Automation in progress — #38 Step 3 (S5–S6).** This manual flow is being automated: idempotent Terraform imports of pre-existing resources in `scripts/create-environment.sh` (S5), and a protected Prod CI path for ongoing `terraform apply` and Functions deploys (`workflow_dispatch` + `environment: prod`, `main` only) (S6). Until that lands, follow the manual import-then-apply steps above; the first protected-environment `terraform apply` is operator-local because it creates the WIF pool and CI service account that CI later authenticates as.
+`make environment-create` handles this automatically. After `terraform init` and
+before `terraform plan`, it runs `scripts/import-preexisting-resources.sh`, which
+idempotently imports the two resources Terraform creates (and would therefore
+fail to re-create):
+
+- **Firestore `(default)` database** (`google_firestore_database.default`) —
+  imported when `gcloud firestore databases describe` finds it in the project.
+- **Firebase iOS app** (`google_firebase_apple_app.ios`) — discovered by matching
+  `CATVOX_IOS_BUNDLE_ID` (exact match) against the project's iOS apps from
+  `firebase apps:list IOS`, then imported by the discovered app ID. The bundle id
+  is the stable identifier in committed config; the app ID is a deferred
+  placeholder until provisioning completes, so it is discovered rather than read
+  from config.
+
+The phase is idempotent and safe to re-run: a resource already in Terraform state
+is skipped, and a resource absent from the project is left for apply to create
+(so a brand-new environment is a no-op). It imports nothing destructive — it only
+records existing resources in state — but it does write to remote state, so it
+runs as part of provisioning rather than a pure read-only preview.
+
+App Check singleton configs (`google_firebase_app_check_app_attest_config`,
+`google_firebase_app_check_service_config`) are intentionally not imported: they
+are PATCH-based singletons, so apply reconciles them via update rather than
+failing to create.
+
+Run the preview first (`RUN_TERRAFORM_APPLY=0`) to import and review the plan,
+then re-run with `RUN_TERRAFORM_APPLY=1` to apply. For a protected environment
+the first apply is operator-local because it also creates the Workload Identity
+Federation pool and `catvox-ci-sa` that CI later authenticates as (ADR-0024);
+subsequent applies go through the protected CI path.

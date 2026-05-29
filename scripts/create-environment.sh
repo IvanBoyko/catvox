@@ -88,6 +88,7 @@ MANAGE_GCF_SOURCES_BUCKET_IAM="$(normalize_bool CATVOX_MANAGE_GCF_SOURCES_BUCKET
 require_tool gcloud
 require_tool firebase
 require_tool terraform
+require_tool node
 
 echo "Environment : ${ENVIRONMENT}"
 echo "Project     : ${PROJECT_ID}"
@@ -185,6 +186,11 @@ make terraform-init \
   CATVOX_ENVIRONMENT="${ENVIRONMENT}" \
   CATVOX_PROJECT_ID="${PROJECT_ID}" \
   CATVOX_TF_VARS_FILE="${TFVARS_FILE}"
+
+# Import pre-existing resources (idempotent) so applying into a project that
+# already contains them succeeds instead of failing ALREADY_EXISTS. No-op for a
+# brand-new project. See docs/CREATE_NEW_ENVIRONMENT.md and issue #38 Step 3 (S5).
+./scripts/import-preexisting-resources.sh
 
 make terraform-plan \
   CATVOX_ENVIRONMENT="${ENVIRONMENT}" \
