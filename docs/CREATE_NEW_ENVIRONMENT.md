@@ -142,15 +142,18 @@ After Terraform apply and Functions deploy, update
 ```xcconfig
 CATVOX_PROJECT_ID = <project-id>
 CATVOX_ENVIRONMENT = <env>
+CATVOX_ENVIRONMENT_PROTECTED = <true for protected envs like Prod/Staging; false for Dev-like>
 CATVOX_FUNCTION_REGION = <region>
 CATVOX_FIRESTORE_LOCATION = <firestore-location>
 CATVOX_TF_STATE_BUCKET = catvox-tf-state-<project-id>
 CATVOX_GCP_CI_SERVICE_ACCOUNT = <terraform output -raw ci_service_account_email>
 CATVOX_GCP_WIF_PROVIDER = <terraform output -raw github_actions_wif_provider>
+CATVOX_GCP_WIF_GITHUB_REF = <empty for any ref; refs/heads/main for protected Prod>
 CATVOX_IOS_BUNDLE_ID = <bundle-id>
 CATVOX_FIREBASE_IOS_APP_DISPLAY_NAME = <display-name>
 CATVOX_FIREBASE_IOS_APP_DELETION_POLICY = ABANDON
 CATVOX_FIREBASE_APPLE_TEAM_ID = QYT76L5836
+CATVOX_FIREBASE_FIRESTORE_APP_CHECK_ENFORCEMENT = <UNENFORCED for Dev-like; ENFORCED for Prod>
 
 CATVOX_MANAGE_GCF_SOURCES_BUCKET_IAM = true
 CATVOX_SIGNED_UPLOAD_URL_HOST = <getSignedUploadURL Cloud Run host only>
@@ -161,6 +164,31 @@ Keep `CATVOX_GCP_CI_SERVICE_ACCOUNT` and `CATVOX_GCP_WIF_PROVIDER` as full
 strings, not composed pieces. **Note for App Check:** `config/environments/<env>.xcconfig` no longer requires App Check debug token boolean flags. The token itself in `terraform/env/<env>.tfvars` or the GitHub Environment secret determines registration.
 Committed boolean values must be lowercase `true` or `false`; do not use `1`,
 `0`, `yes`, or `no`.
+
+**WIF ref scoping (`CATVOX_GCP_WIF_GITHUB_REF`).** WIF trust is always scoped to
+the GitHub Environment whose name equals `CATVOX_ENVIRONMENT` (ADR-0024), so the
+GitHub Environment name must match the CatVox environment name and every CI job
+that authenticates must declare the matching `environment:`. Leave this key empty
+to trust any ref (Dev). Set it to `refs/heads/main` for a protected environment
+like Prod so CI auth additionally requires `assertion.ref == refs/heads/main`.
+
+**Firestore App Check (`CATVOX_FIREBASE_FIRESTORE_APP_CHECK_ENFORCEMENT`).** One
+of `OFF`, `UNENFORCED`, or `ENFORCED` (ADR-0025). Use `ENFORCED` for Prod-like
+environments (secure-by-default; Firebase client SDK access needs a valid App
+Attest token) and `UNENFORCED` for Dev-like environments so the debug-token path
+stays frictionless. Service-account / Admin SDK access (the backend SA and CI
+integration probes via `@google-cloud/firestore`) bypasses App Check regardless
+of this setting.
+
+**Environment security tier (`CATVOX_ENVIRONMENT_PROTECTED`).** `true` for
+protected environments (Prod/Staging-like), `false` for mutable Dev-like
+environments (ADR-0026). When `true`, `make ios-validate-env-config-structure`
+(via `scripts/validate-environment-config.mjs`) enforces the protected posture:
+App Check `ENFORCED`, a pinned `CATVOX_GCP_WIF_GITHUB_REF`, the `ABANDON`
+deletion policy, and that the environment is absent from
+`CATVOX_INTEGRATION_SAFE_ENVIRONMENTS`. Validation and smoke are
+environment-agnostic — run them with `CATVOX_ENVIRONMENT=<env>`; only the CI/CD
+promotion pipeline names environments literally.
 
 ## Conditional Apple Developer Bundle Setup
 

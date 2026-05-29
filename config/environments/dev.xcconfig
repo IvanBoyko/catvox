@@ -7,15 +7,24 @@
 
 CATVOX_PROJECT_ID = kathelix-catvox-dev
 CATVOX_ENVIRONMENT = dev
+// Environment security tier (ADR-0026). false = mutable/integration-safe (Dev-like):
+// debug token allowed, App Check may be UNENFORCED, WIF trusts any ref. true =
+// protected (Prod/Staging-like): App Check ENFORCED, WIF ref pinned, no debug token.
+CATVOX_ENVIRONMENT_PROTECTED = false
 CATVOX_FUNCTION_REGION = us-central1
 CATVOX_FIRESTORE_LOCATION = nam5
 CATVOX_TF_STATE_BUCKET = catvox-tf-state-kathelix-catvox-dev
 CATVOX_GCP_CI_SERVICE_ACCOUNT = catvox-ci-sa@kathelix-catvox-dev.iam.gserviceaccount.com
 CATVOX_GCP_WIF_PROVIDER = projects/99523926611/locations/global/workloadIdentityPools/github-actions-pool/providers/github-actions-provider
+// WIF ref pin: empty trusts any ref in the dev GitHub Environment. See ADR-0024.
+CATVOX_GCP_WIF_GITHUB_REF =
 CATVOX_IOS_BUNDLE_ID = com.kathelix.catvox.dev
 CATVOX_FIREBASE_IOS_APP_DISPLAY_NAME = CatVox Dev iOS
 CATVOX_FIREBASE_IOS_APP_DELETION_POLICY = DELETE
 CATVOX_FIREBASE_APPLE_TEAM_ID = QYT76L5836
+// Firestore App Check enforcement. Dev stays UNENFORCED so the debug-token path
+// is frictionless; service-account/Admin access bypasses App Check. See ADR-0025.
+CATVOX_FIREBASE_FIRESTORE_APP_CHECK_ENFORCEMENT = UNENFORCED
 CATVOX_MANAGE_GCF_SOURCES_BUCKET_IAM = true
 CATVOX_SIGNED_UPLOAD_URL_HOST = getsigneduploadurl-o2aj5rh53a-uc.a.run.app
 CATVOX_ANALYSE_VIDEO_HOST = analysevideo-o2aj5rh53a-uc.a.run.app

@@ -51,7 +51,7 @@ Each ADR should usually contain:
 | 0002 | Use App Attest for Firebase App Check | Accepted |
 | 0003 | Use Firebase Cloud Functions 2nd Gen as Backend Proxy | Accepted |
 | 0004 | Store Terraform Remote State in GCS | Accepted |
-| 0005 | Use Workload Identity Federation for Terraform CI | Accepted |
+| 0005 | Use Workload Identity Federation for Terraform CI | Accepted (updated by ADR-0024) |
 | 0006 | Split Runtime and CI Service Accounts | Accepted |
 | 0007 | Persistent Anonymous userId via UserDefaults for Quota Enforcement | Accepted |
 | 0008 | Load AI System Prompt from Markdown at Build Time | Accepted |
@@ -70,6 +70,9 @@ Each ADR should usually contain:
 | 0021 | Store Non-Secret Environment Values in xcconfig | Accepted (updated by ADR-0022) |
 | 0022 | Use CATVOX_PROJECT_ID as Canonical Project ID | Accepted |
 | 0023 | Adopt Hybrid Agent Review Loop | Accepted |
+| 0024 | Scope CI WIF Trust to GitHub Environment and Branch Ref | Accepted |
+| 0025 | Enforce App Check on Cloud Firestore per Environment | Accepted |
+| 0026 | Classify Environments by Security Tier in Config | Accepted |
 
 ## Workflow
 

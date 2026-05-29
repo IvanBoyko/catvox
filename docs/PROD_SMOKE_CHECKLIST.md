@@ -19,14 +19,14 @@ in `CATVOX_INTEGRATION_SAFE_ENVIRONMENTS`.
 From the repository root:
 
 ```bash
-make prod-smoke
+CATVOX_ENVIRONMENT=prod make smoke
 ```
 
 After Step 3 of issue #38 lands real Prod Firebase, Functions, and Terraform
 state values, operators may make skips fail loudly:
 
 ```bash
-CATVOX_PROD_SMOKE_REQUIRE_LIVE=1 make prod-smoke
+CATVOX_SMOKE_REQUIRE_LIVE=1 CATVOX_ENVIRONMENT=prod make smoke
 ```
 
 The command forces `CATVOX_ENVIRONMENT=prod` and performs only read-only checks:
@@ -73,7 +73,7 @@ Before treating a Prod deploy as healthy, verify these items manually:
 
 ## Failure Handling
 
-If `make prod-smoke` fails after live Prod values have landed:
+If `CATVOX_ENVIRONMENT=prod make smoke` fails after live Prod values have landed:
 
 1. Stop the release or cutover.
 2. Keep the failed command output with the PR or release notes.
@@ -82,5 +82,5 @@ If `make prod-smoke` fails after live Prod values have landed:
    tests for Prod smoke.
 
 If a check is skipped after Step 3 should be complete, re-run with
-`CATVOX_PROD_SMOKE_REQUIRE_LIVE=1` to turn skips into failures and fix the
+`CATVOX_SMOKE_REQUIRE_LIVE=1` to turn skips into failures and fix the
 missing precondition.

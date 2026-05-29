@@ -366,7 +366,7 @@ Firebase plist convention:
 * `make ios-validate-env-config` and the app target pre-build script validate that the selected plist matches the selected environment project ID, Firebase app ID, API key, and bundle ID.
 * Until the real Prod plist lands, CI must still run structural Prod config validation against `config/environments/prod.xcconfig`. That structural check may allow only the explicitly deferred Step 3 values for Firebase app ID, Firebase API key, and backend endpoint hosts.
 
-Mutable live integration tests may run only against environments explicitly marked integration-safe with `CATVOX_INTEGRATION_SAFE_ENVIRONMENTS`. Production deployments get protected non-invasive smoke tests only through `make prod-smoke` and `docs/PROD_SMOKE_CHECKLIST.md`.
+Mutable live integration tests may run only against environments explicitly marked integration-safe with `CATVOX_INTEGRATION_SAFE_ENVIRONMENTS`. Production deployments get protected non-invasive smoke tests only through `CATVOX_ENVIRONMENT=prod make smoke` and `docs/PROD_SMOKE_CHECKLIST.md`.
 
 ---
 

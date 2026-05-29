@@ -7,15 +7,26 @@
 
 CATVOX_PROJECT_ID = kathelix-catvox-prod
 CATVOX_ENVIRONMENT = prod
+// Environment security tier (ADR-0026). true = protected (Prod/Staging-like):
+// the generic validator requires App Check ENFORCED, WIF ref pinned, ABANDON
+// deletion policy, and that this env is absent from the integration-safe list.
+CATVOX_ENVIRONMENT_PROTECTED = true
 CATVOX_FUNCTION_REGION = us-central1
 CATVOX_FIRESTORE_LOCATION = nam5
 CATVOX_TF_STATE_BUCKET = catvox-tf-state-kathelix-catvox-prod
 CATVOX_GCP_CI_SERVICE_ACCOUNT = catvox-ci-sa@kathelix-catvox-prod.iam.gserviceaccount.com
 CATVOX_GCP_WIF_PROVIDER = projects/953500951129/locations/global/workloadIdentityPools/github-actions-pool/providers/github-actions-provider
+// WIF ref pin: Prod trusts only refs/heads/main in the protected prod GitHub
+// Environment, so CI auth requires environment=prod AND ref=main. See ADR-0024.
+CATVOX_GCP_WIF_GITHUB_REF = refs/heads/main
 CATVOX_IOS_BUNDLE_ID = com.kathelix.catvox
 CATVOX_FIREBASE_IOS_APP_DISPLAY_NAME = CatVox Prod iOS
 CATVOX_FIREBASE_IOS_APP_DELETION_POLICY = ABANDON
 CATVOX_FIREBASE_APPLE_TEAM_ID = QYT76L5836
+// Firestore App Check enforcement. Prod is ENFORCED (secure-by-default):
+// Firebase client SDK access needs a valid App Attest token; service-account /
+// Admin SDK access (backend SA, CI probes) bypasses App Check. See ADR-0025.
+CATVOX_FIREBASE_FIRESTORE_APP_CHECK_ENFORCEMENT = ENFORCED
 
 
 CATVOX_MANAGE_GCF_SOURCES_BUCKET_IAM = true

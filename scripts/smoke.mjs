@@ -1,22 +1,40 @@
 #!/usr/bin/env node
+// Environment-agnostic, non-mutating smoke check for a deployed environment.
+//
+// Run as: CATVOX_ENVIRONMENT=<env> make smoke
+//
+// Every check is read-only: it must not write Firestore documents, create GCS
+// objects, invoke mutating Cloud Function paths, start Cloud Build, or register
+// App Check debug tokens. Intended for protected environments before/after a
+// deploy, but safe to run against any environment. See
+// docs/PROD_SMOKE_CHECKLIST.md.
 import { existsSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { request } from 'node:https';
 import { fileURLToPath } from 'node:url';
 import {
-  deferredProdKeys,
+  deferredKeys,
   normalize,
-  validateProdEnvironmentConfig,
-} from './validate-prod-environment-config.mjs';
+  validateEnvironmentConfig,
+} from './validate-environment-config.mjs';
 import placeholderHelpers from './lib/config-placeholders.cjs';
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const { isPlaceholder } = placeholderHelpers;
-const requireLive = process.env.CATVOX_PROD_SMOKE_REQUIRE_LIVE === '1';
+const requireLive = process.env.CATVOX_SMOKE_REQUIRE_LIVE === '1';
+const environmentName = normalize(process.env.CATVOX_ENVIRONMENT);
 const skipped = [];
 let values;
 let deferred;
+
+if (!environmentName) {
+  console.error('CATVOX_ENVIRONMENT is required for smoke checks');
+  process.exit(1);
+}
+
+const configRel = process.env.CATVOX_ENV_CONFIG || `config/environments/${environmentName}.xcconfig`;
+const configPath = resolve(repoRoot, configRel);
 
 try {
   await main();
@@ -26,15 +44,16 @@ try {
 }
 
 async function main() {
-  const result = validateProdEnvironmentConfig({
-    configPath: resolve(repoRoot, 'config/environments/prod.xcconfig'),
-    requireLiveValues: requireLive,
+  const result = validateEnvironmentConfig({
+    configPath,
+    environmentName,
+    requireLive,
   });
 
   values = result.values;
   deferred = new Set(result.deferredPlaceholders);
 
-  console.log('ok: prod xcconfig structural checks passed');
+  console.log(`ok: ${environmentName} xcconfig structural checks passed`);
 
   await runFirebasePlistCheck();
   await runTerraformRefreshOnlyPlan();
@@ -43,42 +62,45 @@ async function main() {
   await runEndpointAppCheckProbe('analyseVideo', values.get('CATVOX_ANALYSE_VIDEO_HOST'));
 
   if (requireLive && skipped.length > 0) {
-    throw new Error(`Prod smoke required live checks, but skipped: ${skipped.join('; ')}`);
+    throw new Error(`Smoke required live checks, but skipped: ${skipped.join('; ')}`);
   }
 
   if (skipped.length > 0) {
     console.log(`skipped: ${skipped.join('; ')}`);
   }
-  console.log('Prod smoke completed without mutations.');
+  console.log(`${environmentName} smoke completed without mutations.`);
 }
 
 async function runFirebasePlistCheck() {
-  const plistPath = resolve(repoRoot, 'CatVox/Resources/Firebase/GoogleService-Info-prod.plist');
+  const plistPath = resolve(
+    repoRoot,
+    `CatVox/Resources/Firebase/GoogleService-Info-${environmentName}.plist`
+  );
   if (!existsSync(plistPath)) {
-    skip('Firebase plist validation', 'GoogleService-Info-prod.plist is deferred to Step 3');
+    skip('Firebase plist validation', `GoogleService-Info-${environmentName}.plist is not present yet`);
     return;
   }
 
   if (hasDeferredFirebasePlaceholder()) {
-    skip('Firebase plist validation', 'Firebase app ID/API key are still Step 3 placeholders');
+    skip('Firebase plist validation', 'Firebase app ID/API key are still placeholders');
     return;
   }
 
   runChecked('node', ['scripts/validate-firebase-ios-config.mjs'], {
     ...process.env,
-    CATVOX_ENVIRONMENT: 'prod',
-    CATVOX_ENV_CONFIG: 'config/environments/prod.xcconfig',
+    CATVOX_ENVIRONMENT: environmentName,
+    CATVOX_ENV_CONFIG: configRel,
     CATVOX_PROJECT_ID: requiredValue('CATVOX_PROJECT_ID'),
     CATVOX_FIREBASE_APP_ID: requiredValue('CATVOX_FIREBASE_APP_ID'),
     CATVOX_FIREBASE_API_KEY: requiredValue('CATVOX_FIREBASE_API_KEY'),
     CATVOX_IOS_BUNDLE_ID: requiredValue('CATVOX_IOS_BUNDLE_ID'),
   });
-  console.log('ok: prod Firebase plist matches prod xcconfig');
+  console.log(`ok: ${environmentName} Firebase plist matches xcconfig`);
 }
 
 async function runTerraformRefreshOnlyPlan() {
   if (!liveConfigReady()) {
-    skip('Terraform refresh-only plan', 'live Prod config is deferred to Step 3');
+    skip('Terraform refresh-only plan', 'live config is not complete yet');
     return;
   }
 
@@ -87,9 +109,13 @@ async function runTerraformRefreshOnlyPlan() {
     return;
   }
 
-  const tfvarsPath = resolve(repoRoot, 'terraform/env/prod.tfvars');
+  const tfvarsRel = `env/${environmentName}.tfvars`;
+  const tfvarsPath = resolve(repoRoot, `terraform/${tfvarsRel}`);
   if (!process.env.TF_VAR_alert_email && !existsSync(tfvarsPath)) {
-    skip('Terraform refresh-only plan', 'TF_VAR_alert_email or terraform/env/prod.tfvars is required');
+    skip(
+      'Terraform refresh-only plan',
+      `TF_VAR_alert_email or terraform/${tfvarsRel} is required`
+    );
     return;
   }
 
@@ -99,21 +125,21 @@ async function runTerraformRefreshOnlyPlan() {
     'init',
     '-reconfigure',
     `-backend-config=bucket=${requiredValue('CATVOX_TF_STATE_BUCKET')}`,
-    '-backend-config=prefix=catvox/state',
+    `-backend-config=prefix=${process.env.CATVOX_TF_STATE_PREFIX || 'catvox/state'}`,
   ], terraformEnv);
   runChecked('terraform', [
     '-chdir=terraform',
     'plan',
     '-refresh-only',
     '-no-color',
-    ...(existsSync(tfvarsPath) ? ['-var-file=env/prod.tfvars'] : []),
+    ...(existsSync(tfvarsPath) ? [`-var-file=${tfvarsRel}`] : []),
   ], terraformEnv);
   console.log('ok: terraform refresh-only plan completed');
 }
 
 async function runFirestoreDescribe() {
   if (!liveConfigReady()) {
-    skip('Firestore database describe', 'live Prod config is deferred to Step 3');
+    skip('Firestore database describe', 'live config is not complete yet');
     return;
   }
 
@@ -136,7 +162,7 @@ async function runFirestoreDescribe() {
 async function runEndpointAppCheckProbe(name, host) {
   const normalizedHost = normalize(host);
   if (!normalizedHost || isPlaceholder(normalizedHost)) {
-    skip(`${name} endpoint liveness`, 'backend endpoint host is deferred to Step 3');
+    skip(`${name} endpoint liveness`, 'backend endpoint host is not configured yet');
     return;
   }
 
@@ -151,7 +177,7 @@ async function runEndpointAppCheckProbe(name, host) {
 }
 
 function liveConfigReady() {
-  for (const key of deferredProdKeys) {
+  for (const key of deferredKeys) {
     const value = normalize(values.get(key));
     if (!value || isPlaceholder(value)) {
       return false;
@@ -176,7 +202,7 @@ function terraformEnvironment() {
   return {
     ...process.env,
     GOOGLE_CLOUD_QUOTA_PROJECT: requiredValue('CATVOX_PROJECT_ID'),
-    TF_VAR_environment_name: 'prod',
+    TF_VAR_environment_name: environmentName,
     TF_VAR_project_id: requiredValue('CATVOX_PROJECT_ID'),
     TF_VAR_region: requiredValue('CATVOX_FUNCTION_REGION'),
     TF_VAR_firestore_location: requiredValue('CATVOX_FIRESTORE_LOCATION'),
@@ -186,6 +212,8 @@ function terraformEnvironment() {
     TF_VAR_firebase_ios_app_deletion_policy: requiredValue('CATVOX_FIREBASE_IOS_APP_DELETION_POLICY'),
     TF_VAR_firebase_apple_team_id: requiredValue('CATVOX_FIREBASE_APPLE_TEAM_ID'),
     TF_VAR_manage_gcf_sources_bucket_iam: requiredValue('CATVOX_MANAGE_GCF_SOURCES_BUCKET_IAM'),
+    TF_VAR_github_ref: normalize(values.get('CATVOX_GCP_WIF_GITHUB_REF')) || '',
+    TF_VAR_firestore_app_check_enforcement: requiredValue('CATVOX_FIREBASE_FIRESTORE_APP_CHECK_ENFORCEMENT'),
   };
 }
 

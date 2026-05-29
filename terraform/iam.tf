@@ -84,6 +84,20 @@ data "google_project" "project" {
 locals {
   compute_default_sa            = "serviceAccount:${data.google_project.project.number}-compute@developer.gserviceaccount.com"
   manage_gcf_sources_bucket_iam = lower(trimspace(var.manage_gcf_sources_bucket_iam)) == "true"
+
+  # WIF trust is scoped per environment: every CI job that authenticates must
+  # run in the GitHub Environment matching CATVOX_ENVIRONMENT (assertion
+  # .environment), and may be further pinned to a branch/tag (assertion.ref)
+  # when github_ref is set (Prod pins refs/heads/main). The repository check is
+  # always present so only kathelix/catvox tokens reach this pool. See ADR-0024.
+  wif_git_ref = trimspace(var.github_ref)
+  wif_attribute_condition = join(" && ", concat(
+    [
+      "assertion.repository == '${var.github_repo}'",
+      "assertion.environment == '${var.environment_name}'",
+    ],
+    local.wif_git_ref != "" ? ["assertion.ref == '${local.wif_git_ref}'"] : []
+  ))
 }
 
 resource "google_storage_bucket_iam_member" "compute_sa_sources_object_admin" {
@@ -148,14 +162,16 @@ resource "google_iam_workload_identity_pool_provider" "github_actions" {
   workload_identity_pool_id          = google_iam_workload_identity_pool.github_actions.workload_identity_pool_id
   workload_identity_pool_provider_id = var.wif_provider_id
   display_name                       = "GitHub Actions OIDC Provider"
-  description                        = "Trusts GitHub Actions OIDC tokens from ${var.github_repo}."
-  attribute_condition                = "assertion.repository == '${var.github_repo}'"
+  description                        = "Trusts GitHub Actions OIDC tokens from ${var.github_repo} (environment ${var.environment_name})."
+  attribute_condition                = local.wif_attribute_condition
 
   attribute_mapping = {
     "google.subject"             = "assertion.sub"
     "attribute.actor"            = "assertion.actor"
     "attribute.repository"       = "assertion.repository"
     "attribute.repository_owner" = "assertion.repository_owner"
+    "attribute.environment"      = "assertion.environment"
+    "attribute.ref"              = "assertion.ref"
   }
 
   oidc {
@@ -198,11 +214,15 @@ resource "google_project_iam_member" "tf_ci_sa_admin" {
 }
 
 # Workload Identity Federation — allow GitHub Actions tokens from
-# kathelix/catvox to impersonate catvox-ci-sa.
+# kathelix/catvox running in the matching GitHub Environment to impersonate
+# catvox-ci-sa. Scoping the principalSet to attribute.environment is a second
+# enforcement layer on top of the provider attribute_condition: even if the
+# condition were loosened, only tokens carrying environment=${var.environment_name}
+# could impersonate this SA. See ADR-0024.
 resource "google_service_account_iam_member" "ci_sa_wif_binding" {
   service_account_id = google_service_account.ci_sa.name
   role               = "roles/iam.workloadIdentityUser"
-  member             = "principalSet://iam.googleapis.com/projects/${data.google_project.project.number}/locations/global/workloadIdentityPools/${var.wif_pool_id}/attribute.repository/${var.github_repo}"
+  member             = "principalSet://iam.googleapis.com/projects/${data.google_project.project.number}/locations/global/workloadIdentityPools/${var.wif_pool_id}/attribute.environment/${var.environment_name}"
 
   depends_on = [google_iam_workload_identity_pool_provider.github_actions]
 }
