@@ -369,7 +369,7 @@ GitHub Actions WIF produces an external-account Application Default Credentials 
 | `build.yml` | Push/PR touching iOS-relevant app, project, config, script, Makefile, or workflow files | XcodeGen → build generic iOS Simulator slice → run unit tests on a concrete simulator |
 | `functions.yml` (build) | Push/PR touching `functions/**`, `firebase.json`, `docs/systemInstruction.md`, `Makefile`, or workflow | TypeScript compile check + backend unit tests |
 | `functions.yml` (deploy: dev) | Merge to `main` touching Functions inputs | Auto-deploy to dev via reusable `functions-deploy.yml`, then Dev integration tests |
-| `functions.yml` (deploy: prod) | Manual `workflow_dispatch` from `main` | Prod deploy via `functions-deploy.yml`; protected `prod` Environment gates it; no integration |
+| `functions.yml` (deploy: prod) | Push to `main`, after dev integration (`needs: integration-after-deploy`) | Approval-gated prod deploy via `functions-deploy.yml`; the protected `prod` Environment pauses it for reviewer approval; no integration |
 | `markdownlint.yml` | Push/PR touching `docs/**`, top-level `README.md`, `.markdownlint.jsonc`, or workflow | markdownlint quality check for repository docs |
 | `terraform.yml` (plan) | PR touching `terraform/**` (excluding `terraform/posthog/**`), `Makefile`, or workflow | fmt-check → init → validate → plan → PR comment |
 | `terraform.yml` (apply: dev) | Merge to `main` touching Terraform inputs | Auto-apply to dev via reusable `terraform-apply.yml` |

@@ -14,8 +14,8 @@ workflow families:
   manual `workflow_dispatch` apply for protected environments (e.g. prod).
 - PostHog Terraform plan on PRs and apply on merge to `main` (separate root,
   separate state prefix; see ADR-0020).
-- Firebase Functions build on PRs and automatic deploy plus integration after
-  merge to `main` (Dev), plus a manual `workflow_dispatch` deploy for protected
+- Firebase Functions build on PRs and, on merge to `main`, an ordered pipeline:
+  deploy + integration on Dev, then an approval-gated `deploy-prod` for protected
   environments (e.g. prod).
 
 The Terraform and Functions deploy paths authenticate to Google Cloud through
@@ -31,10 +31,13 @@ Use GitHub Environments to scope cloud secrets by target environment:
 | `dev` | Unprotected or lightly protected. PR/main deploy paths target Dev. |
 | `prod` | Protected. Require explicit approval before any production deploy. |
 
-Both the Terraform and Functions workflows model promotion as two steps: **dev is
-automatic** (apply/deploy on merge to `main`) and **prod is manual** (a separate
-`apply-prod` / `deploy-prod` job triggered by `workflow_dispatch` from `main` —
-there is no environment chooser; running the workflow means "promote to prod").
+Both workflows model promotion as **dev automatic, prod manual**, by different
+mechanisms until the delivery orchestrator (#106) unifies them. Terraform: a
+separate `apply-prod` job triggered by `workflow_dispatch` from `main`. Functions:
+`deploy-prod` runs in the push pipeline after the Dev deploy + integration
+(`needs: integration-after-deploy`) and is held at the protected environment's
+approval gate — approving it is the manual promote. Neither has an environment
+chooser.
 Each shared apply/deploy body lives in a reusable workflow (`terraform-apply.yml`,
 `functions-deploy.yml`) invoked with the target environment, and GCP
 authentication is the `gcp-auth` composite action. The protected `prod` GitHub

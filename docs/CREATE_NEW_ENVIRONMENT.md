@@ -436,15 +436,19 @@ Protected environments get **no** App Check debug token; PostHog
 gh secret set TF_VAR_ALERT_EMAIL --env "$ENV" --repo kathelix/catvox
 ```
 
-**6 · First Functions deploy — via the protected CI path.** Trigger the Functions
-workflow manually from `main`; approve the `$ENV` Environment gate when GitHub
-prompts you. (Ongoing Terraform changes promote the same way with
-`terraform.yml`.)
+**6 · Promote to the protected environment.** Promotion is split by tool until the
+delivery orchestrator (#106) unifies it:
+
+- **Terraform (apply infra first):** a manual dispatch from `main`, approved on the
+  `$ENV` Environment — `gh workflow run terraform.yml --ref main`.
+- **Functions:** automatic in the push pipeline. On merge to `main` it deploys to
+  dev, runs dev integration, then **pauses `deploy-prod` for your approval** on the
+  `$ENV` Environment; approve it (the run page, or Settings → Environments) to
+  promote. It only runs after dev + integration pass.
 
 ```bash
-gh workflow run functions.yml --ref main
-# later, to promote infrastructure changes:
-# gh workflow run terraform.yml --ref main
+gh workflow run terraform.yml --ref main   # Terraform: manual dispatch, then approve
+# Functions: no command — approve the paused deploy-prod job on the next push to main
 ```
 
 **7 · Fill backend host config + verify.** After the deploy, read the deployed
@@ -458,8 +462,9 @@ a protected environment.
 CATVOX_ENVIRONMENT="$ENV" make smoke
 ```
 
-**Ongoing.** Every later Terraform apply and Functions deploy goes through the
-protected CI path (`gh workflow run … --ref main` → your approval on the `$ENV`
-Environment). The one exception is WIF pool/provider/binding changes: apply those
-operator-local before merge, because the CI SA cannot modify them (see
-`docs/CI_BOOTSTRAP.md`).
+**Ongoing.** Later Terraform applies to the protected environment are a manual
+dispatch (`gh workflow run terraform.yml --ref main`, approved on the `$ENV`
+Environment); later Functions deploys promote automatically through the push
+pipeline behind that same approval gate. The one exception is WIF
+pool/provider/binding changes: apply those operator-local before merge, because
+the CI SA cannot modify them (see `docs/CI_BOOTSTRAP.md`).
