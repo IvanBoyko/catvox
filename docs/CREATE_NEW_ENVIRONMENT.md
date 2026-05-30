@@ -318,3 +318,114 @@ then re-run with `RUN_TERRAFORM_APPLY=1` to apply. For a protected environment
 the first apply is operator-local because it also creates the Workload Identity
 Federation pool and `catvox-ci-sa` that CI later authenticates as (ADR-0024);
 subsequent applies go through the protected CI path.
+
+## Operator Checklist: Standing Up a Protected Environment
+
+This sequences the manual operator actions to bring a **protected** environment
+(for example `prod`) fully online, end to end. The sections above cover each
+piece in detail; this is the order to run them in. Every step is operator-run —
+they need GCP-admin credentials, repo-admin rights, and the environment's secret
+values, so they are not part of any PR diff or CI job.
+
+Set these once for the session (substitute your environment):
+
+```bash
+export ENV=prod
+export PROJECT_ID=kathelix-catvox-prod
+```
+
+**1 · First Terraform apply — operator-local (O1).** Run locally with GCP-admin
+credentials: it creates the WIF pool and `catvox-ci-sa` that CI authenticates as,
+and (for a preserved project) imports the existing Firebase app + Firestore
+before applying. CI cannot do this — the CI SA has no `workloadIdentityPoolAdmin`
+(see `docs/CI_BOOTSTRAP.md`). Functions are deliberately not deployed here;
+protected environments deploy only through the protected CI path (step 6).
+
+```bash
+# Authenticate as the project's GCP admin first:
+#   gcloud auth login && gcloud auth application-default login
+CATVOX_ENVIRONMENT="$ENV" \
+CATVOX_PROJECT_ID="$PROJECT_ID" \
+PROJECT_DISPLAY_NAME="Kathelix CatVox Prod" \
+CATVOX_FUNCTION_REGION=us-central1 \
+CATVOX_FIRESTORE_LOCATION=nam5 \
+CATVOX_TF_STATE_BUCKET="catvox-tf-state-$PROJECT_ID" \
+CATVOX_TF_STATE_PREFIX=catvox/state \
+CATVOX_IOS_BUNDLE_ID=com.kathelix.catvox \
+CATVOX_FIREBASE_IOS_APP_DISPLAY_NAME="CatVox Prod iOS" \
+CATVOX_FIREBASE_IOS_APP_DELETION_POLICY=ABANDON \
+CATVOX_FIREBASE_APPLE_TEAM_ID=QYT76L5836 \
+CATVOX_MANAGE_GCF_SOURCES_BUCKET_IAM=true \
+ALERT_EMAIL=<prod-alerts@example.com> \
+RUN_TERRAFORM_APPLY=1 \
+RUN_FUNCTIONS_DEPLOY=0 \
+make environment-create
+```
+
+**2 · Commit the Firebase plist (O4).** Step 1 wrote
+`CatVox/Resources/Firebase/GoogleService-Info-$ENV.plist` from Terraform output;
+commit it so the iOS build for `$ENV` can load it. Standalone re-run:
+
+```bash
+CATVOX_ENVIRONMENT="$ENV" make terraform-output-firebase-plist
+```
+
+**3 · Fill committed config from Terraform output.** In
+`config/environments/$ENV.xcconfig`, replace the `replace-with-prod-…`
+placeholders for `CATVOX_FIREBASE_APP_ID` and `CATVOX_FIREBASE_API_KEY` (see
+"Committed Environment Config"). The two Cloud Run host placeholders are filled
+after the deploy, in step 7.
+
+**4 · Create the protected GitHub Environment + required reviewer (O2).**
+Repo-admin action. For `prod` the sole required reviewer is **Ivan Boyko**:
+
+```bash
+REVIEWER_ID=$(gh api users/IvanBoyko --jq .id)
+gh api --method PUT repos/kathelix/catvox/environments/"$ENV" --input - <<JSON
+{
+  "reviewers": [{"type": "User", "id": ${REVIEWER_ID}}],
+  "deployment_branch_policy": {"protected_branches": true, "custom_branch_policies": false}
+}
+JSON
+```
+
+`protected_branches: true` requires `main` to be a protected branch; the WIF ref
+pin (`CATVOX_GCP_WIF_GITHUB_REF=refs/heads/main`) already restricts this
+environment's CI auth to `main` (ADR-0024). You can also set the reviewer from the
+GitHub UI: Settings → Environments → `$ENV` → Required reviewers.
+
+**5 · Set the environment's secrets (O3).** You supply the value when prompted.
+Protected environments get **no** App Check debug token; PostHog
+(`POSTHOG_API_KEY`) is deferred to #37 (see "GitHub Environment Secrets").
+
+```bash
+gh secret set TF_VAR_ALERT_EMAIL --env "$ENV" --repo kathelix/catvox
+```
+
+**6 · First Functions deploy — via the protected CI path.** Trigger the Functions
+workflow manually from `main`; approve the `$ENV` Environment gate when GitHub
+prompts you. (Ongoing Terraform changes promote the same way with
+`terraform.yml`.)
+
+```bash
+gh workflow run functions.yml --ref main
+# later, to promote infrastructure changes:
+# gh workflow run terraform.yml --ref main
+```
+
+**7 · Fill backend host config + verify.** After the deploy, read the deployed
+Cloud Run hosts and fill `CATVOX_SIGNED_UPLOAD_URL_HOST` /
+`CATVOX_ANALYSE_VIDEO_HOST` in `config/environments/$ENV.xcconfig` (see "Update
+App Config After Deploy"), then run the non-invasive smoke and follow
+`docs/SMOKE_CHECKLIST.md`. Never run Firestore-mutating integration tests against
+a protected environment.
+
+```bash
+CATVOX_ENVIRONMENT="$ENV" make smoke
+```
+
+**Ongoing.** Every later Terraform apply and Functions deploy goes through the
+protected CI path (`gh workflow run … --ref main` → your approval on the `$ENV`
+Environment). The one exception is WIF pool/provider/binding changes: apply those
+operator-local before merge, because the CI SA cannot modify them (see
+`docs/CI_BOOTSTRAP.md`).
