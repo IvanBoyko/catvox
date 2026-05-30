@@ -409,27 +409,24 @@ CATVOX_ENVIRONMENT="$ENV" make terraform-output-firebase-plist
 git add "CatVox/Resources/Firebase/GoogleService-Info-$ENV.plist" "config/environments/$ENV.xcconfig"
 ```
 
-**4 · Create the protected GitHub Environment + required reviewer (O2).**
-Repo-admin action. For `prod` the sole required reviewer is **Ivan Boyko**:
+**4 · Configure the GitHub Environment from config (O2).** Repo-admin action.
+`make configure-github-environment` reads `CATVOX_ENVIRONMENT_PROTECTED` and
+`CATVOX_GCP_WIF_GITHUB_REF` from `config/environments/$ENV.xcconfig` and applies
+the matching protection — a **protected** environment gets required reviewers plus
+a deployment-branch policy pinned to the WIF ref's branch; a **mutable** one gets
+no reviewers and no branch restriction. Pass the reviewer(s), required when the
+environment is protected:
 
 ```bash
-REVIEWER_ID=$(gh api users/IvanBoyko --jq .id)
-gh api --method PUT repos/kathelix/catvox/environments/"$ENV" --input - <<JSON
-{
-  "reviewers": [{"type": "User", "id": ${REVIEWER_ID}}],
-  "deployment_branch_policy": {"protected_branches": false, "custom_branch_policies": true}
-}
-JSON
-# Allow only main to deploy to this environment:
-gh api --method POST repos/kathelix/catvox/environments/"$ENV"/deployment-branch-policies -f name=main
+make configure-github-environment CATVOX_ENVIRONMENT="$ENV" \
+  GITHUB_ENVIRONMENT_REVIEWERS=IvanBoyko
 ```
 
-The custom `main` policy and the WIF ref pin
-(`CATVOX_GCP_WIF_GITHUB_REF=refs/heads/main`, ADR-0024) both restrict this
-environment's deploys to `main`. Do **not** use `"protected_branches": true`
-unless `main` actually has a branch-protection rule — with no protected branch it
-matches nothing and silently blocks every deploy. You can also manage the
-reviewer + branch policy from the UI: Settings → Environments → `$ENV`.
+For `prod` (`CATVOX_ENVIRONMENT_PROTECTED=true`,
+`CATVOX_GCP_WIF_GITHUB_REF=refs/heads/main`) this requires Ivan Boyko's approval
+and restricts deploys to `main`; for a mutable environment it leaves the
+environment open. Re-running is idempotent. You can also manage it from the UI:
+Settings → Environments → `$ENV`.
 
 **5 · Set the environment's secrets (O3).** You supply the value when prompted.
 Protected environments get **no** App Check debug token; PostHog

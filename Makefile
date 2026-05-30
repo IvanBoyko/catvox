@@ -113,7 +113,7 @@ endef
 	backend-build backend-deploy backend-integration \
 	terraform-check-env-paths terraform-fmt-check terraform-init terraform-validate terraform-test terraform-plan terraform-ci-plan terraform-apply terraform-ci-apply terraform-import terraform-output-firebase-plist \
 	posthog-terraform-check-env-paths posthog-terraform-fmt-check posthog-terraform-init posthog-terraform-validate posthog-terraform-plan posthog-terraform-ci-plan posthog-terraform-apply posthog-terraform-ci-apply \
-	smoke environment-create
+	smoke environment-create configure-github-environment
 
 help:
 	@printf '%s\n' \
@@ -152,6 +152,7 @@ help:
 		'' \
 		'  make smoke CATVOX_ENVIRONMENT=<env> Run non-invasive environment smoke checks' \
 		'  make environment-create     Bootstrap a named GCP/Firebase environment' \
+		'  make configure-github-environment Configure a GitHub Environment from committed config' \
 		'' \
 		'Environment overrides:' \
 		'  CATVOX_ENVIRONMENT=dev selects config/environments/dev.xcconfig plus matching Terraform tfvars basename' \
@@ -207,6 +208,7 @@ scripts-test:
 	@bash scripts/test/emit-xcconfig-env.test.sh
 	@bash scripts/test/makefile-env-cache.test.sh
 	@bash scripts/test/import-preexisting-resources.test.sh
+	@bash scripts/test/configure-github-environment.test.sh
 	@node --test scripts/test/validate-environment-config.test.mjs scripts/test/find-firebase-ios-app-id.test.mjs
 	@python3 tools/ai-loop/ai_loop_test.py
 
@@ -495,3 +497,10 @@ environment-create:
 	 CATVOX_FIREBASE_APPLE_TEAM_ID="$(CATVOX_FIREBASE_APPLE_TEAM_ID)" \
 	 CATVOX_MANAGE_GCF_SOURCES_BUCKET_IAM="$(CATVOX_MANAGE_GCF_SOURCES_BUCKET_IAM)" \
 	 ./scripts/create-environment.sh
+
+configure-github-environment:
+	@CATVOX_ENVIRONMENT="$(CATVOX_ENVIRONMENT)" \
+	 CATVOX_ENVIRONMENT_PROTECTED="$(CATVOX_ENVIRONMENT_PROTECTED)" \
+	 CATVOX_GCP_WIF_GITHUB_REF="$(CATVOX_GCP_WIF_GITHUB_REF)" \
+	 GITHUB_ENVIRONMENT_REVIEWERS="$(GITHUB_ENVIRONMENT_REVIEWERS)" \
+	 ./scripts/configure-github-environment.sh
