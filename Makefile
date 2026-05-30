@@ -356,6 +356,7 @@ functions-test:
 	@npm --prefix functions run test:unit
 
 functions-deploy: functions-build
+	@firebase functions:artifacts:setpolicy --project "$(CATVOX_PROJECT_ID)" --location "$(CATVOX_FUNCTION_REGION)" --days 7 --non-interactive --force
 	@CATVOX_ENVIRONMENT="$(CATVOX_ENVIRONMENT)" \
 	 CATVOX_PROJECT_ID="$(CATVOX_PROJECT_ID)" \
 	 CATVOX_FUNCTION_REGION="$(CATVOX_FUNCTION_REGION)" \

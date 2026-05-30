@@ -212,13 +212,7 @@ else
 fi
 
 if [[ "${RUN_FUNCTIONS_DEPLOY}" == "1" ]]; then
-  firebase functions:artifacts:setpolicy \
-    --project "${PROJECT_ID}" \
-    --location "${REGION}" \
-    --days 7 \
-    --non-interactive \
-    --force
-
+  # make functions-deploy sets the Artifact Registry cleanup policy itself.
   make functions-deploy \
     CATVOX_ENVIRONMENT="${ENVIRONMENT}" \
     CATVOX_PROJECT_ID="${PROJECT_ID}"
