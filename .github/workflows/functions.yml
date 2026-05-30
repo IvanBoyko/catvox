@@ -1,6 +1,15 @@
 name: Functions
 
 on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Environment to deploy Functions to. Protected environments (e.g. prod) require reviewer approval; runs only from main.'
+        type: choice
+        options:
+          - prod
+          - dev
+        default: prod
   push:
     branches: [main]
     paths:
@@ -31,7 +40,9 @@ on:
       - '.github/workflows/functions.yml'
 
 concurrency:
-  group: functions-${{ github.ref }}
+  # Isolate a manual environment-gated deploy from the automatic dev push deploy
+  # so they never cancel each other on main.
+  group: functions-${{ github.event.inputs.environment || github.event_name }}-${{ github.ref }}
   cancel-in-progress: true
 
 permissions:
@@ -151,3 +162,50 @@ jobs:
           CATVOX_INTEGRATION_SAFE_ENVIRONMENTS: dev
           CATVOX_APP_CHECK_DEBUG_TOKEN: ${{ secrets.TF_VAR_APP_CHECK_DEBUG_TOKEN }}
         run: make functions-integration
+
+  # ── Deploy (manual / protected environments) ─────────────────────────────────
+  # Manual, environment-gated Functions deploy for protected environments (e.g.
+  # prod) that have no automatic per-push deploy. Triggered via workflow_dispatch
+  # from main; the chosen environment's GitHub Environment protection gates the
+  # run. No post-deploy integration tests run against a protected environment —
+  # use the non-invasive `make smoke CATVOX_ENVIRONMENT=<env>` path instead.
+  deploy-dispatch:
+    name: Deploy (manual)
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.environment }}
+    needs: build
+    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main'
+    env:
+      CATVOX_ENVIRONMENT: ${{ inputs.environment }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Read environment config
+        id: env
+        uses: ./.github/actions/read-environment-config
+        with:
+          environment: ${{ env.CATVOX_ENVIRONMENT }}
+
+      - name: Authenticate to GCP (Workload Identity Federation)
+        uses: google-github-actions/auth@v3
+        with:
+          workload_identity_provider: ${{ steps.env.outputs.gcp_wif_provider }}
+          service_account: ${{ steps.env.outputs.gcp_service_account }}
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: '22'
+          cache: 'npm'
+          cache-dependency-path: functions/package-lock.json
+
+      - name: Install Firebase CLI
+        run: npm install -g firebase-tools
+
+      - name: Install dependencies
+        run: make functions-install
+
+      - name: Build and deploy to Firebase
+        run: make functions-deploy

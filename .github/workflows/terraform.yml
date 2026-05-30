@@ -1,6 +1,15 @@
 name: Terraform
 
 on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Environment to apply. Protected environments (e.g. prod) require reviewer approval; runs only from main.'
+        type: choice
+        options:
+          - prod
+          - dev
+        default: prod
   push:
     branches: [main]
     paths:
@@ -35,7 +44,9 @@ on:
 # Cancel any in-progress run for the same branch so each push doesn't queue
 # behind the previous one. Separate group from the iOS build workflow.
 concurrency:
-  group: terraform-${{ github.ref }}
+  # Isolate a manual environment-gated apply from the automatic dev push apply so
+  # they never cancel each other on main.
+  group: terraform-${{ github.event.inputs.environment || github.event_name }}-${{ github.ref }}
   cancel-in-progress: true
 
 permissions:
@@ -195,6 +206,46 @@ jobs:
     runs-on: ubuntu-latest
     environment: dev
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Read environment config
+        id: env
+        uses: ./.github/actions/read-environment-config
+        with:
+          environment: ${{ env.CATVOX_ENVIRONMENT }}
+
+      - name: Authenticate to GCP (Workload Identity Federation)
+        uses: google-github-actions/auth@v3
+        with:
+          workload_identity_provider: ${{ steps.env.outputs.gcp_wif_provider }}
+          service_account: ${{ steps.env.outputs.gcp_service_account }}
+
+      - name: Set up Terraform
+        uses: hashicorp/setup-terraform@v4
+
+      - name: Terraform Init
+        run: make terraform-init
+
+      - name: Terraform Apply
+        run: make terraform-ci-apply
+
+  # ── Apply (manual / protected environments) ──────────────────────────────────
+  # Manual, environment-gated apply for protected environments (e.g. prod) that
+  # have no automatic per-push apply. Triggered via workflow_dispatch from main;
+  # the chosen environment's GitHub Environment protection (required reviewers)
+  # gates the run, and its WIF trust requires both environment=<env> and
+  # ref=refs/heads/main (ADR-0024). The first apply for a brand-new protected
+  # environment is operator-local; this path covers every subsequent apply.
+  apply-dispatch:
+    name: Apply (manual)
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.environment }}
+    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main'
+    env:
+      CATVOX_ENVIRONMENT: ${{ inputs.environment }}
 
     steps:
       - name: Checkout

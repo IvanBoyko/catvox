@@ -10,11 +10,13 @@ GitHub Actions must be enabled for `kathelix/catvox`. The repository uses four
 workflow families:
 
 - iOS build and tests on PRs and pushes.
-- GCP Terraform plan on PRs and apply on merge to `main`.
+- GCP Terraform plan on PRs and automatic apply on merge to `main` (Dev), plus a
+  manual `workflow_dispatch` apply for protected environments (e.g. prod).
 - PostHog Terraform plan on PRs and apply on merge to `main` (separate root,
   separate state prefix; see ADR-0020).
-- Firebase Functions build on PRs and deploy plus integration after merge to
-  `main`.
+- Firebase Functions build on PRs and automatic deploy plus integration after
+  merge to `main` (Dev), plus a manual `workflow_dispatch` deploy for protected
+  environments (e.g. prod).
 
 The Terraform and Functions deploy paths authenticate to Google Cloud through
 Workload Identity Federation (WIF). Do not create or store long-lived service
@@ -29,12 +31,20 @@ Use GitHub Environments to scope cloud secrets by target environment:
 | `dev` | Unprotected or lightly protected. PR/main deploy paths target Dev. |
 | `prod` | Protected. Require explicit approval before any production deploy. |
 
-The current workflows target the `dev` GitHub Environment. A protected
-environment must add separate protected workflow jobs instead of reusing a
-mutable environment's deploy path. For a protected environment, do not set the
-App Check debug-token secret, keep mutable integration-test allowlists out of it,
-and keep the Firebase iOS app deletion policy set to `ABANDON` in its
-`config/environments/<env>.xcconfig`.
+Both the Terraform and Functions workflows expose a protected delivery path for
+environments that have no automatic per-push deploy. A manual `workflow_dispatch`
+with an `environment` input (default `prod`) runs an `apply-dispatch` /
+`deploy-dispatch` job whose `environment:` is the chosen environment, gated to
+`main`; the automatic per-push apply/deploy stays scoped to `dev`. The chosen
+GitHub Environment's protection (required reviewers) gates the run, and the
+environment's WIF trust additionally requires `ref=refs/heads/main` (ADR-0024).
+For a protected environment, do not set the App Check debug-token secret, keep
+mutable integration-test allowlists out of it (no post-deploy integration tests
+run against it — use `make smoke CATVOX_ENVIRONMENT=<env>`), and keep the
+Firebase iOS app deletion policy set to `ABANDON` in its
+`config/environments/<env>.xcconfig`. The first apply for a brand-new protected
+environment is operator-local (it creates the WIF pool and `catvox-ci-sa`); every
+subsequent apply and deploy goes through this protected dispatch path.
 
 Required secrets per environment:
 
