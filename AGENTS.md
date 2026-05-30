@@ -98,9 +98,11 @@ catvox/
 
 ├── .github/workflows/
 │   ├── build.yml                  # Path-filtered iOS build check on push/PR
-│   ├── functions.yml              # Functions build/deploy/integration workflow
+│   ├── functions.yml              # Functions build + deploy (dev auto, prod manual) + Dev integration
+│   ├── functions-deploy.yml       # Reusable Functions deploy for one environment
 │   ├── markdownlint.yml           # Markdown lint for docs/ and README changes
-│   ├── terraform.yml              # GCP Terraform plan (PR) + apply (merge to main)
+│   ├── terraform.yml              # GCP Terraform plan (PR) + dev apply (merge) + prod apply (manual)
+│   ├── terraform-apply.yml        # Reusable Terraform apply for one environment
 │   └── posthog-terraform.yml      # PostHog Terraform plan (PR) + apply (merge to main)
 ├── .codex/
 │   ├── AGENTS.md                  # Codex-specific quirks (sandbox, identity)
@@ -186,7 +188,11 @@ environment as input (`scripts/validate-environment-config.mjs`,
 `scripts/smoke.mjs`; `make ios-validate-env-config-structure` /
 `make smoke` with `CATVOX_ENVIRONMENT=<env>`). Literal `dev`/`prod` belong only
 in the CI/CD pipeline that encodes code promotion between environments. See
-ADR-0026.
+ADR-0026. The promotion topology itself — which environment deploys automatically
+versus which is a manually-gated step — belongs in that pipeline as explicit
+literal jobs, not abstracted behind a runtime environment chooser input;
+environment-agnostic design governs per-environment behaviour, not the shape of
+the promotion.
 In `config/environments/*.xcconfig`, keys ending in `_HOST` or `_HOST_NAME`
 store hostnames only: no `https://` scheme, path, or trailing slash. XcodeGen
 and the Makefile compose full `https://` URLs at consumption boundaries, and the
@@ -349,6 +355,14 @@ additionally pins `assertion.ref` to `refs/heads/main` via
 - The first Prod `terraform apply` is operator-local (it creates the WIF pool and
   `catvox-ci-sa`); every later apply and all Functions deploys go through the
   protected CI path.
+- `catvox-ci-sa` holds `editor` + `projectIamAdmin` + `serviceAccountAdmin` +
+  `secretAccessor`, but NOT `workloadIdentityPoolAdmin` — it can refresh the WIF
+  pool/provider but not update them. Apply any change to the WIF pool, provider,
+  or `ci_sa_wif_binding` operator-local **before** merging, so the post-merge CI
+  apply sees no WIF diff. A WIF change routed through CI destroys the binding (a
+  `member` change forces replacement) and then fails the provider update,
+  breaking CI auth for the whole environment until an operator-local apply
+  reconciles it — the #101 Dev apply failed exactly this way.
 
 GitHub Actions WIF produces an external-account Application Default Credentials (ADC) file. Google Cloud client libraries such as `@google-cloud/firestore` accept that path in CI, but Firebase Admin SDK ADC loading may reject it with `app/invalid-credential`. Deployed Cloud Functions can and should use Firebase Admin normally. CI integration test harnesses that perform direct Firestore probes should use `@google-cloud/firestore` unless Firebase Admin has been explicitly verified under GitHub Actions WIF.
 
@@ -358,10 +372,12 @@ GitHub Actions WIF produces an external-account Application Default Credentials 
 |---|---|---|
 | `build.yml` | Push/PR touching iOS-relevant app, project, config, script, Makefile, or workflow files | XcodeGen → build generic iOS Simulator slice → run unit tests on a concrete simulator |
 | `functions.yml` (build) | Push/PR touching `functions/**`, `firebase.json`, `docs/systemInstruction.md`, `Makefile`, or workflow | TypeScript compile check + backend unit tests |
-| `functions.yml` (deploy + integration) | Merge to `main` touching Functions inputs | Firebase Functions deploy, then backend integration tests against the current Dev backend |
+| `functions.yml` (deploy: dev) | Merge to `main` touching Functions inputs | Auto-deploy to dev via reusable `functions-deploy.yml`, then Dev integration tests |
+| `functions.yml` (deploy: prod) | Manual `workflow_dispatch` from `main` | Prod deploy via `functions-deploy.yml`; protected `prod` Environment gates it; no integration |
 | `markdownlint.yml` | Push/PR touching `docs/**`, top-level `README.md`, `.markdownlint.jsonc`, or workflow | markdownlint quality check for repository docs |
 | `terraform.yml` (plan) | PR touching `terraform/**` (excluding `terraform/posthog/**`), `Makefile`, or workflow | fmt-check → init → validate → plan → PR comment |
-| `terraform.yml` (apply) | Merge to `main` touching `terraform/**` (excluding `terraform/posthog/**`), `Makefile`, or workflow | init → apply -auto-approve |
+| `terraform.yml` (apply: dev) | Merge to `main` touching Terraform inputs | Auto-apply to dev via reusable `terraform-apply.yml` |
+| `terraform.yml` (apply: prod) | Manual `workflow_dispatch` from `main` | Prod apply via `terraform-apply.yml`; protected `prod` Environment gates it |
 | `posthog-terraform.yml` (plan) | PR touching `terraform/posthog/**`, `config/environments/**`, `Makefile`, or workflow | fmt-check → init → validate → plan → PR comment |
 | `posthog-terraform.yml` (apply) | Merge to `main` touching `terraform/posthog/**`, `config/environments/**`, `Makefile`, or workflow | init → apply -auto-approve |
 
@@ -444,6 +460,7 @@ Use `docs/CREATE_NEW_ENVIRONMENT.md` and `make environment-create` for new envir
 - In `actions/github-script`, distinguish GitHub Actions expression context from JavaScript runtime objects. `github` inside the script is the Octokit client, not the workflow context. Inject workflow values explicitly, for example `const actor = '${{ github.actor }}';`.
 - When passing multiline step outputs into `actions/github-script`, prefer `${{ toJSON(steps.<id>.outputs.<name>) }}` so newlines, backticks, and quotes are represented safely as JavaScript string values.
 - Plain `run:` step stdout is not automatically available as `steps.<id>.outputs.stdout`; write needed values to `$GITHUB_OUTPUT`.
+- GitHub Actions has no cross-workflow `needs:` — separate workflow files run independently for the same event. To order stages (for example, apply infrastructure before deploying the app that depends on it), express the pipeline as one orchestrator workflow whose jobs call reusable workflows (`workflow_call`) with `needs:`, rather than chaining separate workflows via `workflow_run` (which does not fire when the upstream workflow's `paths` did not match, runs detached from the original event, and behaves differently for PRs). Authenticate with a shared composite action so each job's checkout/config/auth boilerplate is not duplicated.
 
 ### Command Invocation Notes
 
@@ -506,6 +523,10 @@ When provisioning a new protected or otherwise irreversible environment, slice t
 When a safety, security, auth, or environment boundary is introduced or changed, extract the predicate/gate into a pure function with explicit inputs where practical and cover it with focused unit tests. Examples include mutation gates, service-account derivation, allowed-environment checks, Release config validation, and config-file parsing.
 
 When a safety predicate compares configuration against *other* environments' identifiers — for example, asserting one environment's config does not reference another's resources — match each identifier with the comparison semantics its structure requires rather than one uniform rule. Use exact match where one environment's value is a substring or prefix of another's; use substring/containment only where the embedded value is the intended signal. A uniform substring scan silently misfires on prefix-related names. Worked example: in `scripts/validate-environment-config.mjs` the Prod bundle id `com.kathelix.catvox` is a prefix of the Dev bundle id `com.kathelix.catvox.dev`, so foreign-bundle detection compares bundle ids by exact match, while project ids — which appear embedded in derived names like `catvox-tf-state-<project-id>` — are matched by substring.
+
+Before merging a change that mutates a resource the CI service account manages, confirm the CI identity can perform that specific mutation — not just that it can authenticate. Auth succeeding (OIDC token exchange) does not imply the CI role can apply the change, and the gap surfaces only at apply time on `main`, after merge. `catvox-ci-sa` carries `editor` + `projectIamAdmin` + `serviceAccountAdmin` + `secretAccessor` but deliberately not `workloadIdentityPoolAdmin`, so a Terraform change to the WIF pool/provider/binding cannot be applied by CI — route such changes through an operator-local apply before merge. Worked example: PR #101's post-merge Dev apply changed the `ci_sa_wif_binding` member (which forces replacement), destroyed the old binding, then hit `403 iam.workloadIdentityPoolProviders.update denied` updating the provider — leaving Dev WIF with no binding and every Dev CI job failing `getAccessToken` until an operator reconciled it locally. "Safe by construction" claims about a CI-applied change must cover authorization for every resource mutation in the diff, not just token exchange.
+
+When importing pre-existing resources into Terraform state to make provisioning idempotent, gate each import on two checks — skip if the resource is already managed (`terraform state list`) and skip if it is absent from the project (an existence probe) — so a re-run is a no-op and a fresh environment is left for apply to create. Discover the import identifier from the *stable* committed config key, not a deferred placeholder: find the Firebase iOS app by its bundle id (always present in `config/environments/<env>.xcconfig`) rather than its app id (a `replace-with-…` placeholder until provisioning completes). See `scripts/import-preexisting-resources.sh`.
 
 When a feature captures any subset of user-controlled state (shell env vars, command-line arguments, local file contents, ad hoc git config) into an artifact that will be committed or pushed (a log file, generated config, debug dump, telemetry record), audit the captured set from a secret-leak perspective before shipping. Ask: "could any reasonable user have set a secret here?" If yes, switch to an allowlist of known-safe keys/values rather than a deny-list. Default-deny on unknown shapes — a new env var or config key added later should redact, not pass through silently. Example: PR #94 first captured every `AI_LOOP_*` env var verbatim into the committed bootstrap log, with an exclusion list for content vars. The exclusion list missed that `AI_LOOP_CODEX_REAL_COMMAND` (and similar override env vars) could contain an inline API key in a user's custom wrapper. Codex bot caught this as P1 finding B8 before merge; the fix flipped to an allowlist of operational knobs (mode/profile/model/effort/timeout/etc) with default-redact for anything else.
 

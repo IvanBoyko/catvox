@@ -1,0 +1,50 @@
+name: Terraform Apply (reusable)
+
+# Reusable Terraform apply for one environment. Called by terraform.yml:
+# automatically for dev on merge to main, and manually for prod via
+# workflow_dispatch. The environment protection (required reviewers) and WIF
+# ref pin are enforced by the GitHub Environment named here.
+
+on:
+  workflow_call:
+    inputs:
+      environment:
+        description: CatVox environment to apply.
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  id-token: write  # Required for Workload Identity Federation token exchange
+
+jobs:
+  apply:
+    name: Apply
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.environment }}
+    env:
+      CATVOX_ENVIRONMENT: ${{ inputs.environment }}
+      CATVOX_TF_STATE_PREFIX: catvox/state
+      # Resolved from the target environment's GitHub Environment secrets
+      # (caller passes `secrets: inherit`). Non-secret values come from
+      # config/environments/<env>.xcconfig via the Makefile.
+      TF_VAR_app_check_debug_token: ${{ secrets.TF_VAR_APP_CHECK_DEBUG_TOKEN }}
+      TF_VAR_alert_email: ${{ secrets.TF_VAR_ALERT_EMAIL }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Authenticate to GCP (Workload Identity Federation)
+        uses: ./.github/actions/gcp-auth
+        with:
+          environment: ${{ inputs.environment }}
+
+      - name: Set up Terraform
+        uses: hashicorp/setup-terraform@v4
+
+      - name: Terraform Init
+        run: make terraform-init
+
+      - name: Terraform Apply
+        run: make terraform-ci-apply
