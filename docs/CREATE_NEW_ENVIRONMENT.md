@@ -363,23 +363,27 @@ make environment-create
 ```
 
 **2 · Read the Firebase identity values and fill committed config.** The app's
-`GOOGLE_APP_ID` and `API_KEY` exist only after step 1's apply, and the key
+`GOOGLE_APP_ID` and `API_KEY` exist only after step 1's apply, and the API key
 *value* is exposed only inside the generated plist (Terraform outputs the app id
-and the key *id*, not the key value). Generate the plist once to read them — its
-trailing validation fails while the xcconfig still holds `replace-with-…`
+and the key *id*, not the key value). Generate the plist once and read both from
+it — its trailing validation fails while the xcconfig still holds `replace-with-…`
 placeholders, which is expected on a brand-new environment, and the plist file is
 written before that check runs:
 
 ```bash
 CATVOX_ENVIRONMENT="$ENV" make terraform-output-firebase-plist || true
-terraform -chdir=terraform output -raw firebase_ios_app_id    # → CATVOX_FIREBASE_APP_ID
-plutil -extract API_KEY raw "CatVox/Resources/Firebase/GoogleService-Info-$ENV.plist"  # → CATVOX_FIREBASE_API_KEY
+PLIST="CatVox/Resources/Firebase/GoogleService-Info-$ENV.plist"
+plutil -extract GOOGLE_APP_ID raw "$PLIST"   # → CATVOX_FIREBASE_APP_ID
+plutil -extract API_KEY raw "$PLIST"         # → CATVOX_FIREBASE_API_KEY
 ```
 
 Put both into `config/environments/$ENV.xcconfig`, replacing the
 `CATVOX_FIREBASE_APP_ID` and `CATVOX_FIREBASE_API_KEY` placeholders (see
-"Committed Environment Config"). The two Cloud Run host placeholders are filled
-after the deploy, in step 7.
+"Committed Environment Config"). `plutil … raw` prints a trailing newline so the
+values copy cleanly; avoid `terraform output -raw …` here, which prints no
+newline and lets the shell append a reverse-video `%` end-of-line marker that is
+easy to paste into the value by mistake. The two Cloud Run host placeholders are
+filled after the deploy, in step 7.
 
 **3 · Validate and commit the Firebase plist (O4).** Re-run the export — with the
 identity values now in the xcconfig it validates — then commit the plist so the

@@ -88,8 +88,6 @@ catvox/
 │   ├── outputs.tf                 # Output values
 
 │   ├── env/dev.tfvars.example     # Terraform private-values template
-│   ├── bootstrap_remote_state.sh  # Legacy helper; environment-create handles state bootstrap
-│   ├── bootstrap_wif.sh           # Legacy helper; WIF is now Terraform-managed per environment
 │   └── posthog/                   # PostHog Terraform root — state prefix posthog/state; see ADR-0020
 │       ├── main.tf
 │       ├── variables.tf
@@ -142,8 +140,6 @@ make smoke
 make terraform-plan
 make terraform-apply CONFIRM=apply
 make environment-create
-make bootstrap-remote-state
-make bootstrap-wif
 ```
 
 For environment-specific runs, override variables at invocation time, for example:

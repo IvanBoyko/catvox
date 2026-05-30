@@ -113,7 +113,7 @@ endef
 	backend-build backend-deploy backend-integration \
 	terraform-check-env-paths terraform-fmt-check terraform-init terraform-validate terraform-test terraform-plan terraform-ci-plan terraform-apply terraform-ci-apply terraform-import terraform-output-firebase-plist \
 	posthog-terraform-check-env-paths posthog-terraform-fmt-check posthog-terraform-init posthog-terraform-validate posthog-terraform-plan posthog-terraform-ci-plan posthog-terraform-apply posthog-terraform-ci-apply \
-	smoke environment-create bootstrap-remote-state bootstrap-wif
+	smoke environment-create
 
 help:
 	@printf '%s\n' \
@@ -152,8 +152,6 @@ help:
 		'' \
 		'  make smoke CATVOX_ENVIRONMENT=<env> Run non-invasive environment smoke checks' \
 		'  make environment-create     Bootstrap a named GCP/Firebase environment' \
-		'  make bootstrap-remote-state Legacy helper for Terraform state bucket bootstrap' \
-		'  make bootstrap-wif          Legacy helper; WIF is Terraform-managed for new envs' \
 		'' \
 		'Environment overrides:' \
 		'  CATVOX_ENVIRONMENT=dev selects config/environments/dev.xcconfig plus matching Terraform tfvars basename' \
@@ -482,12 +480,6 @@ terraform-output-firebase-plist:
 	 CATVOX_FIREBASE_API_KEY="$(CATVOX_FIREBASE_API_KEY)" \
 	 CATVOX_IOS_BUNDLE_ID="$(CATVOX_IOS_BUNDLE_ID)" \
 	 node scripts/validate-firebase-ios-config.mjs
-
-bootstrap-remote-state:
-	@PROJECT_ID="$(CATVOX_PROJECT_ID)" ./terraform/bootstrap_remote_state.sh
-
-bootstrap-wif:
-	@PROJECT_ID="$(CATVOX_PROJECT_ID)" ./terraform/bootstrap_wif.sh
 
 environment-create:
 	@CATVOX_ENVIRONMENT="$(CATVOX_ENVIRONMENT)" \
