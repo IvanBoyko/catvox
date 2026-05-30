@@ -162,6 +162,21 @@ CATVOX_SIGNED_UPLOAD_URL_HOST = <getSignedUploadURL Cloud Run host only>
 CATVOX_ANALYSE_VIDEO_HOST = <analyseVideo Cloud Run host only>
 ```
 
+`CATVOX_GCP_CI_SERVICE_ACCOUNT` and `CATVOX_GCP_WIF_PROVIDER` come from Terraform
+output. `terraform output -raw` prints **no trailing newline**, so zsh appends a
+reverse-video `%` end-of-line marker that is easy to paste into the value by
+mistake. Read each with a trailing newline — or send it straight to the clipboard
+— so the value lands clean:
+
+```bash
+# Print on its own newline-terminated line (no trailing % to mis-copy):
+terraform -chdir=terraform output -raw ci_service_account_email; echo
+terraform -chdir=terraform output -raw github_actions_wif_provider; echo
+
+# …or copy a single value directly to the macOS clipboard (nothing displayed):
+terraform -chdir=terraform output -raw ci_service_account_email | pbcopy
+```
+
 Keep `CATVOX_GCP_CI_SERVICE_ACCOUNT` and `CATVOX_GCP_WIF_PROVIDER` as full
 strings, not composed pieces. **Note for App Check:** `config/environments/<env>.xcconfig` no longer requires App Check debug token boolean flags. The token itself in `terraform/env/<env>.tfvars` or the GitHub Environment secret determines registration.
 Committed boolean values must be lowercase `true` or `false`; do not use `1`,
