@@ -98,9 +98,11 @@ catvox/
 
 ├── .github/workflows/
 │   ├── build.yml                  # Path-filtered iOS build check on push/PR
-│   ├── functions.yml              # Functions build/deploy/integration workflow
+│   ├── functions.yml              # Functions build + deploy (dev auto, prod manual) + Dev integration
+│   ├── functions-deploy.yml       # Reusable Functions deploy for one environment
 │   ├── markdownlint.yml           # Markdown lint for docs/ and README changes
-│   ├── terraform.yml              # GCP Terraform plan (PR) + apply (merge to main)
+│   ├── terraform.yml              # GCP Terraform plan (PR) + dev apply (merge) + prod apply (manual)
+│   ├── terraform-apply.yml        # Reusable Terraform apply for one environment
 │   └── posthog-terraform.yml      # PostHog Terraform plan (PR) + apply (merge to main)
 ├── .codex/
 │   ├── AGENTS.md                  # Codex-specific quirks (sandbox, identity)
@@ -366,10 +368,12 @@ GitHub Actions WIF produces an external-account Application Default Credentials 
 |---|---|---|
 | `build.yml` | Push/PR touching iOS-relevant app, project, config, script, Makefile, or workflow files | XcodeGen → build generic iOS Simulator slice → run unit tests on a concrete simulator |
 | `functions.yml` (build) | Push/PR touching `functions/**`, `firebase.json`, `docs/systemInstruction.md`, `Makefile`, or workflow | TypeScript compile check + backend unit tests |
-| `functions.yml` (deploy + integration) | Merge to `main` touching Functions inputs | Firebase Functions deploy, then backend integration tests against the current Dev backend |
+| `functions.yml` (deploy: dev) | Merge to `main` touching Functions inputs | Auto-deploy to dev via reusable `functions-deploy.yml`, then Dev integration tests |
+| `functions.yml` (deploy: prod) | Manual `workflow_dispatch` from `main` | Prod deploy via `functions-deploy.yml`; protected `prod` Environment gates it; no integration |
 | `markdownlint.yml` | Push/PR touching `docs/**`, top-level `README.md`, `.markdownlint.jsonc`, or workflow | markdownlint quality check for repository docs |
 | `terraform.yml` (plan) | PR touching `terraform/**` (excluding `terraform/posthog/**`), `Makefile`, or workflow | fmt-check → init → validate → plan → PR comment |
-| `terraform.yml` (apply) | Merge to `main` touching `terraform/**` (excluding `terraform/posthog/**`), `Makefile`, or workflow | init → apply -auto-approve |
+| `terraform.yml` (apply: dev) | Merge to `main` touching Terraform inputs | Auto-apply to dev via reusable `terraform-apply.yml` |
+| `terraform.yml` (apply: prod) | Manual `workflow_dispatch` from `main` | Prod apply via `terraform-apply.yml`; protected `prod` Environment gates it |
 | `posthog-terraform.yml` (plan) | PR touching `terraform/posthog/**`, `config/environments/**`, `Makefile`, or workflow | fmt-check → init → validate → plan → PR comment |
 | `posthog-terraform.yml` (apply) | Merge to `main` touching `terraform/posthog/**`, `config/environments/**`, `Makefile`, or workflow | init → apply -auto-approve |
 

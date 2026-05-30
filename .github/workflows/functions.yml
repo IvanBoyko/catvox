@@ -1,15 +1,9 @@
 name: Functions
 
 on:
+  # Manual trigger = promote to prod. There is no environment chooser: dev is the
+  # automatic path (push to main), prod is this manual step. See deploy-prod below.
   workflow_dispatch:
-    inputs:
-      environment:
-        description: 'Environment to deploy Functions to. Protected environments (e.g. prod) require reviewer approval; runs only from main.'
-        type: choice
-        options:
-          - prod
-          - dev
-        default: prod
   push:
     branches: [main]
     paths:
@@ -23,7 +17,9 @@ on:
       - 'scripts/lib/xcconfig-parse.awk'
       - 'scripts/lib/xcconfig-validate.sh'
       - '.github/actions/read-environment-config/**'
+      - '.github/actions/gcp-auth/**'
       - '.github/workflows/functions.yml'
+      - '.github/workflows/functions-deploy.yml'
   pull_request:
     branches: [main]
     paths:
@@ -37,12 +33,14 @@ on:
       - 'scripts/lib/xcconfig-parse.awk'
       - 'scripts/lib/xcconfig-validate.sh'
       - '.github/actions/read-environment-config/**'
+      - '.github/actions/gcp-auth/**'
       - '.github/workflows/functions.yml'
+      - '.github/workflows/functions-deploy.yml'
 
 concurrency:
-  # Isolate a manual environment-gated deploy from the automatic dev push deploy
-  # so they never cancel each other on main.
-  group: functions-${{ github.event.inputs.environment || github.event_name }}-${{ github.ref }}
+  # Keying on event_name isolates the manual prod promote (workflow_dispatch) from
+  # the automatic dev deploy (push) on main.
+  group: functions-${{ github.event_name }}-${{ github.ref }}
   cancel-in-progress: true
 
 permissions:
@@ -54,8 +52,9 @@ env:
 
 jobs:
   # ── Build ────────────────────────────────────────────────────────────────────
-  # Runs on every push and PR. Catches TypeScript compile errors and unit-test
-  # regressions early. Dev integration tests run only after main deploy.
+  # Runs on every push, PR, and manual dispatch. Catches TypeScript compile errors
+  # and unit-test regressions before any deploy. Dev integration tests run only
+  # after the dev deploy.
   build:
     name: Build
     runs-on: ubuntu-latest
@@ -77,71 +76,34 @@ jobs:
       - name: Build and unit tests
         run: make functions-test
 
-  # ── Deploy ───────────────────────────────────────────────────────────────────
-  # Runs only on merge to main. Authenticates via WIF and deploys to GCP.
-  deploy:
-    name: Deploy
-    runs-on: ubuntu-latest
-    environment: dev
+  # ── Deploy: dev (automatic) ──────────────────────────────────────────────────
+  # Runs on merge to main. Deploys to dev via the reusable workflow.
+  deploy-dev:
+    name: Deploy (dev)
     needs: build
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    uses: ./.github/workflows/functions-deploy.yml
+    with:
+      environment: dev
 
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v6
-
-      - name: Read environment config
-        id: env
-        uses: ./.github/actions/read-environment-config
-        with:
-          environment: ${{ env.CATVOX_ENVIRONMENT }}
-
-      - name: Authenticate to GCP (Workload Identity Federation)
-        uses: google-github-actions/auth@v3
-        with:
-          workload_identity_provider: ${{ steps.env.outputs.gcp_wif_provider }}
-          service_account: ${{ steps.env.outputs.gcp_service_account }}
-
-      - name: Set up Node.js
-        uses: actions/setup-node@v6
-        with:
-          node-version: '22'
-          cache: 'npm'
-          cache-dependency-path: functions/package-lock.json
-
-      - name: Install Firebase CLI
-        run: npm install -g firebase-tools
-
-      - name: Install dependencies
-        run: make functions-install
-
-      - name: Build and deploy to Firebase
-        run: make functions-deploy
-
-  # ── Integration: post-deploy ─────────────────────────────────────────────────
-  # Runs only after main deploy against the integration-safe Dev environment.
+  # ── Integration: post-dev-deploy ─────────────────────────────────────────────
+  # Runs only after the dev deploy, against the integration-safe Dev environment.
+  # Protected environments never run these mutable tests.
   integration-after-deploy:
     name: Integration Tests
     runs-on: ubuntu-latest
     environment: dev
-    needs: deploy
+    needs: deploy-dev
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
 
     steps:
       - name: Checkout
         uses: actions/checkout@v6
 
-      - name: Read environment config
-        id: env
-        uses: ./.github/actions/read-environment-config
+      - name: Authenticate to GCP (Workload Identity Federation)
+        uses: ./.github/actions/gcp-auth
         with:
           environment: ${{ env.CATVOX_ENVIRONMENT }}
-
-      - name: Authenticate to GCP (Workload Identity Federation)
-        uses: google-github-actions/auth@v3
-        with:
-          workload_identity_provider: ${{ steps.env.outputs.gcp_wif_provider }}
-          service_account: ${{ steps.env.outputs.gcp_service_account }}
 
       - name: Set up gcloud
         uses: google-github-actions/setup-gcloud@v3
@@ -163,49 +125,14 @@ jobs:
           CATVOX_APP_CHECK_DEBUG_TOKEN: ${{ secrets.TF_VAR_APP_CHECK_DEBUG_TOKEN }}
         run: make functions-integration
 
-  # ── Deploy (manual / protected environments) ─────────────────────────────────
-  # Manual, environment-gated Functions deploy for protected environments (e.g.
-  # prod) that have no automatic per-push deploy. Triggered via workflow_dispatch
-  # from main; the chosen environment's GitHub Environment protection gates the
-  # run. No post-deploy integration tests run against a protected environment —
-  # use the non-invasive `make smoke CATVOX_ENVIRONMENT=<env>` path instead.
-  deploy-dispatch:
-    name: Deploy (manual)
-    runs-on: ubuntu-latest
-    environment: ${{ inputs.environment }}
+  # ── Deploy: prod (manual promotion) ──────────────────────────────────────────
+  # Runs only on a manual workflow_dispatch from main. The protected `prod`
+  # GitHub Environment (required reviewers) gates the run. No integration tests
+  # run against prod — use the non-invasive `make smoke CATVOX_ENVIRONMENT=prod`.
+  deploy-prod:
+    name: Deploy (prod)
     needs: build
     if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main'
-    env:
-      CATVOX_ENVIRONMENT: ${{ inputs.environment }}
-
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v6
-
-      - name: Read environment config
-        id: env
-        uses: ./.github/actions/read-environment-config
-        with:
-          environment: ${{ env.CATVOX_ENVIRONMENT }}
-
-      - name: Authenticate to GCP (Workload Identity Federation)
-        uses: google-github-actions/auth@v3
-        with:
-          workload_identity_provider: ${{ steps.env.outputs.gcp_wif_provider }}
-          service_account: ${{ steps.env.outputs.gcp_service_account }}
-
-      - name: Set up Node.js
-        uses: actions/setup-node@v6
-        with:
-          node-version: '22'
-          cache: 'npm'
-          cache-dependency-path: functions/package-lock.json
-
-      - name: Install Firebase CLI
-        run: npm install -g firebase-tools
-
-      - name: Install dependencies
-        run: make functions-install
-
-      - name: Build and deploy to Firebase
-        run: make functions-deploy
+    uses: ./.github/workflows/functions-deploy.yml
+    with:
+      environment: prod

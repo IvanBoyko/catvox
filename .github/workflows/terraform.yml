@@ -1,15 +1,9 @@
 name: Terraform
 
 on:
+  # Manual trigger = promote to prod. There is no environment chooser: dev is the
+  # automatic path (push to main), prod is this manual step. See apply-prod below.
   workflow_dispatch:
-    inputs:
-      environment:
-        description: 'Environment to apply. Protected environments (e.g. prod) require reviewer approval; runs only from main.'
-        type: choice
-        options:
-          - prod
-          - dev
-        default: prod
   push:
     branches: [main]
     paths:
@@ -24,7 +18,9 @@ on:
       - 'scripts/lib/xcconfig-validate.sh'
       - 'scripts/guard-terraform-tfvars-private-only.sh'
       - '.github/actions/read-environment-config/**'
+      - '.github/actions/gcp-auth/**'
       - '.github/workflows/terraform.yml'
+      - '.github/workflows/terraform-apply.yml'
   pull_request:
     branches: [main]
     paths:
@@ -39,14 +35,15 @@ on:
       - 'scripts/lib/xcconfig-validate.sh'
       - 'scripts/guard-terraform-tfvars-private-only.sh'
       - '.github/actions/read-environment-config/**'
+      - '.github/actions/gcp-auth/**'
       - '.github/workflows/terraform.yml'
+      - '.github/workflows/terraform-apply.yml'
 
-# Cancel any in-progress run for the same branch so each push doesn't queue
-# behind the previous one. Separate group from the iOS build workflow.
+# Cancel any in-progress run for the same branch + event so a push doesn't queue
+# behind the previous one. Keying on event_name isolates the manual prod promote
+# (workflow_dispatch) from the automatic dev apply (push) on main.
 concurrency:
-  # Isolate a manual environment-gated apply from the automatic dev push apply so
-  # they never cancel each other on main.
-  group: terraform-${{ github.event.inputs.environment || github.event_name }}-${{ github.ref }}
+  group: terraform-${{ github.event_name }}-${{ github.ref }}
   cancel-in-progress: true
 
 permissions:
@@ -77,17 +74,10 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v6
 
-      - name: Read environment config
-        id: env
-        uses: ./.github/actions/read-environment-config
+      - name: Authenticate to GCP (Workload Identity Federation)
+        uses: ./.github/actions/gcp-auth
         with:
           environment: ${{ env.CATVOX_ENVIRONMENT }}
-
-      - name: Authenticate to GCP (Workload Identity Federation)
-        uses: google-github-actions/auth@v3
-        with:
-          workload_identity_provider: ${{ steps.env.outputs.gcp_wif_provider }}
-          service_account: ${{ steps.env.outputs.gcp_service_account }}
 
       - name: Set up Terraform
         uses: hashicorp/setup-terraform@v4
@@ -198,76 +188,27 @@ jobs:
               core.setFailed('Terraform plan failed — see PR comment for details.');
             }
 
-  # ── Apply ────────────────────────────────────────────────────────────────────
-  # Runs only when a commit lands on main (i.e. PR is merged). Re-authenticates
-  # via WIF and applies the plan with -auto-approve.
-  apply:
-    name: Apply
-    runs-on: ubuntu-latest
-    environment: dev
+  # ── Apply: dev (automatic) ───────────────────────────────────────────────────
+  # Runs when a commit lands on main (i.e. PR merged). Applies to dev via the
+  # reusable workflow.
+  apply-dev:
+    name: Apply (dev)
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    uses: ./.github/workflows/terraform-apply.yml
+    with:
+      environment: dev
+    secrets: inherit
 
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v6
-
-      - name: Read environment config
-        id: env
-        uses: ./.github/actions/read-environment-config
-        with:
-          environment: ${{ env.CATVOX_ENVIRONMENT }}
-
-      - name: Authenticate to GCP (Workload Identity Federation)
-        uses: google-github-actions/auth@v3
-        with:
-          workload_identity_provider: ${{ steps.env.outputs.gcp_wif_provider }}
-          service_account: ${{ steps.env.outputs.gcp_service_account }}
-
-      - name: Set up Terraform
-        uses: hashicorp/setup-terraform@v4
-
-      - name: Terraform Init
-        run: make terraform-init
-
-      - name: Terraform Apply
-        run: make terraform-ci-apply
-
-  # ── Apply (manual / protected environments) ──────────────────────────────────
-  # Manual, environment-gated apply for protected environments (e.g. prod) that
-  # have no automatic per-push apply. Triggered via workflow_dispatch from main;
-  # the chosen environment's GitHub Environment protection (required reviewers)
-  # gates the run, and its WIF trust requires both environment=<env> and
-  # ref=refs/heads/main (ADR-0024). The first apply for a brand-new protected
-  # environment is operator-local; this path covers every subsequent apply.
-  apply-dispatch:
-    name: Apply (manual)
-    runs-on: ubuntu-latest
-    environment: ${{ inputs.environment }}
+  # ── Apply: prod (manual promotion) ───────────────────────────────────────────
+  # Runs only on a manual workflow_dispatch from main. The protected `prod`
+  # GitHub Environment (required reviewers) gates the run, and its WIF trust
+  # requires ref=refs/heads/main (ADR-0024). The first prod apply is
+  # operator-local (it creates the WIF pool and catvox-ci-sa); this path covers
+  # every subsequent prod apply.
+  apply-prod:
+    name: Apply (prod)
     if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main'
-    env:
-      CATVOX_ENVIRONMENT: ${{ inputs.environment }}
-
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v6
-
-      - name: Read environment config
-        id: env
-        uses: ./.github/actions/read-environment-config
-        with:
-          environment: ${{ env.CATVOX_ENVIRONMENT }}
-
-      - name: Authenticate to GCP (Workload Identity Federation)
-        uses: google-github-actions/auth@v3
-        with:
-          workload_identity_provider: ${{ steps.env.outputs.gcp_wif_provider }}
-          service_account: ${{ steps.env.outputs.gcp_service_account }}
-
-      - name: Set up Terraform
-        uses: hashicorp/setup-terraform@v4
-
-      - name: Terraform Init
-        run: make terraform-init
-
-      - name: Terraform Apply
-        run: make terraform-ci-apply
+    uses: ./.github/workflows/terraform-apply.yml
+    with:
+      environment: prod
+    secrets: inherit

@@ -1,0 +1,33 @@
+name: GCP auth via WIF
+description: Read per-environment CatVox config and authenticate to Google Cloud via Workload Identity Federation.
+
+inputs:
+  environment:
+    description: CatVox environment name (selects config/environments/<env>.xcconfig).
+    required: true
+
+outputs:
+  catvox_project_id:
+    description: CatVox project ID for the selected environment.
+    value: ${{ steps.config.outputs.catvox_project_id }}
+  gcp_service_account:
+    description: CI service account email used for impersonation.
+    value: ${{ steps.config.outputs.gcp_service_account }}
+  gcp_wif_provider:
+    description: Workload Identity Federation provider resource name.
+    value: ${{ steps.config.outputs.gcp_wif_provider }}
+
+runs:
+  using: composite
+  steps:
+    - name: Read environment config
+      id: config
+      uses: ./.github/actions/read-environment-config
+      with:
+        environment: ${{ inputs.environment }}
+
+    - name: Authenticate to GCP (Workload Identity Federation)
+      uses: google-github-actions/auth@v3
+      with:
+        workload_identity_provider: ${{ steps.config.outputs.gcp_wif_provider }}
+        service_account: ${{ steps.config.outputs.gcp_service_account }}

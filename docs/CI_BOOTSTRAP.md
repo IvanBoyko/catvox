@@ -31,13 +31,15 @@ Use GitHub Environments to scope cloud secrets by target environment:
 | `dev` | Unprotected or lightly protected. PR/main deploy paths target Dev. |
 | `prod` | Protected. Require explicit approval before any production deploy. |
 
-Both the Terraform and Functions workflows expose a protected delivery path for
-environments that have no automatic per-push deploy. A manual `workflow_dispatch`
-with an `environment` input (default `prod`) runs an `apply-dispatch` /
-`deploy-dispatch` job whose `environment:` is the chosen environment, gated to
-`main`; the automatic per-push apply/deploy stays scoped to `dev`. The chosen
-GitHub Environment's protection (required reviewers) gates the run, and the
-environment's WIF trust additionally requires `ref=refs/heads/main` (ADR-0024).
+Both the Terraform and Functions workflows model promotion as two steps: **dev is
+automatic** (apply/deploy on merge to `main`) and **prod is manual** (a separate
+`apply-prod` / `deploy-prod` job triggered by `workflow_dispatch` from `main` —
+there is no environment chooser; running the workflow means "promote to prod").
+Each shared apply/deploy body lives in a reusable workflow (`terraform-apply.yml`,
+`functions-deploy.yml`) invoked with the target environment, and GCP
+authentication is the `gcp-auth` composite action. The protected `prod` GitHub
+Environment's protection (required reviewers) gates the prod run, and its WIF
+trust additionally requires `ref=refs/heads/main` (ADR-0024).
 For a protected environment, do not set the App Check debug-token secret, keep
 mutable integration-test allowlists out of it (no post-deploy integration tests
 run against it — use `make smoke CATVOX_ENVIRONMENT=<env>`), and keep the
