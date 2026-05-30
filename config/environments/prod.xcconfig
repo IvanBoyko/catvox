@@ -31,8 +31,8 @@ CATVOX_FIREBASE_FIRESTORE_APP_CHECK_ENFORCEMENT = ENFORCED
 
 
 CATVOX_MANAGE_GCF_SOURCES_BUCKET_IAM = true
-CATVOX_SIGNED_UPLOAD_URL_HOST = replace-with-prod-signed-upload-host
-CATVOX_ANALYSE_VIDEO_HOST = replace-with-prod-analyse-video-host
+CATVOX_SIGNED_UPLOAD_URL_HOST = getsigneduploadurl-pdkw5uifga-uc.a.run.app
+CATVOX_ANALYSE_VIDEO_HOST = analysevideo-pdkw5uifga-uc.a.run.app
 CATVOX_FIREBASE_APP_ID = 1:953500951129:ios:1595a4c27cd8f3f7964748
 CATVOX_FIREBASE_API_KEY = AIzaSyAMKDQ_mIGQWQF4VhU8lytvvGx1TpuoBMI
 CATVOX_POSTHOG_PROJECT_TOKEN = replace-with-prod-posthog-project-token
