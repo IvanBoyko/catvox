@@ -215,6 +215,16 @@ resource "google_project_iam_member" "tf_ci_sa_admin" {
   member  = "serviceAccount:${google_service_account.ci_sa.email}"
 }
 
+# roles/cloudfunctions.admin — deploying a NEW HTTPS (Gen 2) function sets its
+# invoker IAM policy (cloudfunctions.functions.setIamPolicy), which roles/editor
+# intentionally excludes. Required for the first Functions deploy into a fresh
+# environment; code-only redeploys of an existing function do not need it.
+resource "google_project_iam_member" "tf_ci_functions_admin" {
+  project = var.project_id
+  role    = "roles/cloudfunctions.admin"
+  member  = "serviceAccount:${google_service_account.ci_sa.email}"
+}
+
 # Workload Identity Federation — allow GitHub Actions tokens from
 # kathelix/catvox running in the matching GitHub Environment to impersonate
 # catvox-ci-sa. Scoping the principalSet to attribute.environment is a second

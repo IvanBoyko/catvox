@@ -162,6 +162,21 @@ CATVOX_SIGNED_UPLOAD_URL_HOST = <getSignedUploadURL Cloud Run host only>
 CATVOX_ANALYSE_VIDEO_HOST = <analyseVideo Cloud Run host only>
 ```
 
+`CATVOX_GCP_CI_SERVICE_ACCOUNT` and `CATVOX_GCP_WIF_PROVIDER` come from Terraform
+output. `terraform output -raw` prints **no trailing newline**, so zsh appends a
+reverse-video `%` end-of-line marker that is easy to paste into the value by
+mistake. Read each with a trailing newline — or send it straight to the clipboard
+— so the value lands clean:
+
+```bash
+# Print on its own newline-terminated line (no trailing % to mis-copy):
+terraform -chdir=terraform output -raw ci_service_account_email; echo
+terraform -chdir=terraform output -raw github_actions_wif_provider; echo
+
+# …or copy a single value directly to the macOS clipboard (nothing displayed):
+terraform -chdir=terraform output -raw ci_service_account_email | pbcopy
+```
+
 Keep `CATVOX_GCP_CI_SERVICE_ACCOUNT` and `CATVOX_GCP_WIF_PROVIDER` as full
 strings, not composed pieces. **Note for App Check:** `config/environments/<env>.xcconfig` no longer requires App Check debug token boolean flags. The token itself in `terraform/env/<env>.tfvars` or the GitHub Environment secret determines registration.
 Committed boolean values must be lowercase `true` or `false`; do not use `1`,
@@ -318,3 +333,138 @@ then re-run with `RUN_TERRAFORM_APPLY=1` to apply. For a protected environment
 the first apply is operator-local because it also creates the Workload Identity
 Federation pool and `catvox-ci-sa` that CI later authenticates as (ADR-0024);
 subsequent applies go through the protected CI path.
+
+## Operator Checklist: Standing Up a Protected Environment
+
+This sequences the manual operator actions to bring a **protected** environment
+(for example `prod`) fully online, end to end. The sections above cover each
+piece in detail; this is the order to run them in. Every step is operator-run —
+they need GCP-admin credentials, repo-admin rights, and the environment's secret
+values, so they are not part of any PR diff or CI job.
+
+Set these once for the session (substitute your environment):
+
+```bash
+export ENV=prod
+export PROJECT_ID=kathelix-catvox-prod
+```
+
+**1 · First Terraform apply — operator-local (O1).** Run locally with GCP-admin
+credentials: it creates the WIF pool and `catvox-ci-sa` that CI authenticates as,
+and (for a preserved project) imports the existing Firebase app + Firestore
+before applying. CI cannot do this — the CI SA has no `workloadIdentityPoolAdmin`
+(see `docs/CI_BOOTSTRAP.md`). Functions are deliberately not deployed here;
+protected environments deploy only through the protected CI path (step 6).
+
+```bash
+# Authenticate as the project's GCP admin first:
+#   gcloud auth login && gcloud auth application-default login
+CATVOX_ENVIRONMENT="$ENV" \
+CATVOX_PROJECT_ID="$PROJECT_ID" \
+PROJECT_DISPLAY_NAME="Kathelix CatVox Prod" \
+CATVOX_FUNCTION_REGION=us-central1 \
+CATVOX_FIRESTORE_LOCATION=nam5 \
+CATVOX_TF_STATE_BUCKET="catvox-tf-state-$PROJECT_ID" \
+CATVOX_TF_STATE_PREFIX=catvox/state \
+CATVOX_IOS_BUNDLE_ID=com.kathelix.catvox \
+CATVOX_FIREBASE_IOS_APP_DISPLAY_NAME="CatVox Prod iOS" \
+CATVOX_FIREBASE_IOS_APP_DELETION_POLICY=ABANDON \
+CATVOX_FIREBASE_APPLE_TEAM_ID=QYT76L5836 \
+CATVOX_MANAGE_GCF_SOURCES_BUCKET_IAM=true \
+ALERT_EMAIL=<prod-alerts@example.com> \
+RUN_TERRAFORM_APPLY=1 \
+RUN_FUNCTIONS_DEPLOY=0 \
+make environment-create
+```
+
+**2 · Read the Firebase identity values and fill committed config.** The app's
+`GOOGLE_APP_ID` and `API_KEY` exist only after step 1's apply, and the API key
+*value* is exposed only inside the generated plist (Terraform outputs the app id
+and the key *id*, not the key value). Generate the plist once and read both from
+it — its trailing validation fails while the xcconfig still holds `replace-with-…`
+placeholders, which is expected on a brand-new environment, and the plist file is
+written before that check runs:
+
+```bash
+CATVOX_ENVIRONMENT="$ENV" make terraform-output-firebase-plist || true
+PLIST="CatVox/Resources/Firebase/GoogleService-Info-$ENV.plist"
+plutil -extract GOOGLE_APP_ID raw "$PLIST"   # → CATVOX_FIREBASE_APP_ID
+plutil -extract API_KEY raw "$PLIST"         # → CATVOX_FIREBASE_API_KEY
+```
+
+Put both into `config/environments/$ENV.xcconfig`, replacing the
+`CATVOX_FIREBASE_APP_ID` and `CATVOX_FIREBASE_API_KEY` placeholders (see
+"Committed Environment Config"). `plutil … raw` prints a trailing newline so the
+values copy cleanly; avoid `terraform output -raw …` here, which prints no
+newline and lets the shell append a reverse-video `%` end-of-line marker that is
+easy to paste into the value by mistake. The two Cloud Run host placeholders are
+filled after the deploy, in step 7.
+
+**3 · Validate and commit the Firebase plist (O4).** Re-run the export — with the
+identity values now in the xcconfig it validates — then commit the plist so the
+iOS build for `$ENV` can load it:
+
+```bash
+CATVOX_ENVIRONMENT="$ENV" make terraform-output-firebase-plist
+git add "CatVox/Resources/Firebase/GoogleService-Info-$ENV.plist" "config/environments/$ENV.xcconfig"
+```
+
+**4 · Configure the GitHub Environment from config (O2).** Repo-admin action.
+`make configure-github-environment` reads `CATVOX_ENVIRONMENT_PROTECTED` and
+`CATVOX_GCP_WIF_GITHUB_REF` from `config/environments/$ENV.xcconfig` and applies
+the matching protection — a **protected** environment gets required reviewers plus
+a deployment-branch policy pinned to the WIF ref's branch; a **mutable** one gets
+no reviewers and no branch restriction. Pass the reviewer(s), required when the
+environment is protected:
+
+```bash
+make configure-github-environment CATVOX_ENVIRONMENT="$ENV" \
+  GITHUB_ENVIRONMENT_REVIEWERS=IvanBoyko
+```
+
+For `prod` (`CATVOX_ENVIRONMENT_PROTECTED=true`,
+`CATVOX_GCP_WIF_GITHUB_REF=refs/heads/main`) this requires Ivan Boyko's approval
+and restricts deploys to `main`; for a mutable environment it leaves the
+environment open. Re-running is idempotent. You can also manage it from the UI:
+Settings → Environments → `$ENV`.
+
+**5 · Set the environment's secrets (O3).** You supply the value when prompted.
+Protected environments get **no** App Check debug token; PostHog
+(`POSTHOG_API_KEY`) is deferred to #37 (see "GitHub Environment Secrets").
+
+```bash
+gh secret set TF_VAR_ALERT_EMAIL --env "$ENV" --repo kathelix/catvox
+```
+
+**6 · Promote to the protected environment.** Promotion is split by tool until the
+delivery orchestrator (#106) unifies it:
+
+- **Terraform (apply infra first):** a manual dispatch from `main`, approved on the
+  `$ENV` Environment — `gh workflow run terraform.yml --ref main`.
+- **Functions:** automatic in the push pipeline. On merge to `main` it deploys to
+  dev, runs dev integration, then **pauses `deploy-prod` for your approval** on the
+  `$ENV` Environment; approve it (the run page, or Settings → Environments) to
+  promote. It only runs after dev + integration pass.
+
+```bash
+gh workflow run terraform.yml --ref main   # Terraform: manual dispatch, then approve
+# Functions: no command — approve the paused deploy-prod job on the next push to main
+```
+
+**7 · Fill backend host config + verify.** After the deploy, read the deployed
+Cloud Run hosts and fill `CATVOX_SIGNED_UPLOAD_URL_HOST` /
+`CATVOX_ANALYSE_VIDEO_HOST` in `config/environments/$ENV.xcconfig` (see "Update
+App Config After Deploy"), then run the non-invasive smoke and follow
+`docs/SMOKE_CHECKLIST.md`. Never run Firestore-mutating integration tests against
+a protected environment.
+
+```bash
+CATVOX_ENVIRONMENT="$ENV" make smoke
+```
+
+**Ongoing.** Later Terraform applies to the protected environment are a manual
+dispatch (`gh workflow run terraform.yml --ref main`, approved on the `$ENV`
+Environment); later Functions deploys promote automatically through the push
+pipeline behind that same approval gate. The one exception is WIF
+pool/provider/binding changes: apply those operator-local before merge, because
+the CI SA cannot modify them (see `docs/CI_BOOTSTRAP.md`).
