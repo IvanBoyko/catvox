@@ -362,19 +362,33 @@ RUN_FUNCTIONS_DEPLOY=0 \
 make environment-create
 ```
 
-**2 · Commit the Firebase plist (O4).** Step 1 wrote
-`CatVox/Resources/Firebase/GoogleService-Info-$ENV.plist` from Terraform output;
-commit it so the iOS build for `$ENV` can load it. Standalone re-run:
+**2 · Read the Firebase identity values and fill committed config.** The app's
+`GOOGLE_APP_ID` and `API_KEY` exist only after step 1's apply, and the key
+*value* is exposed only inside the generated plist (Terraform outputs the app id
+and the key *id*, not the key value). Generate the plist once to read them — its
+trailing validation fails while the xcconfig still holds `replace-with-…`
+placeholders, which is expected on a brand-new environment, and the plist file is
+written before that check runs:
+
+```bash
+CATVOX_ENVIRONMENT="$ENV" make terraform-output-firebase-plist || true
+terraform -chdir=terraform output -raw firebase_ios_app_id    # → CATVOX_FIREBASE_APP_ID
+plutil -extract API_KEY raw "CatVox/Resources/Firebase/GoogleService-Info-$ENV.plist"  # → CATVOX_FIREBASE_API_KEY
+```
+
+Put both into `config/environments/$ENV.xcconfig`, replacing the
+`CATVOX_FIREBASE_APP_ID` and `CATVOX_FIREBASE_API_KEY` placeholders (see
+"Committed Environment Config"). The two Cloud Run host placeholders are filled
+after the deploy, in step 7.
+
+**3 · Validate and commit the Firebase plist (O4).** Re-run the export — with the
+identity values now in the xcconfig it validates — then commit the plist so the
+iOS build for `$ENV` can load it:
 
 ```bash
 CATVOX_ENVIRONMENT="$ENV" make terraform-output-firebase-plist
+git add "CatVox/Resources/Firebase/GoogleService-Info-$ENV.plist" "config/environments/$ENV.xcconfig"
 ```
-
-**3 · Fill committed config from Terraform output.** In
-`config/environments/$ENV.xcconfig`, replace the `replace-with-prod-…`
-placeholders for `CATVOX_FIREBASE_APP_ID` and `CATVOX_FIREBASE_API_KEY` (see
-"Committed Environment Config"). The two Cloud Run host placeholders are filled
-after the deploy, in step 7.
 
 **4 · Create the protected GitHub Environment + required reviewer (O2).**
 Repo-admin action. For `prod` the sole required reviewer is **Ivan Boyko**:
