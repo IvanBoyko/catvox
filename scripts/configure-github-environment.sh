@@ -32,6 +32,12 @@ if ! command -v gh >/dev/null 2>&1; then
   exit 1
 fi
 
+# Normalise a comma/newline list to lowercase, whitespace-stripped, sorted, and
+# comma-joined, so reviewer/branch comparisons are order- and case-insensitive.
+normalize_list() {
+  tr ',' '\n' | tr '[:upper:]' '[:lower:]' | sed 's/[[:space:]]//g' | sed '/^$/d' | sort | tr '\n' ',' | sed 's/,$//'
+}
+
 case "$PROTECTED" in
   true | false) ;;
   *) echo "CATVOX_ENVIRONMENT_PROTECTED must be 'true' or 'false' (got: $PROTECTED)" >&2; exit 1 ;;
@@ -98,4 +104,34 @@ if [[ -n "$branch" ]]; then
   echo "  deploys restricted to branch '${branch}'"
 fi
 
+# ── Verify the applied state by reading it back ─────────────────────────────
+# Assert the live GitHub Environment matches the intended config; fail loudly on
+# any drift so the operator does not have to eyeball it.
+echo "Verifying '${ENVIRONMENT}'..."
+
+expected_reviewers=""
+[[ "$PROTECTED" == "true" ]] && expected_reviewers="$(printf '%s' "$REVIEWERS" | normalize_list)"
+expected_branch="$(printf '%s' "$branch" | normalize_list)"
+
+actual_reviewers="$(gh api "repos/${REPO}/environments/${ENVIRONMENT}" \
+  --jq '[.protection_rules[]? | select(.type=="required_reviewers") | .reviewers[]?.reviewer.login] | join(",")' \
+  | normalize_list)"
+actual_branches="$(gh api "repos/${REPO}/environments/${ENVIRONMENT}/deployment-branch-policies" \
+  --jq '[.branch_policies[]?.name] | join(",")' 2>/dev/null | normalize_list || true)"
+
+problems=0
+if [[ "$actual_reviewers" != "$expected_reviewers" ]]; then
+  echo "  reviewers mismatch — expected [${expected_reviewers:-none}], got [${actual_reviewers:-none}]" >&2
+  problems=$((problems + 1))
+fi
+if [[ "$actual_branches" != "$expected_branch" ]]; then
+  echo "  branch-policy mismatch — expected [${expected_branch:-none}], got [${actual_branches:-none}]" >&2
+  problems=$((problems + 1))
+fi
+if [[ "$problems" -ne 0 ]]; then
+  echo "Verification FAILED for '${ENVIRONMENT}'." >&2
+  exit 1
+fi
+
+echo "  verified: reviewers=[${actual_reviewers:-none}]  branch=[${actual_branches:-none}]"
 echo "Done."
