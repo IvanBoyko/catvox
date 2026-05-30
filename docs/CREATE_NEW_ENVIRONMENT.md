@@ -417,15 +417,19 @@ REVIEWER_ID=$(gh api users/IvanBoyko --jq .id)
 gh api --method PUT repos/kathelix/catvox/environments/"$ENV" --input - <<JSON
 {
   "reviewers": [{"type": "User", "id": ${REVIEWER_ID}}],
-  "deployment_branch_policy": {"protected_branches": true, "custom_branch_policies": false}
+  "deployment_branch_policy": {"protected_branches": false, "custom_branch_policies": true}
 }
 JSON
+# Allow only main to deploy to this environment:
+gh api --method POST repos/kathelix/catvox/environments/"$ENV"/deployment-branch-policies -f name=main
 ```
 
-`protected_branches: true` requires `main` to be a protected branch; the WIF ref
-pin (`CATVOX_GCP_WIF_GITHUB_REF=refs/heads/main`) already restricts this
-environment's CI auth to `main` (ADR-0024). You can also set the reviewer from the
-GitHub UI: Settings → Environments → `$ENV` → Required reviewers.
+The custom `main` policy and the WIF ref pin
+(`CATVOX_GCP_WIF_GITHUB_REF=refs/heads/main`, ADR-0024) both restrict this
+environment's deploys to `main`. Do **not** use `"protected_branches": true`
+unless `main` actually has a branch-protection rule — with no protected branch it
+matches nothing and silently blocks every deploy. You can also manage the
+reviewer + branch policy from the UI: Settings → Environments → `$ENV`.
 
 **5 · Set the environment's secrets (O3).** You supply the value when prompted.
 Protected environments get **no** App Check debug token; PostHog
