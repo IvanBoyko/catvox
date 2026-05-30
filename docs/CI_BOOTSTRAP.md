@@ -79,6 +79,14 @@ Terraform manages the per-project WIF pool/provider and the
 bootstrap the remote Terraform state bucket before the first Terraform init,
 because Terraform cannot manage the bucket that stores its own state.
 
+`catvox-ci-sa` is intentionally not granted `workloadIdentityPoolAdmin`, so it
+can refresh but not update these resources. Apply any change to the WIF pool,
+provider, or `ci_sa_wif_binding` operator-local before merging it: a WIF change
+routed through the post-merge CI apply destroys the binding (the `member` change
+forces replacement) and then fails the provider update, breaking CI
+authentication for the whole environment until an operator-local
+`make terraform-apply CATVOX_ENVIRONMENT=<env> CONFIRM=apply` reconciles it.
+
 ## One-Time Repository Checklist
 
 1. Confirm GitHub Actions is enabled for the repository.
