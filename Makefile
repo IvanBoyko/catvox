@@ -113,7 +113,7 @@ endef
 	backend-build backend-deploy backend-integration \
 	terraform-check-env-paths terraform-fmt-check terraform-init terraform-validate terraform-test terraform-plan terraform-ci-plan terraform-apply terraform-ci-apply terraform-import terraform-output-firebase-plist \
 	posthog-terraform-check-env-paths posthog-terraform-fmt-check posthog-terraform-init posthog-terraform-validate posthog-terraform-plan posthog-terraform-ci-plan posthog-terraform-apply posthog-terraform-ci-apply \
-	smoke environment-create configure-github-environment
+	smoke environment-create configure-github-environment environment-write-config environment-doctor
 
 help:
 	@printf '%s\n' \
@@ -152,6 +152,8 @@ help:
 		'' \
 		'  make smoke CATVOX_ENVIRONMENT=<env> Run non-invasive environment smoke checks' \
 		'  make environment-create     Bootstrap a named GCP/Firebase environment' \
+		'  make environment-doctor     Read-only preflight of an environment'\''s provisioning prerequisites' \
+		'  make environment-write-config Write resolved non-secret xcconfig values (PHASE=identity|hosts|all)' \
 		'  make configure-github-environment Configure a GitHub Environment from committed config' \
 		'' \
 		'Environment overrides:' \
@@ -209,6 +211,8 @@ scripts-test:
 	@bash scripts/test/makefile-env-cache.test.sh
 	@bash scripts/test/import-preexisting-resources.test.sh
 	@bash scripts/test/configure-github-environment.test.sh
+	@bash scripts/test/environment-doctor.test.sh
+	@bash scripts/test/write-environment-config.test.sh
 	@node --test scripts/test/validate-environment-config.test.mjs scripts/test/find-firebase-ios-app-id.test.mjs
 	@python3 tools/ai-loop/ai_loop_test.py
 
@@ -505,3 +509,28 @@ configure-github-environment:
 	 CATVOX_GCP_WIF_GITHUB_REF="$(CATVOX_GCP_WIF_GITHUB_REF)" \
 	 GITHUB_ENVIRONMENT_REVIEWERS="$(GITHUB_ENVIRONMENT_REVIEWERS)" \
 	 ./scripts/configure-github-environment.sh
+
+# Read-only preflight: assert an environment's provisioning prerequisites
+# (billing, APIs, CI SA roles incl. cloudfunctions.admin, WIF scoping, state
+# bucket) and fail fast with a hint instead of surfacing them mid-deploy.
+environment-doctor:
+	@CATVOX_ENVIRONMENT="$(CATVOX_ENVIRONMENT)" \
+	 CATVOX_PROJECT_ID="$(CATVOX_PROJECT_ID)" \
+	 CATVOX_FUNCTION_REGION="$(CATVOX_FUNCTION_REGION)" \
+	 CATVOX_GCP_CI_SERVICE_ACCOUNT="$(CATVOX_GCP_CI_SERVICE_ACCOUNT)" \
+	 CATVOX_GCP_WIF_PROVIDER="$(CATVOX_GCP_WIF_PROVIDER)" \
+	 CATVOX_TF_STATE_BUCKET="$(CATVOX_TF_STATE_BUCKET)" \
+	 ./scripts/environment-doctor.sh
+
+# Write resolved non-secret values into config/environments/<env>.xcconfig from
+# Terraform outputs + the Firebase plist (identity) and the deployed Cloud Run
+# hosts (hosts). Working tree only — the operator reviews and commits. PHASE
+# selects which values to write: identity (default) | hosts | all.
+environment-write-config:
+	@CATVOX_ENVIRONMENT="$(CATVOX_ENVIRONMENT)" \
+	 CATVOX_ENV_CONFIG="$(CATVOX_ENV_CONFIG)" \
+	 CATVOX_PROJECT_ID="$(CATVOX_PROJECT_ID)" \
+	 CATVOX_FUNCTION_REGION="$(CATVOX_FUNCTION_REGION)" \
+	 CATVOX_FIREBASE_PLIST_OUTPUT="$(CATVOX_FIREBASE_PLIST_OUTPUT)" \
+	 WRITE_CONFIG_PHASE="$(PHASE)" \
+	 ./scripts/write-environment-config.sh
