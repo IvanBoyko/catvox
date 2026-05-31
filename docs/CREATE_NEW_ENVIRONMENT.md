@@ -501,3 +501,44 @@ Environment); later Functions deploys promote automatically through the push
 pipeline behind that same approval gate. The one exception is WIF
 pool/provider/binding changes: apply those operator-local before merge, because
 the CI SA cannot modify them (see `docs/CI_BOOTSTRAP.md`).
+
+## Destroying an Environment
+
+`make environment-destroy` tears a named environment down — the reverse of
+`make environment-create`. It is operator-run (GCP-admin + repo-admin) and
+**keeps the GCP project**: it removes the Terraform-managed resources, the
+script-created Terraform-state and Cloud Functions source buckets, and the
+GitHub Environment. Deleting the whole project and rotating to a fresh one for a
+new create/destroy cycle is a separate capability (#111).
+
+Environment-agnostic and config-gated:
+
+| Tier | Command |
+|---|---|
+| Mutable (`CATVOX_ENVIRONMENT_PROTECTED=false`) | `make environment-destroy CATVOX_ENVIRONMENT=<env> CONFIRM=destroy` |
+| Protected (`true`) | `make environment-destroy CATVOX_ENVIRONMENT=<env> CONFIRM=destroy ALLOW_PROTECTED_DESTROY=<env>` |
+
+Without `CONFIRM=destroy` it refuses; a protected environment additionally
+refuses unless `ALLOW_PROTECTED_DESTROY` exactly equals the environment name, so
+prod is safe by construction.
+
+What it does, in order (the order is load-bearing):
+
+1. Empties the `catvox-raw-videos-<project-id>` bucket — it is
+   `force_destroy = false`, so Terraform can only delete it once empty.
+2. `terraform destroy` (core). The Firebase iOS app honours
+   `CATVOX_FIREBASE_IOS_APP_DELETION_POLICY`: `DELETE` removes it, `ABANDON`
+   leaves it registered (use `DELETE` for a disposable environment). If this step
+   fails the script stops before touching the buckets, so the state stays intact
+   for a retry.
+3. `terraform destroy` (PostHog) — tolerant of an environment with no PostHog
+   state (deferred; see #37).
+4. Deletes the script-created Cloud Functions Gen2 sources bucket
+   (`gcf-v2-sources-<project-number>-<region>`).
+5. Deletes the Terraform state bucket **last** — both destroys read and write it,
+   so it must outlive them.
+6. Deletes the `<env>` GitHub Environment and its secrets.
+
+It is idempotent: absent resources are skipped, so re-running after a partial
+teardown converges. Like the protected first apply, the destroy is
+operator-local — it is never wired into CI.

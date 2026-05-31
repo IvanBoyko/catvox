@@ -113,7 +113,8 @@ endef
 	backend-build backend-deploy backend-integration \
 	terraform-check-env-paths terraform-fmt-check terraform-init terraform-validate terraform-test terraform-plan terraform-ci-plan terraform-apply terraform-ci-apply terraform-import terraform-output-firebase-plist \
 	posthog-terraform-check-env-paths posthog-terraform-fmt-check posthog-terraform-init posthog-terraform-validate posthog-terraform-plan posthog-terraform-ci-plan posthog-terraform-apply posthog-terraform-ci-apply \
-	smoke environment-create configure-github-environment environment-write-config environment-doctor
+	smoke environment-create configure-github-environment environment-write-config environment-doctor \
+	terraform-destroy posthog-terraform-destroy environment-destroy
 
 help:
 	@printf '%s\n' \
@@ -155,6 +156,7 @@ help:
 		'  make environment-doctor     Read-only preflight of an environment'\''s provisioning prerequisites' \
 		'  make environment-write-config Write resolved non-secret xcconfig values (PHASE=identity|hosts|all)' \
 		'  make configure-github-environment Configure a GitHub Environment from committed config' \
+		'  make environment-destroy    Tear down an environment (CONFIRM=destroy; protected also needs ALLOW_PROTECTED_DESTROY=<env>)' \
 		'' \
 		'Environment overrides:' \
 		'  CATVOX_ENVIRONMENT=dev selects config/environments/dev.xcconfig plus matching Terraform tfvars basename' \
@@ -213,6 +215,7 @@ scripts-test:
 	@bash scripts/test/configure-github-environment.test.sh
 	@bash scripts/test/environment-doctor.test.sh
 	@bash scripts/test/write-environment-config.test.sh
+	@bash scripts/test/destroy-environment.test.sh
 	@node --test scripts/test/validate-environment-config.test.mjs scripts/test/find-firebase-ios-app-id.test.mjs
 	@python3 tools/ai-loop/ai_loop_test.py
 
@@ -439,6 +442,17 @@ terraform-import: terraform-check-env-paths
 	fi
 	@cd terraform && $(catvox_tf_env_args) GOOGLE_CLOUD_QUOTA_PROJECT="$(CATVOX_PROJECT_ID)" terraform import -no-color $(catvox_tf_var_file_arg) "$(ADDRESS)" "$(ID)"
 
+# Destroy the core Terraform-managed resources for an environment. Gated on
+# CONFIRM=destroy. Invoked by scripts/destroy-environment.sh after its own safety
+# checks; the iOS app honours its deletion_policy (ABANDON/DELETE) here.
+terraform-destroy: terraform-check-env-paths
+	@if [[ "$(CONFIRM)" != "destroy" ]]; then \
+		printf 'Refusing to run Terraform destroy. Re-run as: make terraform-destroy CONFIRM=destroy\n' >&2; \
+		exit 1; \
+	fi
+	@cd terraform && $(catvox_tf_env_args) GOOGLE_CLOUD_QUOTA_PROJECT="$(CATVOX_PROJECT_ID)" terraform init $(CATVOX_TF_INIT_FLAGS) $(catvox_tf_backend_args)
+	@cd terraform && $(catvox_tf_env_args) GOOGLE_CLOUD_QUOTA_PROJECT="$(CATVOX_PROJECT_ID)" terraform destroy -auto-approve -no-color $(catvox_tf_var_file_arg)
+
 posthog-terraform-fmt-check:
 	@cd terraform/posthog && terraform fmt -check -recursive
 
@@ -471,6 +485,17 @@ posthog-terraform-apply: posthog-terraform-check-env-paths
 
 posthog-terraform-ci-apply: posthog-terraform-check-env-paths
 	@cd terraform/posthog && $(catvox_posthog_tf_env_args) terraform apply -auto-approve -no-color $(catvox_posthog_tf_var_file_arg)
+
+# Destroy the PostHog Terraform resources for an environment. Gated on
+# CONFIRM=destroy. Tolerant of an empty/uninitialised root (PostHog is deferred
+# for some environments — see #37).
+posthog-terraform-destroy: posthog-terraform-check-env-paths
+	@if [[ "$(CONFIRM)" != "destroy" ]]; then \
+		printf 'Refusing to run PostHog Terraform destroy. Re-run as: make posthog-terraform-destroy CONFIRM=destroy\n' >&2; \
+		exit 1; \
+	fi
+	@cd terraform/posthog && terraform init $(CATVOX_POSTHOG_TF_INIT_FLAGS) $(catvox_posthog_tf_backend_args)
+	@cd terraform/posthog && $(catvox_posthog_tf_env_args) terraform destroy -auto-approve -no-color $(catvox_posthog_tf_var_file_arg)
 
 smoke:
 	@CATVOX_ENVIRONMENT="$(CATVOX_ENVIRONMENT)" \
@@ -534,3 +559,19 @@ environment-write-config:
 	 CATVOX_FIREBASE_PLIST_OUTPUT="$(CATVOX_FIREBASE_PLIST_OUTPUT)" \
 	 WRITE_CONFIG_PHASE="$(PHASE)" \
 	 ./scripts/write-environment-config.sh
+
+# Tear down a named environment (keeps the GCP project): terraform destroy +
+# PostHog + the out-of-graph buckets + the GitHub Environment. Gated:
+# CONFIRM=destroy for any env; protected envs also require
+# ALLOW_PROTECTED_DESTROY=<env>.
+environment-destroy:
+	@CATVOX_ENVIRONMENT="$(CATVOX_ENVIRONMENT)" \
+	 CATVOX_PROJECT_ID="$(CATVOX_PROJECT_ID)" \
+	 CATVOX_FUNCTION_REGION="$(CATVOX_FUNCTION_REGION)" \
+	 CATVOX_TF_STATE_BUCKET="$(CATVOX_TF_STATE_BUCKET)" \
+	 CATVOX_ENVIRONMENT_PROTECTED="$(CATVOX_ENVIRONMENT_PROTECTED)" \
+	 CATVOX_TF_VARS_FILE="$(CATVOX_TF_VARS_FILE)" \
+	 CONFIRM="$(CONFIRM)" \
+	 ALLOW_PROTECTED_DESTROY="$(ALLOW_PROTECTED_DESTROY)" \
+	 GITHUB_REPO="$(GITHUB_REPO)" \
+	 ./scripts/destroy-environment.sh
