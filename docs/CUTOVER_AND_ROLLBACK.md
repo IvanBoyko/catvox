@@ -26,6 +26,9 @@ Set the session variables once (substitute your environment):
 ```bash
 export ENV=prod
 export PROJECT_ID=kathelix-catvox-prod
+# Region is data (config/environments/$ENV.xcconfig → CATVOX_FUNCTION_REGION);
+# the raw gcloud commands below need it in the shell. For the prod example:
+export CATVOX_FUNCTION_REGION=us-central1
 ```
 
 ## Pre-launch Cutover Checklist
@@ -111,7 +114,7 @@ Inspect each surface with read-only operations:
 
 | Surface | Read-only inspection | Default | Clean only if… |
 |---|---|---|---|
-| Firestore `(default)` | `gcloud firestore databases describe "(default)" --project "$PROJECT_ID"` plus a read-only console spot-check of collections | Keep | Inspection shows test/seed documents created before go-live |
+| Firestore `(default)` | `gcloud firestore databases describe --database='(default)' --project "$PROJECT_ID"` plus a read-only console spot-check of collections | Keep | Inspection shows test/seed documents created before go-live |
 | GCS uploads `catvox-raw-videos-$PROJECT_ID` | `gcloud storage ls "gs://catvox-raw-videos-$PROJECT_ID/**"` (list only) | Keep | Stray pre-launch uploaded objects exist |
 | Cloud Run revisions | `gcloud run revisions list --region "$CATVOX_FUNCTION_REGION" --project "$PROJECT_ID"` | Keep all | n/a (see below) |
 
