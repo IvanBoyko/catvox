@@ -372,10 +372,10 @@ GitHub Actions WIF produces an external-account Application Default Credentials 
 | `functions.yml` (deploy: dev) | Merge to `main` touching Functions inputs | Auto-deploy to dev via reusable `functions-deploy.yml`, then Dev integration tests |
 | `functions.yml` (deploy: prod) | Push to `main`, after dev integration (`needs: integration-after-deploy`) | Approval-gated prod deploy via `functions-deploy.yml`; the protected `prod` Environment pauses it for reviewer approval; no integration |
 | `markdownlint.yml` | Push/PR touching `docs/**`, top-level `README.md`, `.markdownlint.jsonc`, or workflow | markdownlint quality check for repository docs |
-| `terraform.yml` (plan) | PR touching `terraform/**` (excluding `terraform/posthog/**`), `Makefile`, or workflow | fmt-check → init → validate → plan → PR comment |
+| `terraform.yml` (plan) | PR touching `terraform/**` (excluding `terraform/posthog/**`), `Makefile`, or workflow | fmt-check → init → validate → plan → PR comment (only when the plan has changes or a check failed) |
 | `terraform.yml` (apply: dev) | Merge to `main` touching Terraform inputs | Auto-apply to dev via reusable `terraform-apply.yml` |
 | `terraform.yml` (apply: prod) | Manual `workflow_dispatch` from `main` | Prod apply via `terraform-apply.yml`; protected `prod` Environment gates it |
-| `posthog-terraform.yml` (plan) | PR touching `terraform/posthog/**`, `config/environments/**`, `Makefile`, or workflow | fmt-check → init → validate → plan → PR comment |
+| `posthog-terraform.yml` (plan) | PR touching `terraform/posthog/**`, `config/environments/**`, `Makefile`, or workflow | fmt-check → init → validate → plan → PR comment (only when the plan has changes or a check failed) |
 | `posthog-terraform.yml` (apply: dev) | Merge to `main` touching `terraform/posthog/**`, `config/environments/**`, `Makefile`, or workflow | Auto-apply PostHog Terraform to dev |
 | `posthog-terraform.yml` (apply: prod) | Manual `workflow_dispatch` from `main` | Prod PostHog apply; protected `prod` Environment gates it |
 
@@ -409,7 +409,7 @@ root, and writes the public PostHog project ID/token back into
 - Feature work goes on a branch; open a PR to `main`.
 - Create or switch to the intended feature branch before making any feature-related doc or code edits. Avoid starting feature work on `main`, even for documentation-only changes.
 - Exception: tiny mechanical follow-ups may be committed directly to `main` when the user explicitly asks for direct-to-main handling or confirms that a PR is unnecessary. Keep this exception to low-risk documentation/config alignment changes, such as updating Codex action wrappers after a Makefile target rename. Do not use it for product behavior, infrastructure semantics, workflow logic, secrets, or anything that needs review before merge.
-- The Terraform pipeline posts a plan comment on every PR — review it before merging.
+- The Terraform pipeline posts a plan comment on PRs that have planned changes or a failed check — review it before merging. A clean no-change plan posts nothing (by design, to avoid notification noise); the plan still ran — confirm the green plan check on the PR.
 - Before final review or merge, check all PR bot / AI review findings and explicitly triage each one as fix, reject with reasoning, or defer.
 - Treat bot findings touching concurrency, cancellation, state ownership, persistence, navigation, or other direct user-facing behavior as high-signal by default until disproven.
 - When opening a follow-up PR to address bot findings on an already-merged PR, read the full original PR diff — not only the lines the bot quoted — before settling on the fix. The bot's quoted hunk is the symptom site; the surrounding context is where you classify the class of weakness (input-validation gap, trust boundary, defense-in-depth) and decide whether the symptom-level fix needs a paired follow-up issue for the broader pattern. Example: in PR #85 the missing-cycle-field fix shipped in the PR, while the underlying "controller trusts agent-self-reported metadata" pattern landed as a separate issue (#84) so the symptom fix did not absorb a scope-expanding refactor.

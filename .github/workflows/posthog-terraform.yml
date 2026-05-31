@@ -101,20 +101,15 @@ jobs:
 
       - name: Terraform Plan
         id: plan
-        run: |
-          set +e
-          make posthog-terraform-ci-plan 2>&1 | tee plan.txt
-          exit_code=${PIPESTATUS[0]}
-          {
-            echo 'stdout<<EOF'
-            cat plan.txt
-            echo 'EOF'
-          } >> "$GITHUB_OUTPUT"
-          exit "$exit_code"
+        uses: ./.github/actions/terraform-ci-plan
+        with:
+          make-target: posthog-terraform-ci-plan
         continue-on-error: true  # Failure is surfaced in the PR comment below
 
-      # Post a structured comment summarising all steps. Truncates plan output
-      # if it exceeds GitHub's 65 535-character comment limit.
+      # Post a structured comment summarising all steps — but only when there is
+      # something to report. A clean run (plan exit code 0 = no changes, all
+      # other checks green) skips the comment so it never emails reviewers. Plan
+      # output is truncated if it exceeds GitHub's 65 535-character comment limit.
       - name: Post plan to PR
         uses: actions/github-script@v8
         with:
@@ -125,7 +120,16 @@ jobs:
             const validate = ${{ toJSON(steps.validate.outputs.stdout) }};
             const plan     = ${{ toJSON(steps.plan.outputs.stdout) }};
             const outcome  = '${{ steps.plan.outcome }}';
+            const exitcode = '${{ steps.plan.outputs.exitcode }}';
             const actor    = '${{ github.actor }}';
+
+            // Skip the comment entirely on a clean no-change run (plan exit
+            // code 0, fmt green). Posting nothing means GitHub sends no email —
+            // only real diffs (exit 2) and failures get a comment.
+            if (exitcode === '0' && fmt !== 'failure') {
+              core.info('PostHog Terraform plan: no changes and all checks passed — skipping PR comment.');
+              return;
+            }
 
             const MAX = 60000;
             const planBody = plan.length > MAX
@@ -153,7 +157,7 @@ jobs:
               '',
               '</details>',
               '',
-              `*Triggered by @${actor} · \`${context.eventName}\`*`,
+              `*Triggered by ${actor} · \`${context.eventName}\`*`,
             ].join('\n');
 
             await github.rest.issues.createComment({

@@ -1,0 +1,69 @@
+name: Terraform CI plan
+description: >-
+  Run a Terraform CI plan Makefile target (terraform plan -detailed-exitcode) and
+  expose its output and change status. Shared by every Terraform plan workflow so
+  the exit-code handling lives in one place.
+
+inputs:
+  make-target:
+    description: >-
+      Makefile target that runs the CI plan, e.g. terraform-ci-plan or
+      posthog-terraform-ci-plan. It must run terraform plan -detailed-exitcode and
+      echo a CATVOX_TF_DETAILED_EXITCODE=<n> marker line (see the Makefile).
+    required: true
+
+outputs:
+  stdout:
+    description: Captured plan output, with the exit-code marker and make's error banner stripped.
+    value: ${{ steps.run.outputs.stdout }}
+  exitcode:
+    description: >-
+      terraform -detailed-exitcode result — 0 = no changes, 2 = changes,
+      1 = error. Empty if the plan died before reporting one.
+    value: ${{ steps.run.outputs.exitcode }}
+  has-changes:
+    description: "'true' when the plan has pending changes (exit code 2), else 'false'."
+    value: ${{ steps.run.outputs.has-changes }}
+
+runs:
+  using: composite
+  steps:
+    - name: Run plan
+      id: run
+      shell: bash
+      env:
+        CATVOX_PLAN_MAKE_TARGET: ${{ inputs.make-target }}
+      run: |
+        set +e  # terraform exits non-zero on changes/errors; don't abort here.
+        make "$CATVOX_PLAN_MAKE_TARGET" 2>&1 | tee plan.raw
+
+        # `make` collapses every non-zero recipe exit to 2, so its own exit code
+        # cannot distinguish "changes" (terraform 2) from "error" (terraform 1).
+        # The recipe therefore echoes terraform's real -detailed-exitcode on a
+        # marker line; read the last one. Empty means the plan never got that far.
+        code=$(sed -n 's/^CATVOX_TF_DETAILED_EXITCODE=\([0-9][0-9]*\)$/\1/p' plan.raw | tail -n1)
+
+        # Keep the marker line and make's "*** [...] Error" banner out of the comment.
+        grep -vE '^CATVOX_TF_DETAILED_EXITCODE=|^make: \*\*\* ' plan.raw > plan.txt
+
+        {
+          echo 'stdout<<CATVOX_PLAN_EOF'
+          cat plan.txt
+          echo 'CATVOX_PLAN_EOF'
+        } >> "$GITHUB_OUTPUT"
+
+        printf 'exitcode=%s\n' "$code" >> "$GITHUB_OUTPUT"
+        if [[ "$code" == "2" ]]; then
+          printf 'has-changes=true\n' >> "$GITHUB_OUTPUT"
+        else
+          printf 'has-changes=false\n' >> "$GITHUB_OUTPUT"
+        fi
+
+        # 0 (no changes) and 2 (changes) are success; anything else — including a
+        # missing marker — is a real failure. The caller runs this with
+        # continue-on-error and surfaces failures in the PR comment.
+        if [[ "$code" == "0" || "$code" == "2" ]]; then
+          exit 0
+        fi
+        echo "Terraform plan failed (detailed-exitcode='${code:-<none>}')." >&2
+        exit 1
