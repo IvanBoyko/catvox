@@ -58,7 +58,7 @@ require_tool() {
 }
 require_tool gcloud
 require_tool make
-require_tool gh   # step 6 deletes the GitHub Environment + secrets; a partial
+require_tool gh   # step 5 deletes the GitHub Environment + secrets; a partial
                   # teardown that silently skips it is worse than failing fast.
 
 # ── Safety gate ─────────────────────────────────────────────────────────────

@@ -535,9 +535,10 @@ What it does, in order (the order is load-bearing):
    state (deferred; see #37).
 4. Deletes the script-created Cloud Functions Gen2 sources bucket
    (`gcf-v2-sources-<project-number>-<region>`).
-5. Deletes the Terraform state bucket **last** — both destroys read and write it,
-   so it must outlive them.
-6. Deletes the `<env>` GitHub Environment and its secrets.
+5. Deletes the `<env>` GitHub Environment and its secrets — before the state
+   bucket, so a `gh` failure leaves the state bucket intact for a re-run to retry.
+6. Deletes the Terraform state bucket **last** — both destroys read and write it,
+   and nothing recoverable-by-rerun runs once it is gone.
 
 It is idempotent: absent resources are skipped, so re-running after a partial
 teardown converges. Like the protected first apply, the destroy is
