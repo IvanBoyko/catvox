@@ -35,7 +35,7 @@
 # reporting a clean teardown. In particular, if the core terraform destroy
 # (step 2) or the PostHog destroy/probe (step 3) fails, the script stops before
 # deleting the state bucket so the operator can retry. gh is required up front so
-# step 6 cannot be silently skipped.
+# step 5 cannot be silently skipped.
 
 set -euo pipefail
 
@@ -143,7 +143,7 @@ make terraform-destroy CONFIRM=destroy \
 # 3 — PostHog Terraform destroy. Gate on whether PostHog state actually exists
 #     (positively identified by the state object under the shared bucket), rather
 #     than tolerating every failure: a destroy that fails for a real reason
-#     (credentials, provider/API error) must abort here, BEFORE step 5 deletes
+#     (credentials, provider/API error) must abort here, BEFORE step 6 deletes
 #     the bucket that holds posthog/state — otherwise PostHog resources are
 #     orphaned with no state to retry from. Many environments have no PostHog
 #     state yet (deferred — see #37); those are skipped.
