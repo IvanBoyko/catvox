@@ -66,10 +66,15 @@ chmod +x "$SANDBOX/bin/gcloud" "$SANDBOX/bin/make" "$SANDBOX/bin/gh"
 
 PATH_HERMETIC="$SANDBOX/bin:/usr/bin:/bin"
 
-# A PATH variant WITHOUT gh, to exercise the required-tool check.
+# A PATH variant WITHOUT gh, to exercise the required-tool check. It must be
+# self-contained (NO /usr/bin or /bin): CI runners ship a real `gh` on the system
+# PATH, so leaving those in would defeat the "gh absent" case (it passed locally
+# only because Homebrew's gh isn't under /usr/bin). Symlink just the coreutils the
+# script reaches before the gh check.
 mkdir -p "$SANDBOX/nogh"
 cp "$SANDBOX/bin/gcloud" "$SANDBOX/bin/make" "$SANDBOX/nogh/"
-PATH_NOGH="$SANDBOX/nogh:/usr/bin:/bin"
+for t in bash dirname grep; do ln -s "$(command -v "$t")" "$SANDBOX/nogh/$t"; done
+PATH_NOGH="$SANDBOX/nogh"
 
 run() {  # trailing KEY=val overrides
   : > "$DLOG"; : > "$DELETED"
