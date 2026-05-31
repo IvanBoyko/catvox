@@ -31,9 +31,10 @@ bkt="${gsurl#gs://}"; bkt="${bkt%%/*}"
 args="$*"
 case "$args" in
   *"projects describe"*) printf '%s\n' "${MOCK_PROJECT_NUMBER-123456}";;
-  *"storage ls"*)  # PostHog state existence probe
+  *"storage ls"*)  # PostHog state existence probe (3-way, like real gcloud)
     [[ -n "${MOCK_POSTHOG_STATE:-}" ]] && { echo "${gsurl%/**}/default.tfstate"; exit 0; }
-    exit 1;;
+    [[ -n "${MOCK_POSTHOG_LS_FAIL:-}" ]] && { echo "ERROR: (gcloud.storage.ls) caller does not have permission" >&2; exit 1; }
+    echo "One or more URLs matched no objects." >&2; exit 1;;
   *"storage buckets describe"*)
     [[ -n "${MOCK_NO_BUCKETS:-}" ]] && exit 1
     [[ -f "$DELETED" ]] && grep -qxF "$bkt" "$DELETED" && exit 1   # already deleted -> absent
@@ -64,6 +65,11 @@ SH
 chmod +x "$SANDBOX/bin/gcloud" "$SANDBOX/bin/make" "$SANDBOX/bin/gh"
 
 PATH_HERMETIC="$SANDBOX/bin:/usr/bin:/bin"
+
+# A PATH variant WITHOUT gh, to exercise the required-tool check.
+mkdir -p "$SANDBOX/nogh"
+cp "$SANDBOX/bin/gcloud" "$SANDBOX/bin/make" "$SANDBOX/nogh/"
+PATH_NOGH="$SANDBOX/nogh:/usr/bin:/bin"
 
 run() {  # trailing KEY=val overrides
   : > "$DLOG"; : > "$DELETED"
@@ -148,5 +154,23 @@ if run CONFIRM=destroy MOCK_GH_403=1 >"$SANDBOX/o11" 2>&1; then
 fi
 grep -q "could not delete the" "$SANDBOX/o11" || fail "S11 should surface the gh error"
 ok "gh Environment 403 aborts (not falsely reported as deleted)"
+
+# 12. [round-2 P2] PostHog state probe fails (transient/auth) -> abort, do NOT skip.
+if run CONFIRM=destroy MOCK_POSTHOG_LS_FAIL=1 >"$SANDBOX/o12" 2>&1; then
+  fail "S12 expected abort when the PostHog state probe fails"
+fi
+grep -q "probe failed" "$SANDBOX/o12" || fail "S12 should report a failed probe"
+grep -q "delbucket:gs://catvox-tf-state-proj" "$DLOG" && fail "S12 must NOT delete the state bucket on a failed probe"
+ok "indeterminate PostHog state probe aborts before deleting the state bucket"
+
+# 13. [round-2 P2] gh not installed -> required-tool check fails fast.
+if env -i PATH="$PATH_NOGH" DLOG="$DLOG" DELETED="$DELETED" \
+   CATVOX_ENVIRONMENT=sbx CATVOX_PROJECT_ID=proj CATVOX_FUNCTION_REGION=us-central1 \
+   CATVOX_TF_STATE_BUCKET=catvox-tf-state-proj CONFIRM=destroy \
+   bash "$SCRIPT" >"$SANDBOX/o13" 2>&1; then
+  fail "S13 expected failure when gh is not installed"
+fi
+grep -q "Missing required tool: gh" "$SANDBOX/o13" || fail "S13 should require gh"
+ok "gh is required up front (no silent skip of the GitHub Environment)"
 
 echo "PASS ($pass cases)"
