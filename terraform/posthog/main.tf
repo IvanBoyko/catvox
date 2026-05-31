@@ -53,21 +53,6 @@ provider "posthog" {
   organization_id = var.posthog_organization_id
 }
 
-moved {
-  from = posthog_insight.daily_scan_volume
-  to   = posthog_insight.photos_validation_failures
-}
-
-moved {
-  from = posthog_insight.top_cat_personas
-  to   = posthog_insight.share_export_conversion
-}
-
-moved {
-  from = posthog_insight.scan_share_actions
-  to   = posthog_insight.save_to_photos_conversion
-}
-
 # CatVox <Environment> PostHog project. Per ADR-0019/ADR-0020 each environment
 # manages its own project; this state targets exactly one environment, selected
 # at init time. The display name follows the `CatVox <Environment>` convention
