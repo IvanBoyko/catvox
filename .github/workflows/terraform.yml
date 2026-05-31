@@ -19,6 +19,7 @@ on:
       - 'scripts/guard-terraform-tfvars-private-only.sh'
       - '.github/actions/read-environment-config/**'
       - '.github/actions/gcp-auth/**'
+      - '.github/actions/terraform-ci-plan/**'
       - '.github/workflows/terraform.yml'
       - '.github/workflows/terraform-apply.yml'
   pull_request:
@@ -36,6 +37,7 @@ on:
       - 'scripts/guard-terraform-tfvars-private-only.sh'
       - '.github/actions/read-environment-config/**'
       - '.github/actions/gcp-auth/**'
+      - '.github/actions/terraform-ci-plan/**'
       - '.github/workflows/terraform.yml'
       - '.github/workflows/terraform-apply.yml'
 

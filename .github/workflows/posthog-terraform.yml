@@ -16,6 +16,7 @@ on:
       - 'scripts/lib/xcconfig-validate.sh'
       - '.github/actions/read-environment-config/**'
       - '.github/actions/gcp-auth/**'
+      - '.github/actions/terraform-ci-plan/**'
       - '.github/workflows/posthog-terraform.yml'
   pull_request:
     branches: [main]
@@ -29,6 +30,7 @@ on:
       - 'scripts/lib/xcconfig-validate.sh'
       - '.github/actions/read-environment-config/**'
       - '.github/actions/gcp-auth/**'
+      - '.github/actions/terraform-ci-plan/**'
       - '.github/workflows/posthog-terraform.yml'
 
 # Cancel any in-progress run for the same branch + event so the manual prod
