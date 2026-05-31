@@ -71,7 +71,10 @@ echo "MAKE $* POSTHOG_API_KEY=${POSTHOG_API_KEY:-}" >> "$MAKE_LOG"
 exit 0
 SH
 
-chmod +x "$SANDBOX/bin/gh" "$SANDBOX/bin/make"
+for stub in terraform gcloud; do
+  printf '#!/usr/bin/env bash\nexit 0\n' > "$SANDBOX/bin/$stub"
+done
+chmod +x "$SANDBOX/bin/gh" "$SANDBOX/bin/make" "$SANDBOX/bin/terraform" "$SANDBOX/bin/gcloud"
 
 PATH_HERMETIC="$SANDBOX/bin:/usr/bin:/bin"
 

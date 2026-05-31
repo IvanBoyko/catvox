@@ -87,11 +87,29 @@ require_value CATVOX_MANAGE_GCF_SOURCES_BUCKET_IAM "${MANAGE_GCF_SOURCES_BUCKET_
 
 MANAGE_GCF_SOURCES_BUCKET_IAM="$(normalize_bool CATVOX_MANAGE_GCF_SOURCES_BUCKET_IAM "${MANAGE_GCF_SOURCES_BUCKET_IAM}")"
 
+case "${RUN_TERRAFORM_APPLY}" in
+  0|1)
+    ;;
+  *)
+    echo "RUN_TERRAFORM_APPLY must be 0 or 1." >&2
+    exit 1
+    ;;
+esac
+
 case "${RUN_POSTHOG_TERRAFORM_APPLY}" in
   0|1)
     ;;
   *)
     echo "RUN_POSTHOG_TERRAFORM_APPLY must be 0 or 1." >&2
+    exit 1
+    ;;
+esac
+
+case "${RUN_FUNCTIONS_DEPLOY}" in
+  0|1)
+    ;;
+  *)
+    echo "RUN_FUNCTIONS_DEPLOY must be 0 or 1." >&2
     exit 1
     ;;
 esac

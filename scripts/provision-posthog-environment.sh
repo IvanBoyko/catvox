@@ -23,6 +23,8 @@ require_tool() {
 
 require_tool gh
 require_tool make
+require_tool terraform
+require_tool gcloud
 
 if [[ ! -f "$ENV_CONFIG" ]]; then
   echo "ERROR: environment config not found: ${ENV_CONFIG}" >&2
