@@ -44,7 +44,9 @@ case "$args" in
     echo "delbucket:${gsurl}" >> "$DLOG"
     [[ -z "${MOCK_BUCKET_DELETE_FAILS:-}" ]] && echo "$bkt" >> "$DELETED"   # records only on "success"
     exit 0;;
-  *"storage rm"*) echo "rm:${gsurl}" >> "$DLOG"; exit 0;;
+  *"storage rm"*)
+    av=""; case "$args" in *--all-versions*) av=" --all-versions";; esac
+    echo "rm:${gsurl}${av}" >> "$DLOG"; exit 0;;
   *) exit 0;;
 esac
 SH
@@ -109,12 +111,14 @@ run CONFIRM=destroy >"$SANDBOX/o4" 2>&1 || fail "S4 mutable destroy should succe
 grep -q "make:terraform-destroy" "$DLOG" || fail "S4 should run terraform destroy"
 grep -q "make:posthog-terraform-destroy" "$DLOG" && fail "S4 should skip PostHog when no state"
 grep -q "gh-delenv" "$DLOG" || fail "S4 should delete the GitHub Environment"
+grep -F "rm:gs://catvox-tf-state-proj/** --all-versions" "$DLOG" >/dev/null || fail "S4 versioned state bucket must be emptied with --all-versions"
 raw=$(line_of "rm:gs://catvox-raw-videos-proj"); td=$(line_of "make:terraform-destroy")
-gcf=$(line_of "delbucket:gs://gcf-v2-sources-123456-us-central1"); st=$(line_of "delbucket:gs://catvox-tf-state-proj")
+gcf=$(line_of "delbucket:gs://gcf-v2-sources-123456-us-central1"); st=$(line_of "delbucket:gs://catvox-tf-state-proj"); gx=$(line_of "gh-delenv")
 [ -n "$raw" ] && [ -n "$td" ] && [ "$raw" -lt "$td" ] || fail "S4 raw-videos emptied before terraform destroy (raw=$raw td=$td)"
 [ -n "$st" ] && [ "$td" -lt "$st" ] || fail "S4 state bucket deleted AFTER terraform destroy (td=$td st=$st)"
-[ -n "$gcf" ] && [ "$gcf" -lt "$st" ] || fail "S4 state bucket deleted last, after sources bucket (gcf=$gcf st=$st)"
-ok "mutable destroy: empty raw -> tf destroy -> ... -> state bucket last; PostHog skipped"
+[ -n "$gcf" ] && [ "$gcf" -lt "$st" ] || fail "S4 state bucket deleted after sources bucket (gcf=$gcf st=$st)"
+[ -n "$gx" ] && [ "$gx" -lt "$st" ] || fail "S4 GitHub Environment deleted BEFORE the state bucket (gh=$gx st=$st)"
+ok "mutable destroy: empty raw -> tf destroy -> ... -> gh env -> state bucket last; PostHog skipped"
 
 # 5. Protected + CONFIRM + matching ack -> proceeds.
 run CATVOX_ENVIRONMENT_PROTECTED=true CONFIRM=destroy ALLOW_PROTECTED_DESTROY=sbx >"$SANDBOX/o5" 2>&1 \
@@ -159,7 +163,8 @@ if run CONFIRM=destroy MOCK_GH_403=1 >"$SANDBOX/o11" 2>&1; then
   fail "S11 expected abort on a non-404 gh failure"
 fi
 grep -q "could not delete the" "$SANDBOX/o11" || fail "S11 should surface the gh error"
-ok "gh Environment 403 aborts (not falsely reported as deleted)"
+grep -q "delbucket:gs://catvox-tf-state-proj" "$DLOG" && fail "S11 must NOT delete the state bucket after a gh failure (re-run must stay possible)"
+ok "gh Environment 403 aborts before the state bucket is deleted (re-run stays possible)"
 
 # 12. [round-2 P2] PostHog state probe fails (transient/auth) -> abort, do NOT skip.
 if run CONFIRM=destroy MOCK_POSTHOG_LS_FAIL=1 >"$SANDBOX/o12" 2>&1; then

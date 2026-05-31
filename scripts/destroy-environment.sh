@@ -21,9 +21,10 @@
 #   2. terraform destroy (core) — honours the iOS app deletion_policy (ABANDON/DELETE);
 #   3. terraform destroy (PostHog) — tolerant of empty/absent state;
 #   4. delete the script-created Cloud Functions Gen2 sources bucket;
-#   5. delete the Terraform state bucket LAST (after both destroys — it holds the
-#      state both need);
-#   6. delete the GitHub Environment + its secrets.
+#   5. delete the GitHub Environment + its secrets (before the state bucket, so a
+#      gh failure leaves the state bucket intact for a re-run to retry);
+#   6. delete the Terraform state bucket LAST (after both destroys, which need the
+#      state it holds, AND the GitHub cleanup — nothing recoverable runs after it).
 #
 # Idempotent: absent resources are skipped, so a re-run after a partial teardown
 # converges. Only not-found / no-state conditions are tolerated — a genuine
@@ -86,7 +87,10 @@ RAW_VIDEOS_BUCKET="catvox-raw-videos-${PROJECT_ID}"
 # gitignored tfvars is absent. A real -var-file (if present) overrides this.
 export TF_VAR_alert_email="${TF_VAR_alert_email:-teardown-noop@example.invalid}"
 
-empty_bucket() { gcloud storage rm --recursive "gs://$1/**" >/dev/null 2>&1 || true; }
+# --all-versions so a versioned bucket (the Terraform state bucket is created with
+# versioning) is fully emptied: the `**` wildcard alone deletes only live
+# versions, leaving noncurrent ones that would block the subsequent bucket delete.
+empty_bucket() { gcloud storage rm --recursive --all-versions "gs://$1/**" >/dev/null 2>&1 || true; }
 
 # Classify a bucket as exists | absent | error. A describe that fails for any
 # reason OTHER than not-found (permission, auth, transient) is "error" — callers
@@ -173,18 +177,13 @@ else
   echo "  project number or region unavailable; skipping sources bucket"
 fi
 
-# 5 — Delete the Terraform state bucket LAST. Both destroys above read/write it,
-#     so it must outlive them. The operator's own credentials delete it (the CI
-#     SA's bucket IAM is already gone with step 2).
-echo "5/6 Deleting Terraform state bucket ${STATE_BUCKET} (last) ..."
-purge_bucket "$STATE_BUCKET"
-
-# 6 — Delete the GitHub Environment and its secrets.
-echo "6/6 Deleting GitHub Environment '${ENVIRONMENT}' ..."
-# gh is a required tool (checked up front), so reaching here means it is present.
-# Tolerate only a genuine 404 (already gone); a 403 / auth / network / malformed
-# error aborts rather than falsely reporting success while the Environment and
-# its secrets remain.
+# 5 — Delete the GitHub Environment and its secrets, BEFORE the state bucket. gh
+#     is a required tool (checked up front), so reaching here means it is present.
+#     Tolerate only a genuine 404 (already gone); a 403 / auth / network /
+#     malformed error aborts. Doing this before the irreversible state-bucket
+#     deletion means a gh failure leaves the state bucket intact, so a re-run can
+#     still terraform-init and retry the GitHub cleanup.
+echo "5/6 Deleting GitHub Environment '${ENVIRONMENT}' ..."
 if gh_out="$(gh api --method DELETE "repos/${REPO}/environments/${ENVIRONMENT}" 2>&1)"; then
   echo "  deleted"
 elif printf '%s' "$gh_out" | grep -qiE 'HTTP 404|Not Found'; then
@@ -193,6 +192,13 @@ else
   echo "  ERROR: could not delete the '${ENVIRONMENT}' GitHub Environment: ${gh_out}" >&2
   exit 1
 fi
+
+# 6 — Delete the Terraform state bucket LAST — after both destroys (which
+#     read/write it) AND the GitHub cleanup, so nothing recoverable-by-rerun
+#     happens once it is gone. The operator's own credentials delete it (the CI
+#     SA's bucket IAM is already gone with step 2).
+echo "6/6 Deleting Terraform state bucket ${STATE_BUCKET} (last) ..."
+purge_bucket "$STATE_BUCKET"
 
 echo
 echo "Done. '${ENVIRONMENT}' torn down; the GCP project ${PROJECT_ID} was kept (now empty)."
