@@ -12,7 +12,12 @@
 #   - required GCP APIs enabled
 #   - catvox-ci-sa holds the expected roles (incl. roles/cloudfunctions.admin,
 #     the one a first new-function deploy needs and roles/editor lacks)
-#   - the WIF pool is ACTIVE and its provider is scoped to this environment
+#   - the WIF pool is ACTIVE, its provider is scoped to this environment, its
+#     attribute_mapping maps attribute.environment, and catvox-ci-sa carries the
+#     roles/iam.workloadIdentityUser impersonation binding for this env
+#   - the Cloud Functions Gen2 build SA (compute default SA) holds its build
+#     grants: artifactregistry.writer, logging.logWriter, actAs on the backend SA
+#     (plus WARN-only storage.objectAdmin on the gcf-v2-sources bucket)
 #   - (WARN-only) the Functions Artifact Registry cleanup policy
 #   - the Terraform state bucket is reachable
 #
@@ -73,6 +78,12 @@ if [[ -n "$WIF_PROVIDER_RESOURCE" ]]; then
 fi
 WIF_POOL="${WIF_POOL:-github-actions-pool}"
 WIF_PROVIDER="${WIF_PROVIDER:-github-actions-provider}"
+
+# Backend runtime SA, and the Cloud Functions Gen2 build identity (the Compute
+# Engine default SA, whose email needs the project number). Resolve the number
+# once; the compute-SA checks degrade to WARN if it cannot be read.
+BACKEND_SA="catvox-backend-sa@${PROJECT_ID}.iam.gserviceaccount.com"
+PROJECT_NUMBER="$(gcloud projects describe "$PROJECT_ID" --format='value(projectNumber)' 2>/dev/null || true)"
 
 problems=0
 warns=0
@@ -145,6 +156,81 @@ else
   fi
 fi
 echo "  note: WIF pool/provider/binding changes must be applied operator-local (catvox-ci-sa lacks workloadIdentityPoolAdmin)."
+
+# 4b — CI SA impersonation binding. This is the half the pool/provider checks
+# above do NOT cover: roles/iam.workloadIdentityUser for the env's principalSet
+# is what lets the federated identity actually impersonate catvox-ci-sa. The #101
+# Dev outage was exactly this binding missing while the pool + provider stayed
+# correct, so the existing WIF checks would have stayed green.
+wif_binding_members="$(gcloud iam service-accounts get-iam-policy "$CI_SA" --project "$PROJECT_ID" \
+  --flatten='bindings[].members' \
+  --filter="bindings.role:roles/iam.workloadIdentityUser" \
+  --format='value(bindings.members)' 2>/dev/null || true)"
+if printf '%s\n' "$wif_binding_members" | grep -qF "workloadIdentityPools/${WIF_POOL}/attribute.environment/${ENVIRONMENT}"; then
+  pass "CI SA has the WIF impersonation binding (roles/iam.workloadIdentityUser, attribute.environment/${ENVIRONMENT})"
+else
+  fail "CI SA is missing roles/iam.workloadIdentityUser for principalSet .../attribute.environment/${ENVIRONMENT} — GitHub Actions cannot impersonate ${CI_SA}; every WIF auth fails. Restore operator-local: terraform apply (google_service_account_iam_member.ci_sa_wif_binding)"
+fi
+
+# 4c — The provider attribute_mapping must map attribute.environment. The
+# impersonation principalSet above keys on the MAPPED attribute, while the
+# condition check reads the raw assertion — different namespaces, no coupling. If
+# the mapping drops attribute.environment, the binding resolves to nobody even
+# with a correct condition.
+wif_map_env="$(gcloud iam workload-identity-pools providers describe "$WIF_PROVIDER" \
+  --workload-identity-pool="$WIF_POOL" --location=global --project "$PROJECT_ID" \
+  --format='value(attributeMapping["attribute.environment"])' 2>/dev/null || true)"
+if [[ "$wif_map_env" == "assertion.environment" ]]; then
+  pass "WIF provider maps attribute.environment = assertion.environment"
+else
+  fail "WIF provider attribute_mapping is missing attribute.environment=assertion.environment — the impersonation principalSet resolves to nobody. Fix operator-local: terraform apply (provider attribute_mapping)"
+fi
+
+# 4d — Cloud Functions Gen2 builds run as the Compute Engine default SA, not
+# catvox-ci-sa, so its grants are invisible to the CI-SA check above. Missing
+# ones fail the deploy mid-build while the doctor otherwise stays green
+# (terraform/iam.tf compute_sa_*).
+echo "Cloud Functions Gen2 build identity (compute default SA):"
+if [[ -z "$PROJECT_NUMBER" ]]; then
+  warn "could not resolve project number — skipped compute-SA build-identity checks"
+else
+  COMPUTE_SA="${PROJECT_NUMBER}-compute@developer.gserviceaccount.com"
+  compute_roles="$(gcloud projects get-iam-policy "$PROJECT_ID" \
+    --flatten='bindings[].members' \
+    --filter="bindings.members:serviceAccount:${COMPUTE_SA}" \
+    --format='value(bindings.role)' 2>/dev/null || true)"
+  for role in roles/artifactregistry.writer roles/logging.logWriter; do
+    if printf '%s\n' "$compute_roles" | grep -qxF "$role"; then
+      pass "compute SA has ${role}"
+    else
+      fail "compute SA (${COMPUTE_SA}) missing ${role} — Gen2 build fails (image push / build logs); grant via terraform apply (terraform/iam.tf compute_sa_*)"
+    fi
+  done
+  backend_actas="$(gcloud iam service-accounts get-iam-policy "$BACKEND_SA" --project "$PROJECT_ID" \
+    --flatten='bindings[].members' \
+    --filter="bindings.role:roles/iam.serviceAccountUser" \
+    --format='value(bindings.members)' 2>/dev/null || true)"
+  if printf '%s\n' "$backend_actas" | grep -qF "serviceAccount:${COMPUTE_SA}"; then
+    pass "compute SA can actAs ${BACKEND_SA} (roles/iam.serviceAccountUser)"
+  else
+    fail "compute SA (${COMPUTE_SA}) lacks roles/iam.serviceAccountUser on ${BACKEND_SA} — Gen2 deploy fails setting the Cloud Run runtime identity (iam.serviceAccounts.actAs denied); grant via terraform apply"
+  fi
+  # The gcf-v2-sources bucket grant is count-gated (CATVOX_MANAGE_GCF_SOURCES_BUCKET_IAM)
+  # and the bucket may not exist before the first deploy — WARN, never FAIL.
+  if [[ -n "$REGION" ]]; then
+    src_bucket="gcf-v2-sources-${PROJECT_NUMBER}-${REGION}"
+    if ! gcloud storage buckets describe "gs://${src_bucket}" --project "$PROJECT_ID" >/dev/null 2>&1; then
+      warn "gcf-v2-sources bucket not present yet — created on first deploy"
+    elif gcloud storage buckets get-iam-policy "gs://${src_bucket}" --project "$PROJECT_ID" \
+           --flatten='bindings[].members' \
+           --filter="bindings.role:roles/storage.objectAdmin" \
+           --format='value(bindings.members)' 2>/dev/null | grep -qF "serviceAccount:${COMPUTE_SA}"; then
+      pass "compute SA has storage.objectAdmin on ${src_bucket}"
+    else
+      warn "compute SA lacks storage.objectAdmin on ${src_bucket} — Gen2 source fetch may 403 if CATVOX_MANAGE_GCF_SOURCES_BUCKET_IAM=true"
+    fi
+  fi
+fi
 
 # 5 — Functions Artifact Registry cleanup policy (informational; set by deploy).
 echo "Artifact Registry (Functions images):"
