@@ -212,11 +212,18 @@ gh secret set <NAME> --env "$ENV" --repo kathelix/catvox
 - **Caveat — write-only.** GitHub will not show the old value, so the operator
   must already know the correct prior value (keep it in your secret store, not in
   the repository).
-- **Caveat — not live until consumed.** A secret change does not take effect
-  until the next apply or deploy reads it. `terraform-apply.yml` and
-  `functions-deploy.yml` consume these via `secrets: inherit` at run time, so
-  after re-setting a secret you must re-run the relevant protected apply or
-  deploy to actually roll the behaviour back.
+- **Caveat — not live until consumed, and each secret has a different consumer.**
+  A secret change takes effect only when the workflow that reads it re-runs — and
+  the Functions deploy is **not** that workflow (it authenticates via WIF and
+  reads neither secret). Re-run the correct protected apply for the secret you
+  rolled back:
+  - `TF_VAR_ALERT_EMAIL` is read by the GCP Terraform apply (`terraform.yml` →
+    `terraform-apply.yml`, `secrets: inherit`); re-run with
+    `gh workflow run terraform.yml --ref main` and approve on the `$ENV`
+    Environment.
+  - `POSTHOG_API_KEY` is read by the PostHog Terraform apply
+    (`posthog-terraform.yml`); re-run with
+    `gh workflow run posthog-terraform.yml --ref main` and approve.
 
 ### Terraform changes
 
