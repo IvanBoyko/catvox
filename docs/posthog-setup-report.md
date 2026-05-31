@@ -90,15 +90,3 @@ and ADR-0020.
 The dashboard and all 5 insights are Terraform-managed under `terraform/posthog/`
 — see `dashboard.tf` and `insights.tf` for the authoritative HCL definitions,
 and `terraform/posthog/README.md` for the per-environment provisioning sequence.
-
-## Insight Reference Links
-
-Direct deep-links to the individual insights in the `CatVox Dev` project
-(`402530`), for quick reference. Every other environment exposes the same tiles
-under its own dashboard, linked in the [Environments](#environments) table above.
-
-- **Scan conversion funnel**: https://us.posthog.com/project/402530/insights/HpsroXVQ
-- **Photos validation failures**: https://us.posthog.com/project/402530/insights/3ZD4bnzS
-- **Share export conversion**: https://us.posthog.com/project/402530/insights/kB5Hjls2
-- **Quota pressure & upgrade intent**: https://us.posthog.com/project/402530/insights/brptiNF5
-- **Save-to-Photos conversion**: https://us.posthog.com/project/402530/insights/5dK5T6k9
