@@ -4,7 +4,7 @@
 - Date: 2026-05-22
 - Owners: Kathelix / CatVox
 - Supersedes: the "mapping does not need to be one-to-one" clause in ADR-0019
-- Related docs: `docs/HLD.md`, `docs/TRD.md`, `docs/CREATE_NEW_ENVIRONMENT.md`, `docs/CI_BOOTSTRAP.md`, `docs/posthog-setup-report.md`, `docs/adr/0011-use-posthog-for-product-analytics.md`, `docs/adr/0017-environment-configuration-model.md`, `docs/adr/0018-create-dedicated-dev-environment.md`, `docs/adr/0019-use-separate-posthog-projects-per-environment.md`, GitHub issue #37
+- Related docs: `docs/HLD.md`, `docs/TRD.md`, `docs/CREATE_NEW_ENVIRONMENT.md`, `docs/CI_BOOTSTRAP.md`, `docs/POSTHOG_SETUP.md`, `docs/adr/0011-use-posthog-for-product-analytics.md`, `docs/adr/0017-environment-configuration-model.md`, `docs/adr/0018-create-dedicated-dev-environment.md`, `docs/adr/0019-use-separate-posthog-projects-per-environment.md`, GitHub issue #37
 
 ## Context
 

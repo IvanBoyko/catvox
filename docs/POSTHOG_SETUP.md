@@ -1,4 +1,4 @@
-# PostHog setup report
+# PostHog setup
 
 PostHog analytics are integrated through the repo-owned XcodeGen workflow.
 The SDK package is declared in `project.yml`, app configuration is generated
