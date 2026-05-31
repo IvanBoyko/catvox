@@ -84,6 +84,10 @@ If `CATVOX_ENVIRONMENT=<env> make smoke` fails after live values have landed:
 4. Re-run the smoke command after the fix. Do not substitute mutating integration
    tests for smoke.
 
+For the full per-layer rollback procedures that step 3's "revert the deploy
+path" refers to — app configuration, Functions, GitHub Environment secrets, and
+Terraform changes — see `docs/CUTOVER_AND_ROLLBACK.md`.
+
 If a check is skipped after the environment should be fully provisioned, re-run
 with `CATVOX_SMOKE_REQUIRE_LIVE=1` to turn skips into failures and fix the missing
 precondition.

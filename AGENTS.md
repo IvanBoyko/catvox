@@ -386,7 +386,7 @@ GitHub Actions WIF produces an external-account Application Default Credentials 
 
 ### Environment Creation / Bootstrap
 
-Use `docs/CREATE_NEW_ENVIRONMENT.md` and `make environment-create` for new environments. One-time repository/GitHub setup lives in `docs/CI_BOOTSTRAP.md`.
+Use `docs/CREATE_NEW_ENVIRONMENT.md` and `make environment-create` for new environments. One-time repository/GitHub setup lives in `docs/CI_BOOTSTRAP.md`. Taking a protected environment live and rolling changes back per layer is in `docs/CUTOVER_AND_ROLLBACK.md`.
 
 **Required GitHub Environment secrets for `dev`** (configured on the GitHub Environment, not as active repo-wide deploy secrets):
 
