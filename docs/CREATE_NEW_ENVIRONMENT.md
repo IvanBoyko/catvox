@@ -112,6 +112,18 @@ Both `RUN_TERRAFORM_APPLY` and `RUN_FUNCTIONS_DEPLOY` must be set explicitly to
 either `0` or `1` — there are no defaults. Set them to `0` to stop after the
 safe preview phases.
 
+Two helpers support the steps that follow, both environment-agnostic
+(`CATVOX_ENVIRONMENT=<env>`):
+
+- `make environment-doctor` — a read-only preflight that asserts the provisioning
+  prerequisites (billing, enabled APIs, the CI SA's roles including
+  `roles/cloudfunctions.admin`, WIF pool/provider scoping, the state bucket) and
+  fails fast with a fix hint instead of surfacing them as a mid-deploy error.
+- `make environment-write-config` — writes the resolved non-secret values into
+  `config/environments/<env>.xcconfig` from Terraform outputs + the plist
+  (`PHASE=identity`, the default) and the deployed Cloud Run hosts
+  (`PHASE=hosts`). It edits the working tree only; you review and commit.
+
 ## GitHub Environment Secrets
 
 Create or update the GitHub Environment named `<env>` and set:
@@ -139,7 +151,10 @@ environment's PostHog project — never a shared org-admin key.
 ## Committed Environment Config
 
 After Terraform apply and Functions deploy, update
-`config/environments/<env>.xcconfig` with the environment's non-secret values:
+`config/environments/<env>.xcconfig` with the environment's non-secret values.
+`make environment-write-config` writes the Terraform/plist-derived values for you
+(see the operator checklist); the mapping below documents what it writes and what
+to fill by hand:
 
 ```xcconfig
 CATVOX_PROJECT_ID = <project-id>
@@ -241,8 +256,10 @@ in Xcode Settings → Accounts and verify it can access team `QYT76L5836`; see
 
 ## Update App Config After Deploy
 
-After Functions deploy, update host-only values in
-`config/environments/<env>.xcconfig`:
+After Functions deploy, fill the host-only values in
+`config/environments/<env>.xcconfig`. `CATVOX_ENVIRONMENT=<env> make
+environment-write-config PHASE=hosts` reads the deployed hosts and writes them
+(hostname only) for you; the commands below show the underlying values:
 
 ```bash
 gcloud functions describe getSignedUploadURL \
@@ -377,28 +394,29 @@ RUN_FUNCTIONS_DEPLOY=0 \
 make environment-create
 ```
 
-**2 · Read the Firebase identity values and fill committed config.** The app's
-`GOOGLE_APP_ID` and `API_KEY` exist only after step 1's apply, and the API key
-*value* is exposed only inside the generated plist (Terraform outputs the app id
-and the key *id*, not the key value). Generate the plist once and read both from
-it — its trailing validation fails while the xcconfig still holds `replace-with-…`
-placeholders, which is expected on a brand-new environment, and the plist file is
-written before that check runs:
+**2 · Fill the committed identity config from Terraform + the plist (O4).** The
+app's `GOOGLE_APP_ID`/`API_KEY` and the CI-SA / WIF provider values exist only
+after step 1's apply, and the API key *value* is exposed only inside the
+generated plist (Terraform outputs the app id and the key *id*, not the key
+value). Export the plist once, then let `make environment-write-config` read the
+Terraform outputs + the plist and write the four identity values into
+`config/environments/$ENV.xcconfig` for you — no hand-copying, and immune to the
+`terraform output -raw` trailing-`%` paste trap (it reads each value through a
+clean capture):
 
 ```bash
+# Writes the plist; its trailing validation fails while the xcconfig still holds
+# replace-with-… placeholders — expected on a brand-new environment, and the
+# plist file is written before that check runs.
 CATVOX_ENVIRONMENT="$ENV" make terraform-output-firebase-plist || true
-PLIST="CatVox/Resources/Firebase/GoogleService-Info-$ENV.plist"
-plutil -extract GOOGLE_APP_ID raw "$PLIST"   # → CATVOX_FIREBASE_APP_ID
-plutil -extract API_KEY raw "$PLIST"         # → CATVOX_FIREBASE_API_KEY
+# PHASE defaults to identity: fills CATVOX_GCP_CI_SERVICE_ACCOUNT,
+# CATVOX_GCP_WIF_PROVIDER, CATVOX_FIREBASE_APP_ID, CATVOX_FIREBASE_API_KEY.
+CATVOX_ENVIRONMENT="$ENV" make environment-write-config
 ```
 
-Put both into `config/environments/$ENV.xcconfig`, replacing the
-`CATVOX_FIREBASE_APP_ID` and `CATVOX_FIREBASE_API_KEY` placeholders (see
-"Committed Environment Config"). `plutil … raw` prints a trailing newline so the
-values copy cleanly; avoid `terraform output -raw …` here, which prints no
-newline and lets the shell append a reverse-video `%` end-of-line marker that is
-easy to paste into the value by mistake. The two Cloud Run host placeholders are
-filled after the deploy, in step 7.
+It writes the working tree only and never stages or commits — review the diff and
+commit `config/environments/$ENV.xcconfig` yourself. The two Cloud Run host
+placeholders are filled after the deploy, in step 7.
 
 **3 · Validate and commit the Firebase plist (O4).** Re-run the export — with the
 identity values now in the xcconfig it validates — then commit the plist so the
@@ -436,8 +454,17 @@ Protected environments get **no** App Check debug token; PostHog
 gh secret set TF_VAR_ALERT_EMAIL --env "$ENV" --repo kathelix/catvox
 ```
 
-**6 · Promote to the protected environment.** Promotion is split by tool until the
-delivery orchestrator (#106) unifies it:
+**6 · Promote to the protected environment.** First run the read-only preflight
+to confirm the prerequisites a first deploy needs — CI-SA roles (incl.
+`roles/cloudfunctions.admin`), WIF scoping, enabled APIs, billing, and the state
+bucket — so they surface now instead of as a mid-deploy failure:
+
+```bash
+CATVOX_ENVIRONMENT="$ENV" make environment-doctor
+```
+
+Then promote. Promotion is split by tool until the delivery orchestrator (#106)
+unifies it:
 
 - **Terraform (apply infra first):** a manual dispatch from `main`, approved on the
   `$ENV` Environment — `gh workflow run terraform.yml --ref main`.
@@ -451,16 +478,19 @@ gh workflow run terraform.yml --ref main   # Terraform: manual dispatch, then ap
 # Functions: no command — approve the paused deploy-prod job on the next push to main
 ```
 
-**7 · Fill backend host config + verify.** After the deploy, read the deployed
-Cloud Run hosts and fill `CATVOX_SIGNED_UPLOAD_URL_HOST` /
-`CATVOX_ANALYSE_VIDEO_HOST` in `config/environments/$ENV.xcconfig` (see "Update
-App Config After Deploy"), then run the non-invasive smoke and follow
-`docs/SMOKE_CHECKLIST.md`. Never run Firestore-mutating integration tests against
-a protected environment.
+**7 · Fill backend host config + verify.** After the deploy, fill the two Cloud
+Run host keys from the deployed functions, then run the non-invasive smoke and
+follow `docs/SMOKE_CHECKLIST.md`. Never run Firestore-mutating integration tests
+against a protected environment.
 
 ```bash
+# Reads the deployed getSignedUploadURL / analyseVideo hosts and writes
+# CATVOX_SIGNED_UPLOAD_URL_HOST / CATVOX_ANALYSE_VIDEO_HOST (hostname only).
+CATVOX_ENVIRONMENT="$ENV" make environment-write-config PHASE=hosts
 CATVOX_ENVIRONMENT="$ENV" make smoke
 ```
+
+Review and commit the host changes (working tree only, as in step 2).
 
 **Ongoing.** Later Terraform applies to the protected environment are a manual
 dispatch (`gh workflow run terraform.yml --ref main`, approved on the `$ENV`
