@@ -16,6 +16,10 @@ screen-view capture, element autocapture, rage-click capture, surveys, session
 replay, feature-flag preloading, default person properties, and crash autocapture
 are disabled in `AnalyticsService`.
 
+In-app user feedback and error/crash intake are intentionally out of scope for
+this analytics epic; the tool/path decision (PostHog Surveys/Error Tracking vs a
+standalone SaaS vs a custom backend endpoint) is tracked in #123.
+
 ## Environments
 
 CatVox runs one PostHog project per named environment. Every project is managed
