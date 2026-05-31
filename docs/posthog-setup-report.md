@@ -11,10 +11,13 @@ If the PostHog project token is missing, analytics are disabled without
 crashing the app. Analytics are also disabled during XCTest and SwiftUI previews
 to keep automated verification out of analytics dashboards.
 
-The current PostHog project is `CatVox Dev`. Per ADR-0019, real production
-analytics must use a separate `CatVox Prod` project. The `app_environment`
-property remains required on every event as defense-in-depth metadata, but
-separate projects are the primary Dev/Prod isolation boundary.
+Two PostHog projects now exist, one per CatVox environment: `CatVox Dev`
+(project `402530`) and `CatVox Prod` (project `448206`, provisioned
+2026-05-31). Per ADR-0019, real production analytics use the separate
+`CatVox Prod` project; each environment's app reads its own project token from
+`config/environments/<env>.xcconfig`. The `app_environment` property remains
+required on every event as defense-in-depth metadata, but separate projects
+are the primary Dev/Prod isolation boundary.
 
 CatVox uses explicit product events only. PostHog automatic lifecycle capture,
 screen-view capture, element autocapture, rage-click capture, surveys, session
@@ -61,12 +64,22 @@ are disabled in `AnalyticsService`.
 - **Quota pressure & upgrade intent**: https://us.posthog.com/project/402530/insights/brptiNF5
 - **Save-to-Photos conversion**: https://us.posthog.com/project/402530/insights/5dK5T6k9
 
-These links are Dev-only references for the current `CatVox Dev` project. The
+These links are Dev-only references for the `CatVox Dev` project. The
 dashboard and all 5 insights are Terraform-managed under `terraform/posthog/`
 — see `dashboard.tf` and `insights.tf` for the authoritative HCL definitions,
 and `terraform/posthog/README.md` for the per-environment provisioning
 sequence (HCL → `terraform apply` → PostHog; no UI wizard, no import). See
 ADR-0019 and ADR-0020.
+
+## Prod Dashboard Link
+
+- **Dashboard - Analytics basics**: https://us.posthog.com/project/448206/dashboard/1650824
+
+The `CatVox Prod` project (`448206`) was provisioned 2026-05-31 with
+`make posthog-environment-provision` from the same Terraform definitions as
+Dev, so its dashboard and 5 insights match the managed MVP tiles below. Its
+public project token lives in `config/environments/prod.xcconfig` as
+`CATVOX_POSTHOG_PROJECT_TOKEN`.
 
 ## Managed MVP Dashboard Tiles
 
