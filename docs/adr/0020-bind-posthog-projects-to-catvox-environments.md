@@ -153,7 +153,22 @@ non-secret environment values live in `config/environments/<env>.xcconfig`,
 while GitHub Environment secrets and ignored tfvars files hold only true
 secrets or deliberately private values.
 
-## Future Work
+## Update — 2026-05-31: dashboard normalisation and Prod bootstrap
+
+Issue #37's next slice normalises the Terraform-managed dashboard into the five
+MVP tiles for scan conversion, Photos validation failures, share/export
+conversion, save-to-Photos conversion, and quota pressure. The PostHog root now
+sets explicit `project_id` on dashboard, insight, and layout resources plus
+explicit `organization_id` on the project resource, so fresh Prod creation does
+not depend on a pre-existing `CATVOX_POSTHOG_PROJECT_ID`. Local bootstrap uses
+`make posthog-environment-provision` to configure/verify the matching GitHub
+Environment, store `POSTHOG_API_KEY`, apply PostHog Terraform, and write the
+public project ID/token back to `config/environments/<env>.xcconfig`.
+
+## Original Follow-up Plan
+
+This list records the follow-up plan when the ADR was accepted; the updates
+above describe the completed issue #37 slices.
 
 - Slice 4 of issue #37: import the existing `CatVox Dev` PostHog project, its
   dashboard, and its wizard-created insights into the Dev PostHog Terraform

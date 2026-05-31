@@ -1,6 +1,9 @@
 name: PostHog Terraform
 
 on:
+  # Manual trigger = promote PostHog Terraform to prod. There is no environment
+  # chooser: dev is the automatic path (push to main), prod is this manual step.
+  workflow_dispatch:
   push:
     branches: [main]
     paths:
@@ -12,6 +15,7 @@ on:
       - 'scripts/lib/xcconfig-parse.awk'
       - 'scripts/lib/xcconfig-validate.sh'
       - '.github/actions/read-environment-config/**'
+      - '.github/actions/gcp-auth/**'
       - '.github/workflows/posthog-terraform.yml'
   pull_request:
     branches: [main]
@@ -24,12 +28,13 @@ on:
       - 'scripts/lib/xcconfig-parse.awk'
       - 'scripts/lib/xcconfig-validate.sh'
       - '.github/actions/read-environment-config/**'
+      - '.github/actions/gcp-auth/**'
       - '.github/workflows/posthog-terraform.yml'
 
-# Cancel any in-progress run for the same branch so each push doesn't queue
-# behind the previous one. Separate group from the GCP Terraform workflow.
+# Cancel any in-progress run for the same branch + event so the manual prod
+# promote never cancels the automatic dev apply on main.
 concurrency:
-  group: posthog-terraform-${{ github.ref }}
+  group: posthog-terraform-${{ github.event_name }}-${{ github.ref }}
   cancel-in-progress: true
 
 permissions:
@@ -38,12 +43,7 @@ permissions:
   pull-requests: write  # Required to post plan output as a PR comment
 
 env:
-  CATVOX_ENVIRONMENT: dev
   CATVOX_POSTHOG_TF_STATE_PREFIX: posthog/state
-
-  # PostHog provider credential. Non-secret provider identifiers come from
-  # config/environments/${CATVOX_ENVIRONMENT}.xcconfig via the Makefile.
-  POSTHOG_API_KEY: ${{ secrets.POSTHOG_API_KEY }}
 
   # The PostHog project ID, organization ID, and provider API host come from
   # config/environments/${CATVOX_ENVIRONMENT}.xcconfig so app config remains
@@ -58,22 +58,20 @@ jobs:
     runs-on: ubuntu-latest
     environment: dev
     if: github.event_name == 'pull_request'
+    env:
+      CATVOX_ENVIRONMENT: dev
+      # PostHog provider credential. Non-secret provider identifiers come from
+      # config/environments/${CATVOX_ENVIRONMENT}.xcconfig via the Makefile.
+      POSTHOG_API_KEY: ${{ secrets.POSTHOG_API_KEY }}
 
     steps:
       - name: Checkout
         uses: actions/checkout@v6
 
-      - name: Read environment config
-        id: env
-        uses: ./.github/actions/read-environment-config
+      - name: Authenticate to GCP (Workload Identity Federation)
+        uses: ./.github/actions/gcp-auth
         with:
           environment: ${{ env.CATVOX_ENVIRONMENT }}
-
-      - name: Authenticate to GCP (Workload Identity Federation)
-        uses: google-github-actions/auth@v3
-        with:
-          workload_identity_provider: ${{ steps.env.outputs.gcp_wif_provider }}
-          service_account: ${{ steps.env.outputs.gcp_service_account }}
 
       - name: Set up Terraform
         uses: hashicorp/setup-terraform@v4
@@ -169,30 +167,55 @@ jobs:
               core.setFailed('PostHog Terraform plan failed — see PR comment for details.');
             }
 
-  # ── Apply ────────────────────────────────────────────────────────────────────
-  # Runs only when a commit lands on main (i.e. PR is merged). Re-authenticates
-  # via WIF and applies the plan with -auto-approve.
-  apply:
-    name: Apply
+  # ── Apply: dev (automatic) ───────────────────────────────────────────────────
+  # Runs when a commit lands on main (i.e. PR merged). Applies to dev.
+  apply-dev:
+    name: Apply (dev)
     runs-on: ubuntu-latest
     environment: dev
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    env:
+      CATVOX_ENVIRONMENT: dev
+      POSTHOG_API_KEY: ${{ secrets.POSTHOG_API_KEY }}
 
     steps:
       - name: Checkout
         uses: actions/checkout@v6
 
-      - name: Read environment config
-        id: env
-        uses: ./.github/actions/read-environment-config
+      - name: Authenticate to GCP (Workload Identity Federation)
+        uses: ./.github/actions/gcp-auth
         with:
           environment: ${{ env.CATVOX_ENVIRONMENT }}
 
+      - name: Set up Terraform
+        uses: hashicorp/setup-terraform@v4
+
+      - name: Terraform Init
+        run: make posthog-terraform-init
+
+      - name: Terraform Apply
+        run: make posthog-terraform-ci-apply
+
+  # ── Apply: prod (manual promotion) ───────────────────────────────────────────
+  # Runs only on manual workflow_dispatch from main. The protected `prod`
+  # GitHub Environment gates the run and its WIF trust requires refs/heads/main.
+  apply-prod:
+    name: Apply (prod)
+    runs-on: ubuntu-latest
+    environment: prod
+    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main'
+    env:
+      CATVOX_ENVIRONMENT: prod
+      POSTHOG_API_KEY: ${{ secrets.POSTHOG_API_KEY }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
       - name: Authenticate to GCP (Workload Identity Federation)
-        uses: google-github-actions/auth@v3
+        uses: ./.github/actions/gcp-auth
         with:
-          workload_identity_provider: ${{ steps.env.outputs.gcp_wif_provider }}
-          service_account: ${{ steps.env.outputs.gcp_service_account }}
+          environment: ${{ env.CATVOX_ENVIRONMENT }}
 
       - name: Set up Terraform
         uses: hashicorp/setup-terraform@v4

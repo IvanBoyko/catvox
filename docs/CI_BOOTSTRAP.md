@@ -12,8 +12,9 @@ workflow families:
 - iOS build and tests on PRs and pushes.
 - GCP Terraform plan on PRs and automatic apply on merge to `main` (Dev), plus a
   manual `workflow_dispatch` apply for protected environments (e.g. prod).
-- PostHog Terraform plan on PRs and apply on merge to `main` (separate root,
-  separate state prefix; see ADR-0020).
+- PostHog Terraform plan on PRs, automatic Dev apply on merge to `main`, and
+  manual protected Prod apply through `workflow_dispatch` from `main` (separate
+  root, separate state prefix; see ADR-0020).
 - Firebase Functions build on PRs and, on merge to `main`, an ordered pipeline:
   deploy + integration on Dev, then an approval-gated `deploy-prod` for protected
   environments (e.g. prod).
@@ -38,6 +39,9 @@ separate `apply-prod` job triggered by `workflow_dispatch` from `main`. Function
 (`needs: integration-after-deploy`) and is held at the protected environment's
 approval gate — approving it is the manual promote. Neither has an environment
 chooser.
+PostHog Terraform follows the same topology as the GCP Terraform workflow: Dev
+applies automatically on merge to `main`, while Prod applies only through the
+protected manual dispatch path.
 Each shared apply/deploy body lives in a reusable workflow (`terraform-apply.yml`,
 `functions-deploy.yml`) invoked with the target environment, and GCP
 authentication is the `gcp-auth` composite action. The protected `prod` GitHub
@@ -57,7 +61,7 @@ Required secrets per environment:
 |---|---|
 | `TF_VAR_ALERT_EMAIL` | Terraform alert recipient. |
 | `TF_VAR_APP_CHECK_DEBUG_TOKEN` | Mutable / integration-safe environments only. |
-| `POSTHOG_API_KEY` | PostHog scoped personal API key for this environment's PostHog project. |
+| `POSTHOG_API_KEY` | PostHog scoped personal API key for this environment's PostHog project. `make posthog-environment-provision` stores it after configuring/verifying the GitHub Environment. |
 
 Non-secret environment values are committed in
 `config/environments/<env>.xcconfig`. This includes `CATVOX_PROJECT_ID`,

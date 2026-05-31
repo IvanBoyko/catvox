@@ -32,6 +32,8 @@ case "$name" in
   ci_service_account_email)    printf 'catvox-ci-sa@proj.iam.gserviceaccount.com  ' ;;
   github_actions_wif_provider) printf 'projects/123/locations/global/workloadIdentityPools/github-actions-pool/providers/github-actions-provider\n' ;;
   firebase_ios_app_id)         printf '1:123:ios:abc964748' ;;
+  project_id)                  printf '402530\n' ;;
+  project_api_token)           printf 'phc_testtoken123\n' ;;
   *) exit 1 ;;
 esac
 SH
@@ -72,6 +74,8 @@ CATVOX_FIREBASE_APP_ID = replace-with-app-id
 CATVOX_FIREBASE_API_KEY = replace-with-api-key
 CATVOX_SIGNED_UPLOAD_URL_HOST = replace-with-upload-host
 CATVOX_ANALYSE_VIDEO_HOST = replace-with-analyse-host
+CATVOX_POSTHOG_PROJECT_ID = replace-with-posthog-project-id
+CATVOX_POSTHOG_PROJECT_TOKEN = replace-with-posthog-project-token
 EOF
   : > "$PLIST"  # presence is enough; plutil is mocked
 }
@@ -132,5 +136,12 @@ if env -i PATH="$PATH_HERMETIC" CATVOX_ENVIRONMENT=sbx \
   fail "S6 expected failure on missing xcconfig"
 fi
 ok "missing xcconfig fails fast"
+
+# 7. PostHog phase writes project id + public ingestion token from terraform/posthog outputs.
+fixture posthog
+run posthog >/dev/null 2>&1 || fail "S7 posthog run errored"
+[[ "$(val CATVOX_POSTHOG_PROJECT_ID)" == "402530" ]] || fail "S7 project id: [$(val CATVOX_POSTHOG_PROJECT_ID)]"
+[[ "$(val CATVOX_POSTHOG_PROJECT_TOKEN)" == "phc_testtoken123" ]] || fail "S7 project token: [$(val CATVOX_POSTHOG_PROJECT_TOKEN)]"
+ok "posthog phase writes project id and public project token"
 
 echo "PASS ($pass cases)"
