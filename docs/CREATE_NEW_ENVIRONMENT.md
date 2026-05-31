@@ -117,8 +117,11 @@ Two helpers support the steps that follow, both environment-agnostic
 
 - `make environment-doctor` — a read-only preflight that asserts the provisioning
   prerequisites (billing, enabled APIs, the CI SA's roles including
-  `roles/cloudfunctions.admin`, WIF pool/provider scoping, the state bucket) and
-  fails fast with a fix hint instead of surfacing them as a mid-deploy error.
+  `roles/cloudfunctions.admin`, the full WIF trust chain — pool/provider scoping,
+  the `attribute.environment` mapping, and the CI SA's `workloadIdentityUser`
+  impersonation binding — the Cloud Functions Gen2 build SA's grants, and the
+  state bucket) and fails fast with a fix hint instead of surfacing them as a
+  mid-deploy error.
 - `make environment-write-config` — writes the resolved non-secret values into
   `config/environments/<env>.xcconfig` from Terraform outputs + the plist
   (`PHASE=identity`, the default) and the deployed Cloud Run hosts
