@@ -115,7 +115,7 @@ Inspect each surface with read-only operations:
 | Surface | Read-only inspection | Default | Clean only if… |
 |---|---|---|---|
 | Firestore `(default)` | `gcloud firestore databases describe --database='(default)' --project "$PROJECT_ID"` plus a read-only console spot-check of collections | Keep | Inspection shows test/seed documents created before go-live |
-| GCS uploads `catvox-raw-videos-$PROJECT_ID` | `gcloud storage ls "gs://catvox-raw-videos-$PROJECT_ID/**"` (list only) | Keep | Stray pre-launch uploaded objects exist |
+| GCS uploads `catvox-raw-videos-$PROJECT_ID` | `gcloud storage ls --recursive "gs://catvox-raw-videos-$PROJECT_ID"` (list only; an empty listing means no pre-launch objects — the `/**` wildcard form instead exits non-zero on an empty bucket) | Keep | Stray pre-launch uploaded objects exist |
 | Cloud Run revisions | `gcloud run revisions list --region "$CATVOX_FUNCTION_REGION" --project "$PROJECT_ID"` | Keep all | n/a (see below) |
 
 Per-surface notes:
@@ -181,13 +181,23 @@ selected by `GoogleService-Info-$(CATVOX_ENVIRONMENT).plist`).
   gate on the `$ENV` Environment — the same path as the original promote in
   `.github/workflows/functions.yml`.
 - **Emergency stop (a bad revision must stop serving immediately).** Shift Cloud
-  Run traffic back to the prior known-good revision. `<service>` is the function
-  name (`getSignedUploadURL` or `analyseVideo`); list revisions with `gcloud run
-  revisions list --service <service> --region "$CATVOX_FUNCTION_REGION"
-  --project "$PROJECT_ID"`.
+  Run traffic back to the prior known-good revision. A Gen2 function's Cloud Run
+  **service ID is the lowercased function name** — `getSignedUploadURL` →
+  `getsigneduploadurl`, `analyseVideo` → `analysevideo` (the mixed-case function
+  name is an invalid Cloud Run resource name). Confirm the exact IDs, then list
+  that service's revisions — both read-only:
 
   ```bash
-  gcloud run services update-traffic <service> \
+  gcloud run services list --region "$CATVOX_FUNCTION_REGION" \
+    --project "$PROJECT_ID" --format='value(metadata.name)'
+  gcloud run revisions list --service <service-id> \
+    --region "$CATVOX_FUNCTION_REGION" --project "$PROJECT_ID"
+  ```
+
+  Then shift traffic back to the prior revision:
+
+  ```bash
+  gcloud run services update-traffic <service-id> \
     --region "$CATVOX_FUNCTION_REGION" \
     --project "$PROJECT_ID" \
     --to-revisions <PRIOR_REVISION>=100
