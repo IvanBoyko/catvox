@@ -36,8 +36,9 @@ case "$args" in
     [[ -n "${MOCK_POSTHOG_LS_FAIL:-}" ]] && { echo "ERROR: (gcloud.storage.ls) caller does not have permission" >&2; exit 1; }
     echo "One or more URLs matched no objects." >&2; exit 1;;
   *"storage buckets describe"*)
-    [[ -n "${MOCK_NO_BUCKETS:-}" ]] && exit 1
-    [[ -f "$DELETED" ]] && grep -qxF "$bkt" "$DELETED" && exit 1   # already deleted -> absent
+    [[ -n "${MOCK_DESCRIBE_ERROR:-}" ]] && { echo "ERROR: (gcloud.storage.buckets.describe) caller does not have storage.buckets.get access to gs://$bkt" >&2; exit 1; }
+    [[ -n "${MOCK_NO_BUCKETS:-}" ]] && { echo "ERROR: gs://$bkt not found: The specified bucket does not exist." >&2; exit 1; }
+    [[ -f "$DELETED" ]] && grep -qxF "$bkt" "$DELETED" && { echo "ERROR: gs://$bkt not found: The specified bucket does not exist." >&2; exit 1; }
     exit 0;;
   *"storage buckets delete"*)
     echo "delbucket:${gsurl}" >> "$DLOG"
@@ -145,7 +146,7 @@ ok "PostHog state present + clean destroy completes the teardown"
 if run CONFIRM=destroy MOCK_BUCKET_DELETE_FAILS=1 >"$SANDBOX/o9" 2>&1; then
   fail "S9 expected abort when a bucket survives deletion"
 fi
-grep -q "still present after delete" "$SANDBOX/o9" || fail "S9 should report the surviving bucket"
+grep -q "still present" "$SANDBOX/o9" || fail "S9 should report the surviving bucket"
 ok "a bucket that survives deletion aborts loudly (not masked)"
 
 # 10. [P2 fix] gh DELETE 404 -> tolerated (already gone), run succeeds.
@@ -177,5 +178,14 @@ if env -i PATH="$PATH_NOGH" DLOG="$DLOG" DELETED="$DELETED" \
 fi
 grep -q "Missing required tool: gh" "$SANDBOX/o13" || fail "S13 should require gh"
 ok "gh is required up front (no silent skip of the GitHub Environment)"
+
+# 14. [round-3 P2] An indeterminate bucket describe (not not-found) -> abort,
+# rather than treating it as "absent" and skipping cleanup / masking a delete.
+if run CONFIRM=destroy MOCK_DESCRIBE_ERROR=1 >"$SANDBOX/o14" 2>&1; then
+  fail "S14 expected abort on an indeterminate bucket describe"
+fi
+grep -q "could not determine the status" "$SANDBOX/o14" || fail "S14 should report indeterminate status"
+grep -q "make:terraform-destroy" "$DLOG" && fail "S14 must abort at step 1, before terraform destroy"
+ok "indeterminate bucket describe aborts (not treated as absent)"
 
 echo "PASS ($pass cases)"

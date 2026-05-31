@@ -27,9 +27,10 @@
 #
 # Idempotent: absent resources are skipped, so a re-run after a partial teardown
 # converges. Only not-found / no-state conditions are tolerated — a genuine
-# failure (terraform destroy, a bucket that survives deletion, PostHog destroy
-# while its state exists, a PostHog state probe that fails for any reason other
-# than an empty prefix, or a non-404 GitHub API error) aborts loudly rather than
+# failure (terraform destroy, a bucket that survives deletion or whose status
+# probe fails for any reason other than not-found, PostHog destroy while its
+# state exists, a PostHog state probe that fails for any reason other than an
+# empty prefix, or a non-404 GitHub API error) aborts loudly rather than
 # reporting a clean teardown. In particular, if the core terraform destroy
 # (step 2) or the PostHog destroy/probe (step 3) fails, the script stops before
 # deleting the state bucket so the operator can retry. gh is required up front so
@@ -85,29 +86,47 @@ RAW_VIDEOS_BUCKET="catvox-raw-videos-${PROJECT_ID}"
 # gitignored tfvars is absent. A real -var-file (if present) overrides this.
 export TF_VAR_alert_email="${TF_VAR_alert_email:-teardown-noop@example.invalid}"
 
-bucket_exists() { gcloud storage buckets describe "gs://$1" --project "$PROJECT_ID" >/dev/null 2>&1; }
 empty_bucket() { gcloud storage rm --recursive "gs://$1/**" >/dev/null 2>&1 || true; }
-# Delete a bucket and VERIFY it is gone. The delete call's own exit is ignored
-# (an already-absent bucket is fine), but if the bucket survives — non-empty,
-# retained, or permission-denied — this fails loudly so we never report a clean
-# teardown while an out-of-graph bucket remains.
-delete_bucket() {
-  gcloud storage buckets delete "gs://$1" --project "$PROJECT_ID" --quiet >/dev/null 2>&1 || true
-  if bucket_exists "$1"; then
-    echo "  ERROR: gs://$1 is still present after delete (non-empty, retained, or permission denied)" >&2
-    return 1
+
+# Classify a bucket as exists | absent | error. A describe that fails for any
+# reason OTHER than not-found (permission, auth, transient) is "error" — callers
+# must treat it as indeterminate and abort, never as "absent", so a probe failure
+# cannot silently skip cleanup or mask a failed delete.
+bucket_status() {
+  local out
+  if out="$(gcloud storage buckets describe "gs://$1" --project "$PROJECT_ID" 2>&1)"; then
+    echo exists
+  elif printf '%s' "$out" | grep -qiE 'not found|does not exist|404|no such bucket'; then
+    echo absent
+  else
+    echo error
   fi
+}
+
+# Empty + delete a script-created bucket, then verify (tri-state) it is gone.
+# Aborts on an indeterminate describe or a surviving bucket rather than reporting
+# a clean teardown while the bucket remains.
+purge_bucket() {  # $1 = bucket name
+  case "$(bucket_status "$1")" in
+    absent) echo "  gs://$1 not present; skipping"; return 0 ;;
+    error)  echo "  ERROR: could not determine the status of gs://$1 (describe failed); aborting" >&2; return 1 ;;
+  esac
+  empty_bucket "$1"
+  gcloud storage buckets delete "gs://$1" --project "$PROJECT_ID" --quiet >/dev/null 2>&1 || true
+  case "$(bucket_status "$1")" in
+    absent) echo "  deleted gs://$1"; return 0 ;;
+    *)      echo "  ERROR: gs://$1 still present or unverifiable after delete (non-empty, retained, permission-denied, or probe failed); aborting" >&2; return 1 ;;
+  esac
 }
 
 # 1 — Empty the force_destroy=false raw-videos bucket (Terraform deletes the
 #     bucket itself in step 2, but only once it is empty).
 echo "1/6 Emptying raw-videos bucket ${RAW_VIDEOS_BUCKET} ..."
-if bucket_exists "$RAW_VIDEOS_BUCKET"; then
-  empty_bucket "$RAW_VIDEOS_BUCKET"
-  echo "  emptied (or already empty)"
-else
-  echo "  not present; skipping"
-fi
+case "$(bucket_status "$RAW_VIDEOS_BUCKET")" in
+  exists) empty_bucket "$RAW_VIDEOS_BUCKET"; echo "  emptied (or already empty)" ;;
+  absent) echo "  not present; skipping" ;;
+  error)  echo "  ERROR: could not determine the status of ${RAW_VIDEOS_BUCKET} (describe failed); aborting" >&2; exit 1 ;;
+esac
 
 # 2 — Core Terraform destroy. set -e stops the script here on failure, before any
 #     bucket is deleted, so the state stays intact for a retry.
@@ -149,13 +168,7 @@ fi
 echo "4/6 Deleting Cloud Functions sources bucket ..."
 if [[ -n "$PROJECT_NUMBER" && -n "$REGION" ]]; then
   src_bucket="gcf-v2-sources-${PROJECT_NUMBER}-${REGION}"
-  if bucket_exists "$src_bucket"; then
-    empty_bucket "$src_bucket"
-    delete_bucket "$src_bucket"
-    echo "  deleted ${src_bucket}"
-  else
-    echo "  ${src_bucket} not present; skipping"
-  fi
+  purge_bucket "$src_bucket"
 else
   echo "  project number or region unavailable; skipping sources bucket"
 fi
@@ -164,13 +177,7 @@ fi
 #     so it must outlive them. The operator's own credentials delete it (the CI
 #     SA's bucket IAM is already gone with step 2).
 echo "5/6 Deleting Terraform state bucket ${STATE_BUCKET} (last) ..."
-if bucket_exists "$STATE_BUCKET"; then
-  empty_bucket "$STATE_BUCKET"
-  delete_bucket "$STATE_BUCKET"
-  echo "  deleted ${STATE_BUCKET}"
-else
-  echo "  ${STATE_BUCKET} not present; skipping"
-fi
+purge_bucket "$STATE_BUCKET"
 
 # 6 — Delete the GitHub Environment and its secrets.
 echo "6/6 Deleting GitHub Environment '${ENVIRONMENT}' ..."
