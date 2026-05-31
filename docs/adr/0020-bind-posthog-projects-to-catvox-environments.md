@@ -165,6 +165,22 @@ not depend on a pre-existing `CATVOX_POSTHOG_PROJECT_ID`. Local bootstrap uses
 Environment, store `POSTHOG_API_KEY`, apply PostHog Terraform, and write the
 public project ID/token back to `config/environments/<env>.xcconfig`.
 
+## Update — 2026-05-31: live `CatVox Prod` PostHog project created
+
+The `CatVox Prod` PostHog project (numeric id `448206`) was provisioned live
+via `CATVOX_ENVIRONMENT=prod make posthog-environment-provision`, the first
+real exercise of the cold-start path: a brand-new environment whose
+`CATVOX_POSTHOG_PROJECT_ID` started as a placeholder. The command configured
+the protected `prod` GitHub Environment, stored the Prod-scoped
+`POSTHOG_API_KEY` secret, applied `terraform/posthog` against the
+`posthog/state` prefix in `catvox-tf-state-kathelix-catvox-prod`, and wrote the
+resulting project id and public ingestion token back into
+`config/environments/prod.xcconfig` (`CATVOX_POSTHOG_PROJECT_ID`,
+`CATVOX_POSTHOG_PROJECT_TOKEN`). Both CatVox PostHog projects now exist —
+`CatVox Dev` (`402530`) and `CatVox Prod` (`448206`) — each managed from the
+same Terraform definitions. This closes the "future Prod" provisioning item in
+the original follow-up plan below.
+
 ## Original Follow-up Plan
 
 This list records the follow-up plan when the ADR was accepted; the updates

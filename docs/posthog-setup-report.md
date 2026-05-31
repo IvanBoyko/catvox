@@ -11,15 +11,36 @@ If the PostHog project token is missing, analytics are disabled without
 crashing the app. Analytics are also disabled during XCTest and SwiftUI previews
 to keep automated verification out of analytics dashboards.
 
-The current PostHog project is `CatVox Dev`. Per ADR-0019, real production
-analytics must use a separate `CatVox Prod` project. The `app_environment`
-property remains required on every event as defense-in-depth metadata, but
-separate projects are the primary Dev/Prod isolation boundary.
-
 CatVox uses explicit product events only. PostHog automatic lifecycle capture,
 screen-view capture, element autocapture, rage-click capture, surveys, session
 replay, feature-flag preloading, default person properties, and crash autocapture
 are disabled in `AnalyticsService`.
+
+## Environments
+
+CatVox runs one PostHog project per named environment. Every project is managed
+from the same `terraform/posthog` definitions, so each environment has the same
+"Analytics basics" dashboard and 5 insights.
+
+| Environment | PostHog project | Project ID | App config | Analytics dashboard |
+|---|---|---|---|---|
+| `dev` | `CatVox Dev` | `402530` | `config/environments/dev.xcconfig` | [dashboard](https://us.posthog.com/project/402530/dashboard/1524032) |
+| `prod` | `CatVox Prod` | `448206` | `config/environments/prod.xcconfig` | [dashboard](https://us.posthog.com/project/448206/dashboard/1650824) |
+
+Per ADR-0019, separate projects per environment are the primary isolation
+boundary; the `app_environment` property required on every event is
+defense-in-depth metadata on top of that. Each environment's app reads its own
+public project token from `CATVOX_POSTHOG_PROJECT_TOKEN` in its xcconfig — a
+`phc_` ingestion key that is safe to commit by design (see ADR-0020). The
+operational PostHog API key is never committed; it lives only in the matching
+GitHub Environment secret.
+
+New environments are provisioned with `make posthog-environment-provision`,
+which applies `terraform/posthog` (HCL → `terraform apply` → PostHog; no UI
+wizard, no import) and writes the resulting project id and token back into the
+environment xcconfig. See `terraform/posthog/README.md` for the full sequence,
+`dashboard.tf` / `insights.tf` for the authoritative definitions, and ADR-0019
+and ADR-0020.
 
 ## Events
 
@@ -52,22 +73,6 @@ are disabled in `AnalyticsService`.
 | `scan_deleted` | User confirms deletion of a saved scan. | `persona_type` |
 | `upgrade_to_pro_tapped` | User taps the quota-card Pro CTA. | - |
 
-## Dev Dashboard Links From Wizard
-
-- **Dashboard - Analytics basics**: https://us.posthog.com/project/402530/dashboard/1524032
-- **Scan conversion funnel**: https://us.posthog.com/project/402530/insights/HpsroXVQ
-- **Photos validation failures**: https://us.posthog.com/project/402530/insights/3ZD4bnzS
-- **Share export conversion**: https://us.posthog.com/project/402530/insights/kB5Hjls2
-- **Quota pressure & upgrade intent**: https://us.posthog.com/project/402530/insights/brptiNF5
-- **Save-to-Photos conversion**: https://us.posthog.com/project/402530/insights/5dK5T6k9
-
-These links are Dev-only references for the current `CatVox Dev` project. The
-dashboard and all 5 insights are Terraform-managed under `terraform/posthog/`
-— see `dashboard.tf` and `insights.tf` for the authoritative HCL definitions,
-and `terraform/posthog/README.md` for the per-environment provisioning
-sequence (HCL → `terraform apply` → PostHog; no UI wizard, no import). See
-ADR-0019 and ADR-0020.
-
 ## Managed MVP Dashboard Tiles
 
 - Scan conversion:
@@ -81,3 +86,7 @@ ADR-0019 and ADR-0020.
 - Quota pressure:
   trend of `quota_card_shown` grouped by `trigger`, with `upgrade_to_pro_tapped`
   as the conversion event.
+
+The dashboard and all 5 insights are Terraform-managed under `terraform/posthog/`
+— see `dashboard.tf` and `insights.tf` for the authoritative HCL definitions,
+and `terraform/posthog/README.md` for the per-environment provisioning sequence.
