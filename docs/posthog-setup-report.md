@@ -38,8 +38,7 @@ GitHub Environment secret.
 New environments are provisioned with `make posthog-environment-provision`,
 which applies `terraform/posthog` (HCL → `terraform apply` → PostHog; no UI
 wizard, no import) and writes the resulting project id and token back into the
-environment xcconfig. `CatVox Prod` (`448206`) was provisioned this way on
-2026-05-31. See `terraform/posthog/README.md` for the full sequence,
+environment xcconfig. See `terraform/posthog/README.md` for the full sequence,
 `dashboard.tf` / `insights.tf` for the authoritative definitions, and ADR-0019
 and ADR-0020.
 
