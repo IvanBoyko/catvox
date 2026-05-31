@@ -419,8 +419,17 @@ terraform-plan: terraform-check-env-paths
 	@cd terraform && $(catvox_tf_env_args) GOOGLE_CLOUD_QUOTA_PROJECT="$(CATVOX_PROJECT_ID)" terraform validate -no-color
 	@cd terraform && $(catvox_tf_env_args) GOOGLE_CLOUD_QUOTA_PROJECT="$(CATVOX_PROJECT_ID)" terraform plan -no-color $(catvox_tf_var_file_arg)
 
+# CI-only plan. terraform -detailed-exitcode reports 0 = no changes, 2 = changes,
+# 1 = error. `make` collapses every non-zero recipe exit to 2, so it cannot carry
+# the 0-vs-2 distinction itself; the recipe echoes terraform's real code on a
+# CATVOX_TF_DETAILED_EXITCODE= marker line and exits 0 for 0/2 (only a genuine
+# error fails). The plan workflow reads that marker to skip the PR comment — and
+# the email it triggers — on no-change runs. See .github/actions/terraform-ci-plan.
 terraform-ci-plan: terraform-check-env-paths
-	@cd terraform && $(catvox_tf_env_args) GOOGLE_CLOUD_QUOTA_PROJECT="$(CATVOX_PROJECT_ID)" terraform plan -no-color $(catvox_tf_var_file_arg)
+	@cd terraform && $(catvox_tf_env_args) GOOGLE_CLOUD_QUOTA_PROJECT="$(CATVOX_PROJECT_ID)" terraform plan -detailed-exitcode -no-color $(catvox_tf_var_file_arg); \
+		code=$$?; \
+		echo "CATVOX_TF_DETAILED_EXITCODE=$$code"; \
+		[ "$$code" = "2" ] && exit 0 || exit "$$code"
 
 terraform-apply: terraform-check-env-paths
 	@if [[ "$(CONFIRM)" != "apply" ]]; then \
@@ -474,8 +483,14 @@ posthog-terraform-plan: posthog-terraform-check-env-paths
 	@cd terraform/posthog && terraform validate -no-color
 	@cd terraform/posthog && $(catvox_posthog_tf_env_args) terraform plan -no-color $(catvox_posthog_tf_var_file_arg)
 
+# CI-only plan. See terraform-ci-plan above for the -detailed-exitcode +
+# CATVOX_TF_DETAILED_EXITCODE marker contract the plan workflow relies on to skip
+# the PR comment on no-change runs.
 posthog-terraform-ci-plan: posthog-terraform-check-env-paths
-	@cd terraform/posthog && $(catvox_posthog_tf_env_args) terraform plan -no-color $(catvox_posthog_tf_var_file_arg)
+	@cd terraform/posthog && $(catvox_posthog_tf_env_args) terraform plan -detailed-exitcode -no-color $(catvox_posthog_tf_var_file_arg); \
+		code=$$?; \
+		echo "CATVOX_TF_DETAILED_EXITCODE=$$code"; \
+		[ "$$code" = "2" ] && exit 0 || exit "$$code"
 
 posthog-terraform-apply: posthog-terraform-check-env-paths
 	@if [[ "$(CONFIRM)" != "apply" ]]; then \
