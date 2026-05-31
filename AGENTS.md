@@ -379,6 +379,11 @@ GitHub Actions WIF produces an external-account Application Default Credentials 
 | `posthog-terraform.yml` (apply: dev) | Merge to `main` touching `terraform/posthog/**`, `config/environments/**`, `Makefile`, or workflow | Auto-apply PostHog Terraform to dev |
 | `posthog-terraform.yml` (apply: prod) | Manual `workflow_dispatch` from `main` | Prod PostHog apply; protected `prod` Environment gates it |
 
+**Workflow authoring notes:**
+
+- A path-filtered workflow must list every local action it `uses:` in its `push` and `pull_request` `paths` (e.g. `.github/actions/terraform-ci-plan/**`, alongside `gcp-auth`/`read-environment-config`). Otherwise a PR that changes only the action skips the workflow, so a regression in shared CI logic merges unchecked — re-run this consistency sweep whenever you extract a step into a composite action (PR #121).
+- `make` exits **2** for *any* recipe failure, so CI cannot recover a wrapped tool's exact exit code through a make target — e.g. `terraform plan -detailed-exitcode` returns 0/2/1, but make collapses 1 and 2 to 2. Capture `$?` inside the recipe and surface the real code (the `*-ci-plan` targets echo a `CATVOX_TF_DETAILED_EXITCODE=` marker that `.github/actions/terraform-ci-plan` parses). Verify a wrapper's exit-code behavior empirically before relying on it (PR #121).
+
 ### Environment Creation / Bootstrap
 
 Use `docs/CREATE_NEW_ENVIRONMENT.md` and `make environment-create` for new environments. One-time repository/GitHub setup lives in `docs/CI_BOOTSTRAP.md`.
