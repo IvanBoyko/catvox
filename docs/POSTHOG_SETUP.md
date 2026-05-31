@@ -1,4 +1,4 @@
-# PostHog setup report
+# PostHog setup
 
 PostHog analytics are integrated through the repo-owned XcodeGen workflow.
 The SDK package is declared in `project.yml`, app configuration is generated
@@ -15,6 +15,10 @@ CatVox uses explicit product events only. PostHog automatic lifecycle capture,
 screen-view capture, element autocapture, rage-click capture, surveys, session
 replay, feature-flag preloading, default person properties, and crash autocapture
 are disabled in `AnalyticsService`.
+
+In-app user feedback and error/crash intake are intentionally out of scope for
+this analytics epic; the tool/path decision (PostHog Surveys/Error Tracking vs a
+standalone SaaS vs a custom backend endpoint) is tracked in #123.
 
 ## Environments
 

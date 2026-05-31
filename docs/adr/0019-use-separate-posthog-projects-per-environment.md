@@ -3,7 +3,7 @@
 - Status: Accepted
 - Date: 2026-05-21
 - Owners: Kathelix / CatVox
-- Related docs: `docs/HLD.md`, `docs/TRD.md`, `docs/CREATE_NEW_ENVIRONMENT.md`, `docs/posthog-setup-report.md`, `docs/adr/0011-use-posthog-for-product-analytics.md`, `docs/adr/0017-environment-configuration-model.md`, `docs/adr/0018-create-dedicated-dev-environment.md`, GitHub issue #37
+- Related docs: `docs/HLD.md`, `docs/TRD.md`, `docs/CREATE_NEW_ENVIRONMENT.md`, `docs/POSTHOG_SETUP.md`, `docs/adr/0011-use-posthog-for-product-analytics.md`, `docs/adr/0017-environment-configuration-model.md`, `docs/adr/0018-create-dedicated-dev-environment.md`, GitHub issue #37
 
 ## Context
 
