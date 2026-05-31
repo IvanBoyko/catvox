@@ -56,45 +56,25 @@ are disabled in `AnalyticsService`.
 
 - **Dashboard - Analytics basics**: https://us.posthog.com/project/402530/dashboard/1524032
 - **Scan conversion funnel**: https://us.posthog.com/project/402530/insights/HpsroXVQ
-- **Daily scan volume**: https://us.posthog.com/project/402530/insights/3ZD4bnzS
-- **Top cat personas**: https://us.posthog.com/project/402530/insights/kB5Hjls2
+- **Photos validation failures**: https://us.posthog.com/project/402530/insights/3ZD4bnzS
+- **Share export conversion**: https://us.posthog.com/project/402530/insights/kB5Hjls2
 - **Quota pressure & upgrade intent**: https://us.posthog.com/project/402530/insights/brptiNF5
-- **Scan share actions**: https://us.posthog.com/project/402530/insights/5dK5T6k9
-
-These dashboard definitions may need to be refreshed because `scan_shared` now
-means a completed share action, while `share_sheet_opened` tracks sheet
-presentation.
+- **Save-to-Photos conversion**: https://us.posthog.com/project/402530/insights/5dK5T6k9
 
 These links are Dev-only references for the current `CatVox Dev` project. The
 dashboard and all 5 insights are Terraform-managed under `terraform/posthog/`
 — see `dashboard.tf` and `insights.tf` for the authoritative HCL definitions,
 and `terraform/posthog/README.md` for the per-environment provisioning
-sequence (HCL → `terraform apply` → PostHog; no UI wizard, no import). Slice 5
-will normalise the definitions into a reusable per-environment form and
-rewrite share-semantics insights to use corrected event names. See ADR-0019
-and ADR-0020.
+sequence (HCL → `terraform apply` → PostHog; no UI wizard, no import). See
+ADR-0019 and ADR-0020.
 
-## Dashboard Refresh Notes
+## Managed MVP Dashboard Tiles
 
-Refresh the wizard-created PostHog insights so they match CatVox's final event
-semantics:
-
-1. Open each linked insight from **Dashboard - Analytics basics**.
-2. For share-sheet presentation counts, use `share_sheet_opened`.
-3. For completed share counts, use `scan_shared`.
-4. For save-to-Photos success counts, use `scan_saved_to_photos`.
-5. For failure monitoring, use `share_export_render_failed`,
-   `share_save_failed`, and `photos_permission_denied`.
-6. Save the edited insight and update the dashboard tile title if the event
-   meaning changed.
-
-Suggested MVP dashboard tiles:
-
-- Scan conversion funnel:
+- Scan conversion:
   `scan_source_chosen` -> `video_validation_passed` -> `analysis_completed`.
-- Photos import validation:
+- Photos validation failures:
   trend of `video_validation_failed` grouped by `validation_failure_reason`.
-- Share conversion funnel:
+- Share/export conversion:
   `share_export_started` -> `share_sheet_opened` -> `scan_shared`.
 - Save-to-Photos conversion:
   `share_export_started` -> `scan_saved_to_photos`.

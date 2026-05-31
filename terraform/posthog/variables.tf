@@ -28,12 +28,12 @@ variable "posthog_api_host" {
 }
 
 variable "posthog_project_id" {
-  description = "PostHog project ID for this CatVox environment. Sourced from CATVOX_POSTHOG_PROJECT_ID in config/environments/<env>.xcconfig."
+  description = "PostHog project ID for this CatVox environment. Sourced from CATVOX_POSTHOG_PROJECT_ID in config/environments/<env>.xcconfig. Unlike the other inputs this is not required to provision a brand-new environment: during cold start it is empty or a `replace-with-...` placeholder, the project is created from posthog_organization_id, and every resource targets the created project's id. It is written back to a numeric id after the first apply."
   type        = string
 
   validation {
-    condition     = length(var.posthog_project_id) > 0
-    error_message = "posthog_project_id must not be empty. Set CATVOX_POSTHOG_PROJECT_ID in the matching xcconfig."
+    condition     = var.posthog_project_id == "" || startswith(var.posthog_project_id, "replace-with-") || can(regex("^[0-9]+$", var.posthog_project_id))
+    error_message = "posthog_project_id must be empty or a replace-with-... placeholder during cold start, or a numeric PostHog project ID once the project exists."
   }
 }
 

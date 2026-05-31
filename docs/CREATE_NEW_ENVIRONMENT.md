@@ -64,7 +64,10 @@ Pick explicit values before running the script:
 | `APP_CHECK_DEBUG_TOKEN` | UUID4 token | Optional. Presence registers the token. |
 | `ALERT_EMAIL` | alert recipient | Required when the ignored tfvars file does not already exist |
 | `RUN_TERRAFORM_APPLY` | `0` or `1` | Yes. Set to `1` to apply Terraform; `0` runs only the safe preview phases. |
+| `RUN_POSTHOG_TERRAFORM_APPLY` | `0` or `1` | Yes. Set to `1` to provision the environment's PostHog project/dashboard and write PostHog values into xcconfig. |
 | `RUN_FUNCTIONS_DEPLOY` | `0` or `1` | Yes. Set to `1` to deploy Cloud Functions; `0` skips the deploy. |
+| `POSTHOG_API_KEY` | PostHog personal API key | Optional. If omitted and `RUN_POSTHOG_TERRAFORM_APPLY=1`, the provisioning script prompts silently. |
+| `GITHUB_ENVIRONMENT_REVIEWERS` | `IvanBoyko` | Required for protected environments when PostHog provisioning configures the GitHub Environment before storing `POSTHOG_API_KEY`. |
 
 ## Automated Creation
 
@@ -87,6 +90,7 @@ CATVOX_FIREBASE_APPLE_TEAM_ID=QYT76L5836 \
 CATVOX_MANAGE_GCF_SOURCES_BUCKET_IAM=true \
 ALERT_EMAIL=<alerts@example.com> \
 RUN_TERRAFORM_APPLY=1 \
+RUN_POSTHOG_TERRAFORM_APPLY=1 \
 RUN_FUNCTIONS_DEPLOY=1 \
 make environment-create
 ```
@@ -105,12 +109,17 @@ The script:
 7. Runs Terraform init and plan.
 8. Optionally applies Terraform.
 9. Writes and validates `CatVox/Resources/Firebase/GoogleService-Info-<env>.plist`.
-10. Optionally sets the Functions artifact cleanup policy and deploys Cloud Functions.
-11. Prints the remaining GitHub Environment secrets and committed xcconfig values still needing review.
+10. Optionally provisions PostHog for the environment. If a `POSTHOG_API_KEY`
+    is not exported, the script prompts silently, configures/verifies the
+    matching GitHub Environment, stores the key as that environment's
+    `POSTHOG_API_KEY` secret, applies `terraform/posthog`, and writes the
+    public PostHog project ID/token into the environment xcconfig.
+11. Optionally sets the Functions artifact cleanup policy and deploys Cloud Functions.
+12. Prints the remaining GitHub Environment secrets and committed xcconfig values still needing review.
 
-Both `RUN_TERRAFORM_APPLY` and `RUN_FUNCTIONS_DEPLOY` must be set explicitly to
-either `0` or `1` — there are no defaults. Set them to `0` to stop after the
-safe preview phases.
+`RUN_TERRAFORM_APPLY`, `RUN_POSTHOG_TERRAFORM_APPLY`, and
+`RUN_FUNCTIONS_DEPLOY` must be set explicitly to either `0` or `1` — there are
+no defaults. Set them to `0` to stop after the safe preview phases.
 
 Two helpers support the steps that follow, both environment-agnostic
 (`CATVOX_ENVIRONMENT=<env>`):
@@ -135,7 +144,7 @@ Create or update the GitHub Environment named `<env>` and set:
 |---|---|
 | `TF_VAR_ALERT_EMAIL` | same value as `alert_email` in ignored tfvars |
 | `TF_VAR_APP_CHECK_DEBUG_TOKEN` | Mutable / integration-safe environments only |
-| `POSTHOG_API_KEY` | PostHog scoped personal API key with project-write scope limited to this environment's PostHog project. |
+| `POSTHOG_API_KEY` | PostHog scoped personal API key with project-write scope limited to this environment's PostHog project. Set automatically by `make posthog-environment-provision`. |
 
 Example:
 
@@ -143,7 +152,7 @@ Example:
 gh api --method PUT repos/kathelix/catvox/environments/<env>
 gh secret set TF_VAR_ALERT_EMAIL --env <env>
 gh secret set TF_VAR_APP_CHECK_DEBUG_TOKEN --env <env>
-gh secret set POSTHOG_API_KEY --env <env>
+make posthog-environment-provision CATVOX_ENVIRONMENT=<env>
 ```
 
 Protected environments must use a protected GitHub Environment and must not reuse
@@ -259,6 +268,19 @@ in Xcode Settings → Accounts and verify it can access team `QYT76L5836`; see
 
 ## Update App Config After Deploy
 
+After PostHog provisioning, fill the analytics values in
+`config/environments/<env>.xcconfig`. `make posthog-environment-provision` does
+this automatically after apply by calling `make environment-write-config
+PHASE=posthog`; you can also re-run just the writeback step:
+
+```bash
+CATVOX_ENVIRONMENT=<env> make environment-write-config PHASE=posthog
+```
+
+This writes `CATVOX_POSTHOG_PROJECT_ID` and
+`CATVOX_POSTHOG_PROJECT_TOKEN`. The token is the public ingestion key used by
+the iOS client; it is safe to commit, unlike `POSTHOG_API_KEY`.
+
 After Functions deploy, fill the host-only values in
 `config/environments/<env>.xcconfig`. `CATVOX_ENVIRONMENT=<env> make
 environment-write-config PHASE=hosts` reads the deployed hosts and writes them
@@ -369,12 +391,17 @@ export ENV=prod
 export PROJECT_ID=kathelix-catvox-prod
 ```
 
-**1 · First Terraform apply — operator-local (O1).** Run locally with GCP-admin
-credentials: it creates the WIF pool and `catvox-ci-sa` that CI authenticates as,
-and (for a preserved project) imports the existing Firebase app + Firestore
-before applying. CI cannot do this — the CI SA has no `workloadIdentityPoolAdmin`
-(see `docs/CI_BOOTSTRAP.md`). Functions are deliberately not deployed here;
-protected environments deploy only through the protected CI path (step 6).
+**1 · First Terraform apply + PostHog provision — operator-local (O1).** Run
+locally with GCP-admin credentials: it creates the WIF pool and `catvox-ci-sa`
+that CI authenticates as, and (for a preserved project) imports the existing
+Firebase app + Firestore before applying. CI cannot do this — the CI SA has no
+`workloadIdentityPoolAdmin` (see `docs/CI_BOOTSTRAP.md`). If
+`RUN_POSTHOG_TERRAFORM_APPLY=1`, the same command prompts silently for the
+environment's PostHog API key (unless exported), configures/verifies the GitHub
+Environment, stores `POSTHOG_API_KEY` there for CI, applies `terraform/posthog`,
+and writes the public PostHog project ID/token into the xcconfig. Functions are
+deliberately not deployed here; protected environments deploy only through the
+protected CI path (step 6).
 
 ```bash
 # Authenticate as the project's GCP admin first:
@@ -393,7 +420,9 @@ CATVOX_FIREBASE_APPLE_TEAM_ID=QYT76L5836 \
 CATVOX_MANAGE_GCF_SOURCES_BUCKET_IAM=true \
 ALERT_EMAIL=<prod-alerts@example.com> \
 RUN_TERRAFORM_APPLY=1 \
+RUN_POSTHOG_TERRAFORM_APPLY=1 \
 RUN_FUNCTIONS_DEPLOY=0 \
+GITHUB_ENVIRONMENT_REVIEWERS=IvanBoyko \
 make environment-create
 ```
 
@@ -430,13 +459,15 @@ CATVOX_ENVIRONMENT="$ENV" make terraform-output-firebase-plist
 git add "CatVox/Resources/Firebase/GoogleService-Info-$ENV.plist" "config/environments/$ENV.xcconfig"
 ```
 
-**4 · Configure the GitHub Environment from config (O2).** Repo-admin action.
-`make configure-github-environment` reads `CATVOX_ENVIRONMENT_PROTECTED` and
-`CATVOX_GCP_WIF_GITHUB_REF` from `config/environments/$ENV.xcconfig` and applies
-the matching protection — a **protected** environment gets required reviewers plus
-a deployment-branch policy pinned to the WIF ref's branch; a **mutable** one gets
-no reviewers and no branch restriction. Pass the reviewer(s), required when the
-environment is protected:
+**4 · Verify or configure the GitHub Environment from config (O2).** Repo-admin
+action. If step 1 ran PostHog provisioning, this configuration already happened
+before `POSTHOG_API_KEY` was stored; re-running is idempotent and verifies the
+live environment still matches config. `make configure-github-environment` reads
+`CATVOX_ENVIRONMENT_PROTECTED` and `CATVOX_GCP_WIF_GITHUB_REF` from
+`config/environments/$ENV.xcconfig` and applies the matching protection — a
+**protected** environment gets required reviewers plus a deployment-branch policy
+pinned to the WIF ref's branch; a **mutable** one gets no reviewers and no branch
+restriction. Pass the reviewer(s), required when the environment is protected:
 
 ```bash
 make configure-github-environment CATVOX_ENVIRONMENT="$ENV" \
@@ -449,9 +480,10 @@ and restricts deploys to `main`; for a mutable environment it leaves the
 environment open. Re-running is idempotent. You can also manage it from the UI:
 Settings → Environments → `$ENV`.
 
-**5 · Set the environment's secrets (O3).** You supply the value when prompted.
-Protected environments get **no** App Check debug token; PostHog
-(`POSTHOG_API_KEY`) is deferred to #37 (see "GitHub Environment Secrets").
+**5 · Set any remaining environment secrets (O3).** You supply the value when
+prompted. Protected environments get **no** App Check debug token. If step 1 ran
+PostHog provisioning, `POSTHOG_API_KEY` is already stored; otherwise run
+`CATVOX_ENVIRONMENT="$ENV" make posthog-environment-provision` now.
 
 ```bash
 gh secret set TF_VAR_ALERT_EMAIL --env "$ENV" --repo kathelix/catvox

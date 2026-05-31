@@ -139,6 +139,7 @@ make functions-integration
 make smoke
 make terraform-plan
 make terraform-apply CONFIRM=apply
+make posthog-environment-provision
 make environment-create
 ```
 
@@ -375,7 +376,8 @@ GitHub Actions WIF produces an external-account Application Default Credentials 
 | `terraform.yml` (apply: dev) | Merge to `main` touching Terraform inputs | Auto-apply to dev via reusable `terraform-apply.yml` |
 | `terraform.yml` (apply: prod) | Manual `workflow_dispatch` from `main` | Prod apply via `terraform-apply.yml`; protected `prod` Environment gates it |
 | `posthog-terraform.yml` (plan) | PR touching `terraform/posthog/**`, `config/environments/**`, `Makefile`, or workflow | fmt-check → init → validate → plan → PR comment |
-| `posthog-terraform.yml` (apply) | Merge to `main` touching `terraform/posthog/**`, `config/environments/**`, `Makefile`, or workflow | init → apply -auto-approve |
+| `posthog-terraform.yml` (apply: dev) | Merge to `main` touching `terraform/posthog/**`, `config/environments/**`, `Makefile`, or workflow | Auto-apply PostHog Terraform to dev |
+| `posthog-terraform.yml` (apply: prod) | Manual `workflow_dispatch` from `main` | Prod PostHog apply; protected `prod` Environment gates it |
 
 ### Environment Creation / Bootstrap
 
@@ -388,6 +390,11 @@ Use `docs/CREATE_NEW_ENVIRONMENT.md` and `make environment-create` for new envir
 | `TF_VAR_ALERT_EMAIL` | Dev alert recipient |
 | `TF_VAR_APP_CHECK_DEBUG_TOKEN` | Dev Firebase App Check debug token |
 | `POSTHOG_API_KEY` | PostHog scoped personal API key for the `CatVox Dev` project |
+
+`make posthog-environment-provision` configures/verifies the matching GitHub
+Environment before storing `POSTHOG_API_KEY`, applies the PostHog Terraform
+root, and writes the public PostHog project ID/token back into
+`config/environments/<environment>.xcconfig`.
 
 `CATVOX_PROJECT_ID`, `CATVOX_GCP_CI_SERVICE_ACCOUNT`, and
 `CATVOX_GCP_WIF_PROVIDER` are non-secret values in

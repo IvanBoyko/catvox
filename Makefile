@@ -112,7 +112,7 @@ endef
 	functions-install functions-build functions-test functions-deploy functions-integration functions-ci \
 	backend-build backend-deploy backend-integration \
 	terraform-check-env-paths terraform-fmt-check terraform-init terraform-validate terraform-test terraform-plan terraform-ci-plan terraform-apply terraform-ci-apply terraform-import terraform-output-firebase-plist \
-	posthog-terraform-check-env-paths posthog-terraform-fmt-check posthog-terraform-init posthog-terraform-validate posthog-terraform-plan posthog-terraform-ci-plan posthog-terraform-apply posthog-terraform-ci-apply \
+	posthog-terraform-check-env-paths posthog-terraform-fmt-check posthog-terraform-init posthog-terraform-validate posthog-terraform-plan posthog-terraform-ci-plan posthog-terraform-apply posthog-terraform-ci-apply posthog-environment-provision \
 	smoke environment-create configure-github-environment environment-write-config environment-doctor \
 	terraform-destroy posthog-terraform-destroy environment-destroy
 
@@ -150,11 +150,12 @@ help:
 		'  make posthog-terraform-plan  fmt-check, init, validate, and plan PostHog Terraform' \
 		'  make posthog-terraform-apply Plan, then interactively apply PostHog Terraform; requires CONFIRM=apply' \
 		'  make posthog-terraform-ci-apply CI-only auto-approved PostHog Terraform apply' \
+		'  make posthog-environment-provision Prompt/store PostHog API key, apply PostHog Terraform, and write xcconfig' \
 		'' \
 		'  make smoke CATVOX_ENVIRONMENT=<env> Run non-invasive environment smoke checks' \
 		'  make environment-create     Bootstrap a named GCP/Firebase environment' \
 		'  make environment-doctor     Read-only preflight of an environment'\''s provisioning prerequisites' \
-		'  make environment-write-config Write resolved non-secret xcconfig values (PHASE=identity|hosts|all)' \
+		'  make environment-write-config Write resolved non-secret xcconfig values (PHASE=identity|hosts|posthog|all)' \
 		'  make configure-github-environment Configure a GitHub Environment from committed config' \
 		'  make environment-destroy    Tear down an environment (CONFIRM=destroy; protected also needs ALLOW_PROTECTED_DESTROY=<env>)' \
 		'' \
@@ -178,6 +179,7 @@ help:
 		'  CATVOX_POSTHOG_PROJECT_ID=... overrides the xcconfig PostHog project ID for terraform/posthog/' \
 		'  CATVOX_POSTHOG_ORGANIZATION_ID=... overrides the xcconfig PostHog organization ID for terraform/posthog/' \
 		'  CATVOX_POSTHOG_API_HOST_NAME=us.posthog.com overrides the xcconfig PostHog Terraform API host name' \
+		'  RUN_POSTHOG_TERRAFORM_APPLY=1 includes PostHog provisioning in make environment-create' \
 		'  IOS_TEST_DESTINATION="platform=iOS Simulator,name=iPhone 16,OS=latest"' \
 		'  IOS_UI_TEST_DESTINATION="platform=iOS Simulator,name=iPhone 16,OS=latest"' \
 		'  DEVICE_ID=... make ios-device-launch' \
@@ -213,6 +215,7 @@ scripts-test:
 	@bash scripts/test/makefile-env-cache.test.sh
 	@bash scripts/test/import-preexisting-resources.test.sh
 	@bash scripts/test/configure-github-environment.test.sh
+	@bash scripts/test/provision-posthog-environment.test.sh
 	@bash scripts/test/environment-doctor.test.sh
 	@bash scripts/test/write-environment-config.test.sh
 	@bash scripts/test/destroy-environment.test.sh
@@ -486,9 +489,16 @@ posthog-terraform-apply: posthog-terraform-check-env-paths
 posthog-terraform-ci-apply: posthog-terraform-check-env-paths
 	@cd terraform/posthog && $(catvox_posthog_tf_env_args) terraform apply -auto-approve -no-color $(catvox_posthog_tf_var_file_arg)
 
+posthog-environment-provision:
+	@CATVOX_ENVIRONMENT="$(CATVOX_ENVIRONMENT)" \
+	 CATVOX_ENV_CONFIG="$(CATVOX_ENV_CONFIG)" \
+	 GITHUB_ENVIRONMENT_REVIEWERS="$(GITHUB_ENVIRONMENT_REVIEWERS)" \
+	 POSTHOG_API_KEY="$(POSTHOG_API_KEY)" \
+	 ./scripts/provision-posthog-environment.sh
+
 # Destroy the PostHog Terraform resources for an environment. Gated on
-# CONFIRM=destroy. Tolerant of an empty/uninitialised root (PostHog is deferred
-# for some environments — see #37).
+# CONFIRM=destroy. Tolerant of an empty/uninitialised root during first
+# bootstrap or after a previous teardown.
 posthog-terraform-destroy: posthog-terraform-check-env-paths
 	@if [[ "$(CONFIRM)" != "destroy" ]]; then \
 		printf 'Refusing to run PostHog Terraform destroy. Re-run as: make posthog-terraform-destroy CONFIRM=destroy\n' >&2; \
@@ -526,6 +536,9 @@ environment-create:
 	 CATVOX_FIREBASE_IOS_APP_DELETION_POLICY="$(CATVOX_FIREBASE_IOS_APP_DELETION_POLICY)" \
 	 CATVOX_FIREBASE_APPLE_TEAM_ID="$(CATVOX_FIREBASE_APPLE_TEAM_ID)" \
 	 CATVOX_MANAGE_GCF_SOURCES_BUCKET_IAM="$(CATVOX_MANAGE_GCF_SOURCES_BUCKET_IAM)" \
+	 RUN_POSTHOG_TERRAFORM_APPLY="$(RUN_POSTHOG_TERRAFORM_APPLY)" \
+	 GITHUB_ENVIRONMENT_REVIEWERS="$(GITHUB_ENVIRONMENT_REVIEWERS)" \
+	 POSTHOG_API_KEY="$(POSTHOG_API_KEY)" \
 	 ./scripts/create-environment.sh
 
 configure-github-environment:

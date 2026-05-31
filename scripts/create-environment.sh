@@ -25,6 +25,7 @@ IOS_APP_DELETION_POLICY="${CATVOX_FIREBASE_IOS_APP_DELETION_POLICY:-}"
 APPLE_TEAM_ID="${CATVOX_FIREBASE_APPLE_TEAM_ID:-}"
 RUN_TERRAFORM_APPLY="${RUN_TERRAFORM_APPLY:-}"
 RUN_FUNCTIONS_DEPLOY="${RUN_FUNCTIONS_DEPLOY:-}"
+RUN_POSTHOG_TERRAFORM_APPLY="${RUN_POSTHOG_TERRAFORM_APPLY:-}"
 MANAGE_GCF_SOURCES_BUCKET_IAM="${CATVOX_MANAGE_GCF_SOURCES_BUCKET_IAM:-}"
 
 cd "${REPO_ROOT}"
@@ -81,9 +82,37 @@ require_value CATVOX_FIREBASE_IOS_APP_DELETION_POLICY "${IOS_APP_DELETION_POLICY
 require_value CATVOX_FIREBASE_APPLE_TEAM_ID "${APPLE_TEAM_ID}"
 require_value RUN_TERRAFORM_APPLY "${RUN_TERRAFORM_APPLY}"
 require_value RUN_FUNCTIONS_DEPLOY "${RUN_FUNCTIONS_DEPLOY}"
+require_value RUN_POSTHOG_TERRAFORM_APPLY "${RUN_POSTHOG_TERRAFORM_APPLY}"
 require_value CATVOX_MANAGE_GCF_SOURCES_BUCKET_IAM "${MANAGE_GCF_SOURCES_BUCKET_IAM}"
 
 MANAGE_GCF_SOURCES_BUCKET_IAM="$(normalize_bool CATVOX_MANAGE_GCF_SOURCES_BUCKET_IAM "${MANAGE_GCF_SOURCES_BUCKET_IAM}")"
+
+case "${RUN_TERRAFORM_APPLY}" in
+  0|1)
+    ;;
+  *)
+    echo "RUN_TERRAFORM_APPLY must be 0 or 1." >&2
+    exit 1
+    ;;
+esac
+
+case "${RUN_POSTHOG_TERRAFORM_APPLY}" in
+  0|1)
+    ;;
+  *)
+    echo "RUN_POSTHOG_TERRAFORM_APPLY must be 0 or 1." >&2
+    exit 1
+    ;;
+esac
+
+case "${RUN_FUNCTIONS_DEPLOY}" in
+  0|1)
+    ;;
+  *)
+    echo "RUN_FUNCTIONS_DEPLOY must be 0 or 1." >&2
+    exit 1
+    ;;
+esac
 
 require_tool gcloud
 require_tool firebase
@@ -211,6 +240,13 @@ else
   echo "RUN_TERRAFORM_APPLY is not 1; skipped terraform apply and plist export."
 fi
 
+if [[ "${RUN_POSTHOG_TERRAFORM_APPLY}" == "1" ]]; then
+  make posthog-environment-provision \
+    CATVOX_ENVIRONMENT="${ENVIRONMENT}"
+else
+  echo "RUN_POSTHOG_TERRAFORM_APPLY is not 1; skipped PostHog Terraform apply."
+fi
+
 if [[ "${RUN_FUNCTIONS_DEPLOY}" == "1" ]]; then
   # make functions-deploy sets the Artifact Registry cleanup policy itself.
   make functions-deploy \
@@ -225,6 +261,7 @@ cat <<EOF
 Remaining secrets to add to the GitHub Environment named '${ENVIRONMENT}':
   TF_VAR_ALERT_EMAIL=<same alert email used in ${TFVARS_FILE}>
   TF_VAR_APP_CHECK_DEBUG_TOKEN=<Dev only; same UUID used in ${TFVARS_FILE}>
+  POSTHOG_API_KEY=<already set by RUN_POSTHOG_TERRAFORM_APPLY=1, otherwise set manually>
 
 After Terraform apply and Functions deploy, update config/environments/${ENVIRONMENT}.xcconfig with:
   CATVOX_PROJECT_ID=${PROJECT_ID}

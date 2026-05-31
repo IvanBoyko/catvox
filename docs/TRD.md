@@ -332,7 +332,7 @@ percentage. See ADR-0010 and ADR-0012.
 ### 6.7 Named Environment Configuration
 CatVox uses named environments. Initial names are `dev` and `prod`, but product code, scripts, CI, and Terraform conventions must treat the environment name as data so future environments can be added without source-level branching. See ADR-0017.
 
-Each environment owns its own GCP/Firebase project, Firebase iOS app, App Check configuration, backend endpoints, PostHog project/token configuration, GitHub Environment secret set, and Terraform state. PostHog Terraform automation lives in the `terraform/posthog/` root with state under prefix `posthog/state` in the matching environment's GCS bucket; operational PostHog API credentials live in per-environment GitHub Environment secrets (`POSTHOG_API_KEY`), while the PostHog API host, project ID, and organization ID remain in `config/environments/<environment>.xcconfig` as `CATVOX_POSTHOG_API_HOST_NAME`, `CATVOX_POSTHOG_PROJECT_ID`, and `CATVOX_POSTHOG_ORGANIZATION_ID` so app config is the source of truth. See ADR-0020.
+Each environment owns its own GCP/Firebase project, Firebase iOS app, App Check configuration, backend endpoints, PostHog project/token configuration, GitHub Environment secret set, and Terraform state. PostHog Terraform automation lives in the `terraform/posthog/` root with state under prefix `posthog/state` in the matching environment's GCS bucket; operational PostHog API credentials live in per-environment GitHub Environment secrets (`POSTHOG_API_KEY`), while the PostHog API host, project ID, and organization ID remain in `config/environments/<environment>.xcconfig` as `CATVOX_POSTHOG_API_HOST_NAME`, `CATVOX_POSTHOG_PROJECT_ID`, and `CATVOX_POSTHOG_ORGANIZATION_ID` so app config is the source of truth. `make posthog-environment-provision` configures/verifies the matching GitHub Environment, stores `POSTHOG_API_KEY`, applies the PostHog root, and writes the public project ID/token back to xcconfig. See ADR-0020.
 
 Active Dev defaults point at `kathelix-catvox-dev`. Committed `config/environments/<environment>.xcconfig` files are the source of truth for non-secret app, backend, CI-auth identity, analytics, and Terraform environment values so bare Xcode runs and Makefile-driven automation read the same values. XcodeGen attaches the selected xcconfig to the app target and passes values through build settings into `Info.plist`; URL values in xcconfig are stored as hostnames and composed into `https://` URLs at the Info.plist and Makefile boundaries. The Makefile derives the matching `CATVOX_ENV_CONFIG` and Terraform tfvars basename from `CATVOX_ENVIRONMENT` by default, and Terraform targets reject tfvars basenames that do not match `CATVOX_ENVIRONMENT`. GitHub Environment secrets and ignored `terraform/env/<environment>.tfvars` files hold only true secrets or deliberately private values: `POSTHOG_API_KEY`, App Check debug tokens, and `alert_email`. See ADR-0021 and ADR-0022.
 
@@ -429,7 +429,7 @@ Active Dev uses the GitHub Environment named `dev` with:
 |---|---|
 | `TF_VAR_ALERT_EMAIL` | Dev alert recipient |
 | `TF_VAR_APP_CHECK_DEBUG_TOKEN` | Dev App Check debug token |
-| `POSTHOG_API_KEY` | Dev PostHog scoped personal API key |
+| `POSTHOG_API_KEY` | Dev PostHog scoped personal API key, normally stored by `make posthog-environment-provision` |
 
 ### 7.5 Environment Creation Runbook
 

@@ -9,7 +9,7 @@
 # protected (prod-like) environments. Literal environment names never appear
 # here — everything is keyed off CATVOX_ENVIRONMENT.
 #
-#   WRITE_CONFIG_PHASE   identity | hosts | all   (default: identity)
+#   WRITE_CONFIG_PHASE   identity | hosts | posthog | all   (default: identity)
 #     identity  values that exist after `terraform apply` + plist export:
 #               CATVOX_GCP_CI_SERVICE_ACCOUNT, CATVOX_GCP_WIF_PROVIDER,
 #               CATVOX_FIREBASE_APP_ID (Terraform outputs) and
@@ -17,7 +17,9 @@
 #               only the key *id*, not its value).
 #     hosts     the two Cloud Run host keys, which exist only after the Functions
 #               deploy: CATVOX_SIGNED_UPLOAD_URL_HOST, CATVOX_ANALYSE_VIDEO_HOST.
-#     all       identity, then hosts.
+#     posthog   values that exist after PostHog Terraform apply:
+#               CATVOX_POSTHOG_PROJECT_ID and CATVOX_POSTHOG_PROJECT_TOKEN.
+#     all       identity, then hosts, then posthog.
 #
 # Writes the working tree only. It never stages or commits — the operator
 # reviews the diff and commits (this keeps committed config, especially a
@@ -52,8 +54,8 @@ FUNCTION_GETSIGNEDUPLOADURL="getSignedUploadURL"
 FUNCTION_ANALYSEVIDEO="analyseVideo"
 
 case "$PHASE" in
-  identity | hosts | all) ;;
-  *) echo "WRITE_CONFIG_PHASE must be 'identity', 'hosts', or 'all' (got: $PHASE)" >&2; exit 1 ;;
+  identity | hosts | posthog | all) ;;
+  *) echo "WRITE_CONFIG_PHASE must be 'identity', 'hosts', 'posthog', or 'all' (got: $PHASE)" >&2; exit 1 ;;
 esac
 
 if [[ ! -f "$ENV_CONFIG" ]]; then
@@ -111,6 +113,16 @@ tf_output() {
   clean_token "$val"
 }
 
+posthog_tf_output() {
+  local name="$1" val
+  if ! val="$(terraform -chdir="${REPO_ROOT}/terraform/posthog" output -raw "$name" 2>/dev/null)"; then
+    echo "ERROR: could not read PostHog Terraform output '${name}'." >&2
+    echo "Run 'make posthog-terraform-init' and apply PostHog Terraform for ${ENVIRONMENT} first." >&2
+    return 1
+  fi
+  clean_token "$val"
+}
+
 write_identity() {
   require_tool terraform
   require_tool plutil
@@ -135,6 +147,18 @@ write_identity() {
   set_xcconfig_value CATVOX_GCP_WIF_PROVIDER "$wif_provider"
   set_xcconfig_value CATVOX_FIREBASE_APP_ID "$app_id"
   set_xcconfig_value CATVOX_FIREBASE_API_KEY "$api_key"
+}
+
+write_posthog() {
+  require_tool terraform
+
+  local project_id project_token
+  project_id="$(posthog_tf_output project_id)"
+  project_token="$(posthog_tf_output project_api_token)"
+
+  echo "Writing PostHog values into ${ENV_CONFIG}:"
+  set_xcconfig_value CATVOX_POSTHOG_PROJECT_ID "$project_id"
+  set_xcconfig_value CATVOX_POSTHOG_PROJECT_TOKEN "$project_token"
 }
 
 # Lenient read of a deployed Cloud Run function host. Prints the hostname only
@@ -179,6 +203,9 @@ if [[ "$PHASE" == "identity" || "$PHASE" == "all" ]]; then
 fi
 if [[ "$PHASE" == "hosts" || "$PHASE" == "all" ]]; then
   write_hosts
+fi
+if [[ "$PHASE" == "posthog" || "$PHASE" == "all" ]]; then
+  write_posthog
 fi
 
 echo "Done. Review the diff and commit ${ENV_CONFIG} when it looks right."

@@ -12,7 +12,7 @@ infrastructure state, with prefix `posthog/state`:
 | CatVox env | State bucket | Prefix |
 |---|---|---|
 | `dev` | `catvox-tf-state-kathelix-catvox-dev` | `posthog/state` |
-| `prod` (future) | `catvox-tf-state-kathelix-catvox-prod` | `posthog/state` |
+| `prod` | `catvox-tf-state-kathelix-catvox-prod` | `posthog/state` |
 
 There is no separate state bucket for PostHog. The existing per-environment
 `catvox-ci-sa` already has `storage.objectAdmin` on its environment's state
@@ -53,19 +53,25 @@ plan and apply interactively.
 
 The `.github/workflows/posthog-terraform.yml` workflow runs `plan` on PRs that
 touch `terraform/posthog/**`, `config/environments/**`, or the workflow itself,
-and runs `apply` on push to `main`. It targets the `dev` GitHub Environment,
-reads GCP auth identity from xcconfig, and reads the PostHog API key secret from
-the GitHub Environment.
+applies Dev automatically on push to `main`, and applies Prod only through a
+manual `workflow_dispatch` from `main`. Each apply job targets the matching
+GitHub Environment, reads GCP auth identity from xcconfig, and reads that
+environment's `POSTHOG_API_KEY` secret.
 
 ## Scope
 
 This root manages the `CatVox <Environment>` PostHog project, the
-"Analytics basics" dashboard, its dashboard layout, and 5 insights. The
-insight definitions still reflect the original wizard choices — including the
-mis-labelled "Share sheet" series on `scan_share_actions` that uses
-`scan_shared` instead of `share_sheet_opened`. Slice 5 will rewrite share
-semantics and normalise tile ordering so the same definitions cover every
-environment with the corrected event taxonomy.
+"Analytics basics" dashboard, its dashboard layout, and 5 normalized MVP
+insights:
+
+- scan conversion:
+  `scan_source_chosen -> video_validation_passed -> analysis_completed`
+- Photos validation failures grouped by `validation_failure_reason`
+- share/export conversion:
+  `share_export_started -> share_sheet_opened -> scan_shared`
+- save-to-Photos conversion:
+  `share_export_started -> scan_saved_to_photos`
+- quota pressure grouped by `trigger`, alongside `upgrade_to_pro_tapped`
 
 ## Provisioning a new environment
 
@@ -82,15 +88,15 @@ No PostHog UI clicks, no wizard, no import. Sequence:
    `CATVOX_POSTHOG_ORGANIZATION_ID`. `CATVOX_POSTHOG_PROJECT_ID` and
    `CATVOX_POSTHOG_PROJECT_TOKEN` are populated *after* the first apply (see
    step 4).
-3. Run `make posthog-terraform-plan CATVOX_ENVIRONMENT=<env>` with a
-   `POSTHOG_API_KEY` scoped to the target organisation. Expected output:
-   `Plan: 8 to add, 0 to change, 0 to destroy` — the project, dashboard,
-   layout, and 5 insights.
-4. Apply the plan. Read back the created project ID (`terraform output
-   project_id`) and the project ingestion token (visible in the PostHog UI
-   under Project Settings) and commit them into the matching
-   `config/environments/<env>.xcconfig`. The token is the public ingestion
-   key the iOS app sends events to; it is safe to commit by design.
+3. Run `make posthog-environment-provision CATVOX_ENVIRONMENT=<env>`. If
+   `POSTHOG_API_KEY` is not already exported, the command prompts for it
+   silently. The command configures and verifies the matching GitHub
+   Environment, stores the key as that environment's `POSTHOG_API_KEY` secret,
+   plans/applies this root, and writes the resulting `CATVOX_POSTHOG_PROJECT_ID`
+   and `CATVOX_POSTHOG_PROJECT_TOKEN` into
+   `config/environments/<env>.xcconfig`.
+4. Review and commit the xcconfig diff. The project token is the public
+   ingestion key the iOS app sends events to; it is safe to commit by design.
 
 The original Dev import (issue #37 Slice 4) used `import {}` blocks to adopt
 the wizard-created Dev state; those blocks were removed after first apply.
