@@ -527,12 +527,17 @@ CATVOX_ENVIRONMENT="$ENV" make smoke
 
 Review and commit the host changes (working tree only, as in step 2).
 
+Once verified, `docs/CUTOVER_AND_ROLLBACK.md` covers the pre-launch cutover
+checklist for taking the environment live.
+
 **Ongoing.** Later Terraform applies to the protected environment are a manual
 dispatch (`gh workflow run terraform.yml --ref main`, approved on the `$ENV`
 Environment); later Functions deploys promote automatically through the push
 pipeline behind that same approval gate. The one exception is WIF
 pool/provider/binding changes: apply those operator-local before merge, because
-the CI SA cannot modify them (see `docs/CI_BOOTSTRAP.md`).
+the CI SA cannot modify them (see `docs/CI_BOOTSTRAP.md`). To roll back app,
+Functions, secret, or Terraform changes on a live protected environment, see
+`docs/CUTOVER_AND_ROLLBACK.md`.
 
 ## Destroying an Environment
 
