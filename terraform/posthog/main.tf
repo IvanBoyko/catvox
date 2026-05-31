@@ -31,13 +31,25 @@ terraform {
   backend "gcs" {}
 }
 
+# Cold start: a brand-new environment has no PostHog project yet, so
+# CATVOX_POSTHOG_PROJECT_ID is still empty or a `replace-with-...` placeholder.
+# A real PostHog project id is numeric; in any other case we hand the provider
+# null instead of a non-numeric string. The provider-level project_id is only a
+# default target for resources that act on an existing project, and every
+# resource in this root sets its own project_id from posthog_project.this.id
+# (created below), so null here is safe and lets the same config provision a
+# fresh environment and manage an existing one.
+locals {
+  provider_project_id = can(regex("^[0-9]+$", var.posthog_project_id)) ? var.posthog_project_id : null
+}
+
 # The PostHog provider reads only operational secrets from environment
 # variables. Non-secret environment identity comes from xcconfig-driven
 # Terraform variables so config/environments/<env>.xcconfig remains the source
 # of truth.
 provider "posthog" {
   host            = var.posthog_api_host
-  project_id      = var.posthog_project_id
+  project_id      = local.provider_project_id
   organization_id = var.posthog_organization_id
 }
 
