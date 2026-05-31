@@ -26,8 +26,12 @@
 #   6. delete the GitHub Environment + its secrets.
 #
 # Idempotent: absent resources are skipped, so a re-run after a partial teardown
-# converges. If the core terraform destroy (step 2) fails, the script stops
-# before deleting the state bucket so the operator can retry.
+# converges. Only not-found / no-state conditions are tolerated — a genuine
+# failure (terraform destroy, a bucket that survives deletion, PostHog destroy
+# while its state exists, or a non-404 GitHub API error) aborts loudly rather
+# than reporting a clean teardown. In particular, if the core terraform destroy
+# (step 2) or the PostHog destroy (step 3) fails, the script stops before
+# deleting the state bucket so the operator can retry.
 
 set -euo pipefail
 
@@ -79,7 +83,17 @@ export TF_VAR_alert_email="${TF_VAR_alert_email:-teardown-noop@example.invalid}"
 
 bucket_exists() { gcloud storage buckets describe "gs://$1" --project "$PROJECT_ID" >/dev/null 2>&1; }
 empty_bucket() { gcloud storage rm --recursive "gs://$1/**" >/dev/null 2>&1 || true; }
-delete_bucket() { gcloud storage buckets delete "gs://$1" --project "$PROJECT_ID" --quiet >/dev/null 2>&1 || true; }
+# Delete a bucket and VERIFY it is gone. The delete call's own exit is ignored
+# (an already-absent bucket is fine), but if the bucket survives — non-empty,
+# retained, or permission-denied — this fails loudly so we never report a clean
+# teardown while an out-of-graph bucket remains.
+delete_bucket() {
+  gcloud storage buckets delete "gs://$1" --project "$PROJECT_ID" --quiet >/dev/null 2>&1 || true
+  if bucket_exists "$1"; then
+    echo "  ERROR: gs://$1 is still present after delete (non-empty, retained, or permission denied)" >&2
+    return 1
+  fi
+}
 
 # 1 — Empty the force_destroy=false raw-videos bucket (Terraform deletes the
 #     bucket itself in step 2, but only once it is empty).
@@ -99,13 +113,22 @@ make terraform-destroy CONFIRM=destroy \
   CATVOX_PROJECT_ID="$PROJECT_ID" \
   CATVOX_TF_VARS_FILE="$TFVARS_FILE"
 
-# 3 — PostHog Terraform destroy. Tolerant: many environments have no PostHog
-#     state yet (deferred — see #37), so an empty/uninitialised root is fine.
+# 3 — PostHog Terraform destroy. Gate on whether PostHog state actually exists
+#     (positively identified by the state object under the shared bucket), rather
+#     than tolerating every failure: a destroy that fails for a real reason
+#     (credentials, provider/API error) must abort here, BEFORE step 5 deletes
+#     the bucket that holds posthog/state — otherwise PostHog resources are
+#     orphaned with no state to retry from. Many environments have no PostHog
+#     state yet (deferred — see #37); those are skipped.
 echo "3/6 terraform destroy (PostHog) ..."
-if ! make posthog-terraform-destroy CONFIRM=destroy \
-  CATVOX_ENVIRONMENT="$ENVIRONMENT" \
-  CATVOX_PROJECT_ID="$PROJECT_ID"; then
-  echo "  PostHog destroy reported an issue (commonly: no PostHog state) — continuing"
+POSTHOG_STATE_PREFIX="${CATVOX_POSTHOG_TF_STATE_PREFIX:-posthog/state}"
+if gcloud storage ls "gs://${STATE_BUCKET}/${POSTHOG_STATE_PREFIX}/**" >/dev/null 2>&1; then
+  echo "  PostHog state present — destroying (a failure aborts before the state bucket is deleted)"
+  make posthog-terraform-destroy CONFIRM=destroy \
+    CATVOX_ENVIRONMENT="$ENVIRONMENT" \
+    CATVOX_PROJECT_ID="$PROJECT_ID"
+else
+  echo "  no PostHog state under gs://${STATE_BUCKET}/${POSTHOG_STATE_PREFIX}; skipping"
 fi
 
 # 4 — Delete the script-created Cloud Functions Gen2 sources bucket (outside the
@@ -139,13 +162,19 @@ fi
 # 6 — Delete the GitHub Environment and its secrets.
 echo "6/6 Deleting GitHub Environment '${ENVIRONMENT}' ..."
 if command -v gh >/dev/null 2>&1; then
-  if gh api --method DELETE "repos/${REPO}/environments/${ENVIRONMENT}" >/dev/null 2>&1; then
+  # Tolerate only a genuine 404 (already gone). Any other failure — 403, auth,
+  # network, malformed repo — must abort rather than falsely report success while
+  # the Environment and its secrets remain.
+  if gh_out="$(gh api --method DELETE "repos/${REPO}/environments/${ENVIRONMENT}" 2>&1)"; then
     echo "  deleted"
-  else
+  elif printf '%s' "$gh_out" | grep -qiE 'HTTP 404|Not Found'; then
     echo "  not present or already deleted; skipping"
+  else
+    echo "  ERROR: could not delete the '${ENVIRONMENT}' GitHub Environment: ${gh_out}" >&2
+    exit 1
   fi
 else
-  echo "  gh not installed — delete the '${ENVIRONMENT}' GitHub Environment manually"
+  echo "  gh not installed — delete the '${ENVIRONMENT}' GitHub Environment manually" >&2
 fi
 
 echo
