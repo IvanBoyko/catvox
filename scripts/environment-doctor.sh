@@ -35,7 +35,7 @@ WIF_PROVIDER_RESOURCE="${CATVOX_GCP_WIF_PROVIDER:-}"
 
 command -v gcloud >/dev/null 2>&1 || { echo "Missing required tool: gcloud" >&2; exit 1; }
 
-# Roles catvox-ci-sa must hold (keep in sync with terraform/iam.tf).
+# Roles catvox-ci-sa must hold (keep in sync with terraform/core/iam.tf).
 # cloudfunctions.admin is the one roles/editor excludes (it grants
 # cloudfunctions.functions.setIamPolicy, required to deploy a *new* function).
 REQUIRED_ROLES=(
@@ -46,7 +46,7 @@ REQUIRED_ROLES=(
   roles/cloudfunctions.admin
 )
 
-# Required GCP APIs (keep in sync with terraform/main.tf google_project_service).
+# Required GCP APIs (keep in sync with terraform/core/main.tf google_project_service).
 REQUIRED_APIS=(
   aiplatform.googleapis.com
   cloudfunctions.googleapis.com
@@ -69,7 +69,7 @@ REQUIRED_APIS=(
 )
 
 # Derive the WIF pool/provider ids from the committed resource name when present,
-# else fall back to the Terraform defaults (terraform/variables.tf).
+# else fall back to the Terraform defaults (terraform/core/variables.tf).
 WIF_POOL=""
 WIF_PROVIDER=""
 if [[ -n "$WIF_PROVIDER_RESOURCE" ]]; then
@@ -129,7 +129,7 @@ done
 if [[ "${#missing_roles[@]}" -eq 0 ]]; then
   pass "all ${#REQUIRED_ROLES[@]} required roles present"
 else
-  fail "missing roles: ${missing_roles[*]} — grant via terraform apply (terraform/iam.tf)"
+  fail "missing roles: ${missing_roles[*]} — grant via terraform apply (terraform/core/iam.tf)"
 fi
 
 # 4 — WIF pool ACTIVE + provider scoped to this environment.
@@ -189,7 +189,7 @@ fi
 # 4d — Cloud Functions Gen2 builds run as the Compute Engine default SA, not
 # catvox-ci-sa, so its grants are invisible to the CI-SA check above. Missing
 # ones fail the deploy mid-build while the doctor otherwise stays green
-# (terraform/iam.tf compute_sa_*).
+# (terraform/core/iam.tf compute_sa_*).
 echo "Cloud Functions Gen2 build identity (compute default SA):"
 if [[ -z "$PROJECT_NUMBER" ]]; then
   warn "could not resolve project number — skipped compute-SA build-identity checks"
@@ -203,7 +203,7 @@ else
     if printf '%s\n' "$compute_roles" | grep -qxF "$role"; then
       pass "compute SA has ${role}"
     else
-      fail "compute SA (${COMPUTE_SA}) missing ${role} — Gen2 build fails (image push / build logs); grant via terraform apply (terraform/iam.tf compute_sa_*)"
+      fail "compute SA (${COMPUTE_SA}) missing ${role} — Gen2 build fails (image push / build logs); grant via terraform apply (terraform/core/iam.tf compute_sa_*)"
     fi
   done
   backend_actas="$(gcloud iam service-accounts get-iam-policy "$BACKEND_SA" --project "$PROJECT_ID" \
