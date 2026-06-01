@@ -72,6 +72,9 @@ jobs:
       - name: Validate Prod Environment Structure
         run: make ios-validate-env-config-structure CATVOX_ENVIRONMENT=prod
 
+      - name: Validate Release Safety (protected environment)
+        run: make ios-validate-release-safety CATVOX_ENVIRONMENT=prod
+
       - name: Guard Analytics Capture Boundary
         run: make ios-analytics-guard
 

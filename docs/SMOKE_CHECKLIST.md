@@ -59,13 +59,8 @@ manually:
 - The environment's secrets do not include `TF_VAR_APP_CHECK_DEBUG_TOKEN`.
 - Firebase App Check for the environment's iOS app uses App Attest only. No Debug
   Provider token is registered.
-- `config/environments/<env>.xcconfig` has no leftover `replace-with-*`
-  placeholders after provisioning.
 - `CatVox/Resources/Firebase/GoogleService-Info-<env>.plist` exists, is committed
   if that remains the chosen repo contract, and passes the automated plist check.
-- A Release/App Store archive selects the environment, fails loudly if its plist
-  is missing, and does not reference another environment's project IDs, bundle
-  IDs, Debug App Check providers, or debug-token environment variables.
 - Terraform plan output is reviewed by a human before any apply. A smoke run must
   never be used as approval to apply infrastructure.
 - Cloud Run / Cloud Functions endpoints match the committed hosts, and the smoke
@@ -73,6 +68,20 @@ manually:
   reservations, or analysis responses.
 - Firestore and GCS are inspected only through read/list/describe operations. Do
   not create test documents or upload objects.
+- Build and sign the physical Release/App Store archive (this needs a signing
+  identity) and confirm it launches against the protected backend.
+
+For a protected environment, the Release leak and archive-selection checks below
+are automated by `make ios-validate-release-safety` (run in the Build workflow on
+every relevant PR), so they no longer need a manual audit:
+
+- `config/environments/<env>.xcconfig` has no leftover `replace-with-*`
+  placeholders after provisioning.
+- The Release configuration and the `project.yml` archive binding select this
+  environment and reference no other environment's project IDs, bundle IDs,
+  Firebase app IDs, endpoint hosts, Debug App Check providers, or debug-token
+  variables, and the Swift debug surfaces stay behind `#if DEBUG`.
+- The committed entitlements select the production App Attest environment.
 
 ## Failure Handling
 
