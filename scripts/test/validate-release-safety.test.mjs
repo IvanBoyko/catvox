@@ -317,6 +317,26 @@ test('info.properties with valid xcconfig substitutions passes', () => {
   assert.equal(result.isProtected, true);
 });
 
+test('a debug-token key hard-coded in info.properties is rejected', () => {
+  assert.throws(
+    () =>
+      run({
+        project: projectYml({ infoProperties: { FIRAAppCheckDebugToken: 'some-debug-token-value' } }),
+      }),
+    /debug token/i
+  );
+});
+
+test('a leftover placeholder hard-coded in info.properties is rejected', () => {
+  assert.throws(
+    () =>
+      run({
+        project: projectYml({ infoProperties: { CatVoxPostHogProjectToken: 'replace-with-token' } }),
+      }),
+    /leftover placeholder/
+  );
+});
+
 test('an App Check debug-token key in the Release config is rejected', () => {
   assert.throws(
     () => run({ protectedOverrides: { TF_VAR_APP_CHECK_DEBUG_TOKEN: 'a-debug-token-value' } }),

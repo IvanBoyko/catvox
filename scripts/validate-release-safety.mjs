@@ -78,14 +78,18 @@ export function validateReleaseSafety({
   if (projectSpec == null) {
     pushError(errors, `Could not read ${projectYmlPath}`);
   }
+  // The archive's Info.plist is generated from project.yml's info.properties
+  // (with $(...) resolved against the xcconfig). Resolve it once; several checks
+  // scan this surface, not just the xcconfig.
+  const infoValues = resolveInfoPlistValues(projectSpec, values);
 
   assertProtectedPosture(values, env, errors);
-  assertNoDebugTokenKeys(values, errors);
+  assertNoDebugTokenKeys(values, infoValues, errors);
   assertAppAttestEntitlement(
     resolveEntitlementsPath({ explicit: entitlementsPath, projectSpec, root, errors }),
     errors
   );
-  assertNoForeignIdentifiers(values, absConfig, projectSpec, errors);
+  assertNoForeignIdentifiers(values, infoValues, absConfig, errors);
   assertDebugSurfacesGated(root, errors);
   assertArchiveBinding(projectSpec, root, errors);
 
@@ -115,7 +119,7 @@ function assertProtectedPosture(values, env, errors) {
 }
 
 // (d) No App Check debug-token key may be set in a protected Release config.
-function assertNoDebugTokenKeys(values, errors) {
+function assertNoDebugTokenKeys(values, infoValues, errors) {
   for (const key of debugTokenKeys) {
     if (normalize(values.get(key))) {
       pushError(
@@ -124,6 +128,30 @@ function assertNoDebugTokenKeys(values, errors) {
       );
     }
   }
+  // The archive's Info.plist is generated from project.yml's info.properties, so
+  // a debug-token key or a leftover provisioning placeholder hard-coded there
+  // ships in the Release build too — the xcconfig is not the only surface.
+  const debugTokenKeySet = new Set(debugTokenKeys);
+  for (const [key, value] of infoValues) {
+    const resolved = normalize(value);
+    if (!resolved) {
+      continue;
+    }
+    if (debugTokenKeySet.has(key)) {
+      pushError(
+        errors,
+        `Info.plist key ${key} must not be set in a protected Release build (App Check debug tokens are mutable-tier only)`
+      );
+    }
+    if (isProvisioningPlaceholder(resolved)) {
+      pushError(errors, `Info.plist value for ${key} must not be a leftover placeholder (${resolved})`);
+    }
+  }
+}
+
+function isProvisioningPlaceholder(value) {
+  const lower = value.toLowerCase();
+  return lower.includes('replace-with') || lower.includes('placeholder') || lower === 'todo';
 }
 
 // The entitlements file the Release build actually signs with is whatever
@@ -198,7 +226,7 @@ function resolveInfoPlistValues(projectSpec, values) {
       const resolvedRef = normalize(values.get(name));
       return resolvedRef != null ? resolvedRef : match;
     });
-    resolved.push([`Info.plist:${key}`, value]);
+    resolved.push([key, value]);
   }
   return resolved;
 }
@@ -210,10 +238,13 @@ function resolveInfoPlistValues(projectSpec, values) {
 // not flagged); Firebase app ids, API keys, endpoint hosts, and the PostHog
 // token match as substrings; the PostHog project id matches exactly. The scan
 // surface is every xcconfig value plus the generated Info.plist values.
-function assertNoForeignIdentifiers(values, configPath, projectSpec, errors) {
+function assertNoForeignIdentifiers(values, infoValues, configPath, errors) {
   const foreign = collectForeignReleaseIdentifiers(configPath);
 
-  const scan = [...values.entries(), ...resolveInfoPlistValues(projectSpec, values)];
+  const scan = [
+    ...values.entries(),
+    ...infoValues.map(([key, value]) => [`Info.plist:${key}`, value]),
+  ];
 
   for (const [key, value] of scan) {
     for (const projectId of foreign.projectIds) {
