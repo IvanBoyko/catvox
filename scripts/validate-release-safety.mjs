@@ -73,12 +73,21 @@ export function validateReleaseSafety({
   const values = readXcconfigValues(absConfig);
   const env = environmentName || normalize(values.get('CATVOX_ENVIRONMENT'));
 
+  const projectYmlPath = join(root, 'project.yml');
+  const projectSpec = readFileOrNull(projectYmlPath);
+  if (projectSpec == null) {
+    pushError(errors, `Could not read ${projectYmlPath}`);
+  }
+
   assertProtectedPosture(values, env, errors);
   assertNoDebugTokenKeys(values, errors);
-  assertAppAttestEntitlement(entitlementsPath ?? join(root, 'CatVox/CatVox.entitlements'), errors);
+  assertAppAttestEntitlement(
+    resolveEntitlementsPath({ explicit: entitlementsPath, projectSpec, root, errors }),
+    errors
+  );
   assertNoForeignIdentifiers(values, absConfig, errors);
   assertDebugSurfacesGated(root, errors);
-  assertArchiveBinding(root, errors);
+  assertArchiveBinding(projectSpec, root, errors);
 
   const deduped = [...new Set(errors)];
   if (deduped.length > 0) {
@@ -117,9 +126,34 @@ function assertNoDebugTokenKeys(values, errors) {
   }
 }
 
-// (e) The committed entitlements must select the production App Attest
-// environment, never the development attestation service.
+// The entitlements file the Release build actually signs with is whatever
+// project.yml binds to CODE_SIGN_ENTITLEMENTS — not a hard-coded path. Resolving
+// it from the spec means dropping or repointing that setting is caught, instead
+// of validating a file the build no longer uses. Tests may pass an explicit path.
+function resolveEntitlementsPath({ explicit, projectSpec, root, errors }) {
+  if (explicit) {
+    return explicit;
+  }
+  if (projectSpec == null) {
+    return null; // project.yml read error already reported
+  }
+  const match = projectSpec.match(/CODE_SIGN_ENTITLEMENTS:\s*(\S+)/);
+  if (!match) {
+    pushError(
+      errors,
+      'project.yml must set CODE_SIGN_ENTITLEMENTS for the app target so the Release build signs with the committed entitlements'
+    );
+    return null;
+  }
+  return join(root, match[1]);
+}
+
+// (e) The entitlements the Release build signs with must select the production
+// App Attest environment, never the development attestation service.
 function assertAppAttestEntitlement(entitlementsPath, errors) {
+  if (!entitlementsPath) {
+    return; // resolution failed; the specific error was already reported
+  }
   const xml = readFileOrNull(entitlementsPath);
   if (xml == null) {
     pushError(errors, `Could not read entitlements file: ${entitlementsPath}`);
@@ -385,12 +419,9 @@ function accessorReleaseBranchReturnsFalse(lines, accessorName) {
 // (g) project.yml must bind the Release configuration to the protected tier and
 // the Debug configuration to a mutable tier, and every scheme must archive with
 // Release. Resolved through the configs themselves, so no environment is named.
-export function assertArchiveBinding(root, errors) {
-  const projectYmlPath = join(root, 'project.yml');
-  const spec = readFileOrNull(projectYmlPath);
+export function assertArchiveBinding(spec, root, errors) {
   if (spec == null) {
-    pushError(errors, `Could not read ${projectYmlPath}`);
-    return;
+    return; // project.yml read error already reported
   }
 
   const bindings = new Map();

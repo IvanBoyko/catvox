@@ -9,7 +9,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdtempSync, mkdirSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 import { validateReleaseSafety } from '../validate-release-safety.mjs';
 
 const PROTECTED_BASE = {
@@ -127,12 +127,23 @@ const PRODUCTION_ENTITLEMENTS = `<?xml version="1.0" encoding="UTF-8"?>
 </plist>
 `;
 
-function projectYml({ release = 'shielded', debug = 'mutable', archive = 'Release' } = {}) {
+function projectYml({
+  release = 'shielded',
+  debug = 'mutable',
+  archive = 'Release',
+  entitlements = 'CatVox/CatVox.entitlements',
+} = {}) {
+  const entitlementsSetting = entitlements
+    ? `
+    settings:
+      base:
+        CODE_SIGN_ENTITLEMENTS: ${entitlements}`
+    : '';
   return `targets:
   CatVox:
     configFiles:
       Debug: config/environments/${debug}.xcconfig
-      Release: config/environments/${release}.xcconfig
+      Release: config/environments/${release}.xcconfig${entitlementsSetting}
 schemes:
   CatVox:
     archive:
@@ -159,6 +170,7 @@ function makeRoot({
   configSwift = CLEAN_CONFIG_SWIFT,
   entitlements = PRODUCTION_ENTITLEMENTS,
   project = projectYml(),
+  extraFiles = {},
 } = {}) {
   const root = mkdtempSync(join(tmpdir(), 'catvox-release-safety-'));
   mkdirSync(join(root, 'config/environments'), { recursive: true });
@@ -176,6 +188,11 @@ function makeRoot({
   writeFileSync(join(root, 'CatVox/App/CatVoxAppConfiguration.swift'), configSwift);
   writeFileSync(join(root, 'CatVox/CatVox.entitlements'), entitlements);
   writeFileSync(join(root, 'project.yml'), project);
+  for (const [relativePath, content] of Object.entries(extraFiles)) {
+    const target = join(root, relativePath);
+    mkdirSync(dirname(target), { recursive: true });
+    writeFileSync(target, content);
+  }
   return root;
 }
 
@@ -254,6 +271,32 @@ test('a non-production App Attest entitlement is rejected', () => {
   assert.throws(
     () => run({ entitlements: PRODUCTION_ENTITLEMENTS.replace('production', 'development') }),
     /appattest-environment|production/
+  );
+});
+
+test('a project.yml without CODE_SIGN_ENTITLEMENTS is rejected', () => {
+  assert.throws(() => run({ project: projectYml({ entitlements: '' }) }), /CODE_SIGN_ENTITLEMENTS/);
+});
+
+test('CODE_SIGN_ENTITLEMENTS repointed to a non-production file is rejected', () => {
+  // CatVox/CatVox.entitlements still has production, but the build signs with a
+  // different file — the check must follow CODE_SIGN_ENTITLEMENTS, not the name.
+  assert.throws(
+    () =>
+      run({
+        project: projectYml({ entitlements: 'CatVox/Other.entitlements' }),
+        extraFiles: {
+          'CatVox/Other.entitlements': PRODUCTION_ENTITLEMENTS.replace('production', 'development'),
+        },
+      }),
+    /appattest-environment|production/
+  );
+});
+
+test('CODE_SIGN_ENTITLEMENTS repointed to a missing file is rejected', () => {
+  assert.throws(
+    () => run({ project: projectYml({ entitlements: 'CatVox/Missing.entitlements' }) }),
+    /Could not read entitlements/
   );
 });
 
