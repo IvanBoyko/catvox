@@ -10,14 +10,14 @@ GitHub Actions must be enabled for `kathelix/catvox`. The repository uses four
 workflow families:
 
 - iOS build and tests on PRs and pushes.
-- GCP Terraform plan on PRs and automatic apply on merge to `main` (Dev), plus a
-  manual `workflow_dispatch` apply for protected environments (e.g. prod).
-- PostHog Terraform plan on PRs, automatic Dev apply on merge to `main`, and
-  manual protected Prod apply through `workflow_dispatch` from `main` (separate
-  root, separate state prefix; see ADR-0020).
+- GCP Terraform plan on PRs and automatic apply on merge to `main` for the mutable
+  environment, plus a manual `workflow_dispatch` apply for protected environments.
+- PostHog Terraform plan on PRs, automatic mutable-environment apply on merge to
+  `main`, and manual protected-environment apply through `workflow_dispatch` from
+  `main` (separate root, separate state prefix; see ADR-0020).
 - Firebase Functions build on PRs and, on merge to `main`, an ordered pipeline:
-  deploy + integration on Dev, then an approval-gated `deploy-prod` for protected
-  environments (e.g. prod).
+  deploy + integration on the mutable environment, then an approval-gated
+  `deploy-prod` job for protected environments.
 
 The Terraform and Functions deploy paths authenticate to Google Cloud through
 Workload Identity Federation (WIF). Do not create or store long-lived service
@@ -27,26 +27,26 @@ account keys.
 
 Use GitHub Environments to scope cloud secrets by target environment:
 
-| Environment | Protection |
+| Tier | Protection |
 |---|---|
-| `dev` | Unprotected or lightly protected. PR/main deploy paths target Dev. |
-| `prod` | Protected. Require explicit approval before any production deploy. |
+| Mutable | Unprotected or lightly protected. PR/main deploy paths target it automatically. |
+| Protected | Required reviewers. Require explicit approval before any production deploy. |
 
-Both workflows model promotion as **dev automatic, prod manual**, by different
-mechanisms until the delivery orchestrator (#106) unifies them. Terraform: a
-separate `apply-prod` job triggered by `workflow_dispatch` from `main`. Functions:
-`deploy-prod` runs in the push pipeline after the Dev deploy + integration
-(`needs: integration-after-deploy`) and is held at the protected environment's
-approval gate — approving it is the manual promote. Neither has an environment
-chooser.
-PostHog Terraform follows the same topology as the GCP Terraform workflow: Dev
-applies automatically on merge to `main`, while Prod applies only through the
-protected manual dispatch path.
+Both workflows model promotion as **mutable automatic, protected manual**, by
+different mechanisms until the delivery orchestrator (#106) unifies them.
+Terraform: a separate `apply-prod` job triggered by `workflow_dispatch` from
+`main`. Functions: `deploy-prod` runs in the push pipeline after the
+mutable-environment deploy + integration (`needs: integration-after-deploy`) and
+is held at the protected environment's approval gate — approving it is the manual
+promote. Neither has an environment chooser.
+PostHog Terraform follows the same topology as the GCP Terraform workflow: the
+mutable environment applies automatically on merge to `main`, while protected
+environments apply only through the manual dispatch path.
 Each shared apply/deploy body lives in a reusable workflow (`terraform-apply.yml`,
 `functions-deploy.yml`) invoked with the target environment, and GCP
-authentication is the `gcp-auth` composite action. The protected `prod` GitHub
-Environment's protection (required reviewers) gates the prod run, and its WIF
-trust additionally requires `ref=refs/heads/main` (ADR-0024).
+authentication is the `gcp-auth` composite action. A protected GitHub
+Environment's protection (required reviewers) gates its run, and its WIF trust
+additionally requires `ref=refs/heads/main` (ADR-0024).
 For a protected environment, do not set the App Check debug-token secret, keep
 mutable integration-test allowlists out of it (no post-deploy integration tests
 run against it — use `make smoke CATVOX_ENVIRONMENT=<env>`), and keep the
@@ -99,7 +99,8 @@ authentication for the whole environment until an operator-local
 ## One-Time Repository Checklist
 
 1. Confirm GitHub Actions is enabled for the repository.
-2. Create the `dev` GitHub Environment.
+2. Create the mutable environment's GitHub Environment (named to match the
+   environment).
 3. For a protected environment, create a separate protected GitHub Environment
    (named to match the environment) with required reviewers.
 4. Keep repository-level cloud secrets empty or legacy-only; active cloud deploy

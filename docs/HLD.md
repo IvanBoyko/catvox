@@ -66,7 +66,7 @@ The MVP also supports on-demand creation of a funny shareable result video deriv
 * **Backend Pattern:** Firebase Cloud Functions (2nd Gen) act as the backend proxy between the iOS client and privileged GCP services.
 * **Prompt Management:** The AI system prompt is maintained as a versioned markdown document in the repository and treated as part of the deployable backend behavior.
 * **Identity Separation:** Runtime cloud execution and automated infrastructure delivery use separate service accounts to reduce blast radius and keep privileged automation isolated from application runtime.
-* **Product Analytics:** MVP product analytics use PostHog to measure scan-funnel health, Photos-import validation, quota pressure, share/export behavior, and upgrade intent. Analytics use the same anonymous per-install UUID as quota enforcement and must not include raw video, AI-generated cat thoughts, file paths, or Photos asset identifiers. PostHog projects map 1:1 to CatVox environments — Dev and Prod analytics use separate PostHog projects bound to the same environment as the matching app build and backend, with `app_environment` retained as defense-in-depth metadata. See ADR-0011, ADR-0019, and ADR-0020.
+* **Product Analytics:** MVP product analytics use PostHog to measure scan-funnel health, Photos-import validation, quota pressure, share/export behavior, and upgrade intent. Analytics use the same anonymous per-install UUID as quota enforcement and must not include raw video, AI-generated cat thoughts, file paths, or Photos asset identifiers. PostHog projects map 1:1 to CatVox environments — each environment uses its own PostHog project bound to the matching app build and backend, with `app_environment` retained as defense-in-depth metadata. See ADR-0011, ADR-0019, and ADR-0020.
 
 ## 5. Trust Boundary
 * The iOS client never calls Vertex AI directly.
@@ -82,7 +82,7 @@ The MVP also supports on-demand creation of a funny shareable result video deriv
 * The infrastructure model is intended to be reproducible and rebuildable.
 * The project uses three distinct CI/CD pipelines: iOS build validation, infrastructure delivery, and backend function delivery.
 * CI/CD authentication uses keyless GitHub Actions federation.
-* `kathelix-catvox-dev` is the active Dev / integration-testing project. `kathelix-catvox-prod` is the Prod environment project, being provisioned for production; pre-split Dev leftovers were cleaned from it beforehand. See ADR-0017 and ADR-0018.
+* Each environment runs in its own GCP/Firebase project — one mutable (integration-testing) and one protected (production). The current roster lives in the Environment Model section of `docs/TRD.md`. See ADR-0017 and ADR-0018.
 
 ## 7. MVP Boundaries / Non-goals
 * No direct client-side access to privileged GCP services.

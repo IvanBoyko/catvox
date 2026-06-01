@@ -50,9 +50,9 @@ parameterization model is specified in the Environment Model section of
 Example local flow:
 
 ```bash
-cp env/dev.tfvars.example env/dev.tfvars
+cp env/<env>.tfvars.example env/<env>.tfvars
 # Fill in private values
-make terraform-plan CATVOX_ENVIRONMENT=dev
+make terraform-plan CATVOX_ENVIRONMENT=<env>
 ```
 
 Do not put secrets in committed tfvars files. Commit only `.example` files when

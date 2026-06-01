@@ -52,20 +52,20 @@ Pick explicit values before running the script:
 
 | Variable | Example | Required |
 |---|---|---|
-| `CATVOX_ENVIRONMENT` | `dev` | Yes |
-| `CATVOX_PROJECT_ID` | `kathelix-catvox-dev` | Yes |
-| `PROJECT_DISPLAY_NAME` | `Kathelix CatVox Dev` | Yes |
+| `CATVOX_ENVIRONMENT` | `<env>` | Yes |
+| `CATVOX_PROJECT_ID` | `kathelix-catvox-<env>` | Yes |
+| `PROJECT_DISPLAY_NAME` | `Kathelix CatVox <Env>` | Yes |
 | `ORGANIZATION_ID` or `FOLDER_ID` | `1032067916665` | Optional, but usually needed for new projects |
 | `BILLING_ACCOUNT_ID` | billing account ID | Optional; if omitted, link billing manually before deploy |
 | `CATVOX_FUNCTION_REGION` | `us-central1` | Yes |
 | `CATVOX_FIRESTORE_LOCATION` | `nam5` | Yes |
-| `CATVOX_TF_STATE_BUCKET` | `catvox-tf-state-kathelix-catvox-dev` | Yes |
+| `CATVOX_TF_STATE_BUCKET` | `catvox-tf-state-kathelix-catvox-<env>` | Yes |
 | `CATVOX_TF_STATE_PREFIX` | `catvox/state` | Yes |
-| `CATVOX_IOS_BUNDLE_ID` | `com.kathelix.catvox.dev` | Yes |
-| `CATVOX_FIREBASE_IOS_APP_DISPLAY_NAME` | `CatVox Dev iOS` | Yes |
+| `CATVOX_IOS_BUNDLE_ID` | `com.kathelix.catvox.<env>` | Yes |
+| `CATVOX_FIREBASE_IOS_APP_DISPLAY_NAME` | `CatVox <Env> iOS` | Yes |
 | `CATVOX_FIREBASE_IOS_APP_DELETION_POLICY` | `ABANDON` | Yes. Use `ABANDON` for protected environments; use `DELETE` only for disposable mutable environments. |
 | `CATVOX_FIREBASE_APPLE_TEAM_ID` | `QYT76L5836` | Yes |
-| `CATVOX_MANAGE_GCF_SOURCES_BUCKET_IAM` | `true` for Dev bootstrap | Yes. Use lowercase `true` or `false` only. |
+| `CATVOX_MANAGE_GCF_SOURCES_BUCKET_IAM` | `true` at bootstrap | Yes. Use lowercase `true` or `false` only. |
 | `APP_CHECK_DEBUG_TOKEN` | UUID4 token | Optional. Presence registers the token. |
 | `ALERT_EMAIL` | alert recipient | Required when the ignored tfvars file does not already exist |
 | `RUN_TERRAFORM_APPLY` | `0` or `1` | Yes. Set to `1` to apply Terraform; `0` runs only the safe preview phases. |
@@ -239,7 +239,7 @@ environments literally.
 Most environment creation is cloud/Firebase setup and does not require changing
 local Xcode signing. Skip this section when the new environment reuses an
 existing iOS bundle ID or when developers will continue to build only the active
-Dev bundle locally.
+mutable-environment bundle locally.
 
 Run this section only when `CATVOX_IOS_BUNDLE_ID` is a new explicit bundle ID
 that needs physical-device builds or App Attest configuration. This is manual
@@ -310,7 +310,7 @@ CATVOX_ENVIRONMENT=<env> make ios-validate-env-config
 
 ## Required Validation
 
-For Dev-like mutable environments:
+For mutable environments:
 
 ```bash
 export CATVOX_ENVIRONMENT=<env>
@@ -326,8 +326,8 @@ make functions-integration
 The Terraform tfvars basename must match `CATVOX_ENVIRONMENT`; the
 Makefile rejects mismatched tfvars paths.
 
-Also run a real Debug device scan before retiring or cleaning any previous Dev
-backend.
+Also run a real Debug device scan before retiring or cleaning any previous
+backend for that environment.
 
 For protected environments:
 
@@ -379,16 +379,16 @@ subsequent applies go through the protected CI path.
 ## Operator Checklist: Standing Up a Protected Environment
 
 This sequences the manual operator actions to bring a **protected** environment
-(for example `prod`) fully online, end to end. The sections above cover each
-piece in detail; this is the order to run them in. Every step is operator-run —
-they need GCP-admin credentials, repo-admin rights, and the environment's secret
-values, so they are not part of any PR diff or CI job.
+fully online, end to end. The sections above cover each piece in detail; this is
+the order to run them in. Every step is operator-run — they need GCP-admin
+credentials, repo-admin rights, and the environment's secret values, so they are
+not part of any PR diff or CI job.
 
-Set these once for the session (substitute your environment):
+Set these once for the session (substitute your environment's name and project):
 
 ```bash
-export ENV=prod
-export PROJECT_ID=kathelix-catvox-prod
+export ENV=<protected-env>
+export PROJECT_ID=kathelix-catvox-<protected-env>
 ```
 
 **1 · First Terraform apply + PostHog provision — operator-local (O1).** Run
@@ -408,17 +408,17 @@ protected CI path (step 6).
 #   gcloud auth login && gcloud auth application-default login
 CATVOX_ENVIRONMENT="$ENV" \
 CATVOX_PROJECT_ID="$PROJECT_ID" \
-PROJECT_DISPLAY_NAME="Kathelix CatVox Prod" \
+PROJECT_DISPLAY_NAME="Kathelix CatVox <Env>" \
 CATVOX_FUNCTION_REGION=us-central1 \
 CATVOX_FIRESTORE_LOCATION=nam5 \
 CATVOX_TF_STATE_BUCKET="catvox-tf-state-$PROJECT_ID" \
 CATVOX_TF_STATE_PREFIX=catvox/state \
-CATVOX_IOS_BUNDLE_ID=com.kathelix.catvox \
-CATVOX_FIREBASE_IOS_APP_DISPLAY_NAME="CatVox Prod iOS" \
+CATVOX_IOS_BUNDLE_ID=<protected-bundle-id> \
+CATVOX_FIREBASE_IOS_APP_DISPLAY_NAME="CatVox <Env> iOS" \
 CATVOX_FIREBASE_IOS_APP_DELETION_POLICY=ABANDON \
 CATVOX_FIREBASE_APPLE_TEAM_ID=QYT76L5836 \
 CATVOX_MANAGE_GCF_SOURCES_BUCKET_IAM=true \
-ALERT_EMAIL=<prod-alerts@example.com> \
+ALERT_EMAIL=<alerts@example.com> \
 RUN_TERRAFORM_APPLY=1 \
 RUN_POSTHOG_TERRAFORM_APPLY=1 \
 RUN_FUNCTIONS_DEPLOY=0 \
@@ -474,11 +474,11 @@ make configure-github-environment CATVOX_ENVIRONMENT="$ENV" \
   GITHUB_ENVIRONMENT_REVIEWERS=IvanBoyko
 ```
 
-For `prod` (`CATVOX_ENVIRONMENT_PROTECTED=true`,
-`CATVOX_GCP_WIF_GITHUB_REF=refs/heads/main`) this requires Ivan Boyko's approval
-and restricts deploys to `main`; for a mutable environment it leaves the
-environment open. Re-running is idempotent. You can also manage it from the UI:
-Settings → Environments → `$ENV`.
+For a protected environment (`CATVOX_ENVIRONMENT_PROTECTED=true`,
+`CATVOX_GCP_WIF_GITHUB_REF=refs/heads/main`) this requires the configured
+reviewer's approval and restricts deploys to `main`; for a mutable environment it
+leaves the environment open. Re-running is idempotent. You can also manage it from
+the UI: Settings → Environments → `$ENV`.
 
 **5 · Set any remaining environment secrets (O3).** You supply the value when
 prompted. Protected environments get **no** App Check debug token. If step 1 ran
@@ -504,13 +504,14 @@ unifies it:
 - **Terraform (apply infra first):** a manual dispatch from `main`, approved on the
   `$ENV` Environment — `gh workflow run terraform.yml --ref main`.
 - **Functions:** automatic in the push pipeline. On merge to `main` it deploys to
-  dev, runs dev integration, then **pauses `deploy-prod` for your approval** on the
-  `$ENV` Environment; approve it (the run page, or Settings → Environments) to
-  promote. It only runs after dev + integration pass.
+  the mutable environment, runs its integration suite, then **pauses the
+  protected-environment deploy job for your approval** on the `$ENV` Environment;
+  approve it (the run page, or Settings → Environments) to promote. It only runs
+  after the mutable deploy + integration pass.
 
 ```bash
 gh workflow run terraform.yml --ref main   # Terraform: manual dispatch, then approve
-# Functions: no command — approve the paused deploy-prod job on the next push to main
+# Functions: no command — approve the paused protected-environment deploy job on the next push to main
 ```
 
 **7 · Fill backend host config + verify.** After the deploy, fill the two Cloud
@@ -557,7 +558,7 @@ Environment-agnostic and config-gated:
 
 Without `CONFIRM=destroy` it refuses; a protected environment additionally
 refuses unless `ALLOW_PROTECTED_DESTROY` exactly equals the environment name, so
-prod is safe by construction.
+a protected environment is safe by construction.
 
 What it does, in order (the order is load-bearing):
 
