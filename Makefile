@@ -132,7 +132,7 @@ help:
 		'  make ios-validate-env-config-structure Validate <env> xcconfig structure before plist lands' \
 		'  make ios-validate-env-config-drift Compare committed Firebase plist to Terraform output' \
 		'  make ios-analytics-guard    Verify PostHog SDK usage stays behind AnalyticsService' \
-		'  make ios-validate-release-safety CATVOX_ENVIRONMENT=<env> Validate protected-tier Release safety (no foreign-env leak, debug surfaces gated)' \
+		'  make ios-validate-release-safety [CATVOX_ENVIRONMENT=<env>] Validate protected Release safety; auto-discovers the protected env (no foreign-env leak, debug surfaces gated)' \
 		'  make ios-ci                 Generate, build, and test like CI' \
 		'  make ios-device-launch      Build, install, and launch on DEVICE_ID or default iPhone' \
 		'  make ios-device-console     Build, install, and launch with devicectl console' \
@@ -258,10 +258,13 @@ ios-validate-env-config-drift:
 ios-analytics-guard:
 	@scripts/guard-analytics-capture-boundary.sh
 
+# Release safety is a protected-tier check. With no override it auto-discovers
+# the protected environment; pass CATVOX_ENVIRONMENT=<env> to target a specific
+# config. The repo default (CATVOX_ENVIRONMENT ?= dev) is deliberately not
+# forwarded, so a bare invocation validates the protected tier rather than dev.
 ios-validate-release-safety:
-	@CATVOX_ENVIRONMENT="$(CATVOX_ENVIRONMENT)" \
-	 CATVOX_ENV_CONFIG="$(CATVOX_ENV_CONFIG)" \
-	 node scripts/validate-release-safety.mjs "$(CATVOX_ENVIRONMENT)"
+	@node scripts/validate-release-safety.mjs \
+	 $(if $(filter-out file default undefined,$(origin CATVOX_ENVIRONMENT)),"$(CATVOX_ENVIRONMENT)")
 
 ios-build: ios-generate ios-build-only
 

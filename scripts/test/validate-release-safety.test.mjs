@@ -280,6 +280,56 @@ private final class CatVoxAppCheckProviderFactory: NSObject, AppCheckProviderFac
   assert.throws(() => run({ appSwift: ungated }), /AppCheckDebugProviderFactory/);
 });
 
+test('a Release branch that selects a non-App-Attest factory is rejected', () => {
+  // The production factory name still appears (in the DEBUG branch), so a
+  // whole-file string match would pass; the #else branch must be verified.
+  const swapped = `import FirebaseAppCheck
+
+enum FirebaseSetup {
+    static func configureFirebase() {
+        #if DEBUG
+        AppCheckDebugTokenBootstrap.configure()
+        let providerFactory = CatVoxAppCheckProviderFactory()
+        #else
+        let providerFactory = LegacyAppCheckProviderFactory()
+        #endif
+        AppCheck.setAppCheckProviderFactory(providerFactory)
+    }
+}
+
+private final class CatVoxAppCheckProviderFactory: NSObject, AppCheckProviderFactory {
+    func createProvider(with app: FirebaseApp) -> AppCheckProvider? {
+        AppAttestProvider(app: app)
+    }
+}
+`;
+  assert.throws(() => run({ appSwift: swapped }), /production App Check provider factory/);
+});
+
+test('a production factory that drops AppAttestProvider is rejected', () => {
+  const noAppAttest = `import FirebaseAppCheck
+
+enum FirebaseSetup {
+    static func configureFirebase() {
+        #if DEBUG
+        AppCheckDebugTokenBootstrap.configure()
+        let providerFactory = AppCheckDebugProviderFactory()
+        #else
+        let providerFactory = CatVoxAppCheckProviderFactory()
+        #endif
+        AppCheck.setAppCheckProviderFactory(providerFactory)
+    }
+}
+
+private final class CatVoxAppCheckProviderFactory: NSObject, AppCheckProviderFactory {
+    func createProvider(with app: FirebaseApp) -> AppCheckProvider? {
+        DeviceCheckProvider(app: app)
+    }
+}
+`;
+  assert.throws(() => run({ appSwift: noAppAttest }), /AppAttestProvider/);
+});
+
 test('the debug-token bootstrap defined outside #if DEBUG is rejected', () => {
   const ungated = `import Foundation
 

@@ -250,11 +250,22 @@ export function assertDebugSurfacesGated(root, errors) {
         pushError(errors, 'AppCheckDebugTokenBootstrap must only be referenced inside #if DEBUG in CatVox/App/CatVoxApp.swift');
       }
     }
-    if (!/AppAttestProvider\s*\(/.test(app)) {
-      pushError(errors, 'CatVox/App/CatVoxApp.swift must instantiate AppAttestProvider for the Release App Check provider');
+    // Assert the Release (#else) branch itself selects the production factory,
+    // via the classified regions — not a whole-file string match that a stray
+    // occurrence elsewhere could satisfy.
+    const releaseSelectsProductionFactory = lines.some(
+      (line) =>
+        !line.directive &&
+        line.releaseOfDebug &&
+        /CatVoxAppCheckProviderFactory\s*\(\s*\)/.test(line.text)
+    );
+    if (!releaseSelectsProductionFactory) {
+      pushError(errors, 'The Release (#else) branch in CatVox/App/CatVoxApp.swift must select the production App Check provider factory (CatVoxAppCheckProviderFactory())');
     }
-    if (!/CatVoxAppCheckProviderFactory\s*\(\s*\)/.test(app)) {
-      pushError(errors, 'CatVox/App/CatVoxApp.swift must use CatVoxAppCheckProviderFactory in the Release (#else) branch');
+    // ...and that factory must build an App Attest provider (scoped to its type
+    // body, so the assertion tracks the actual provider, not any string).
+    if (!typeBodyContains(app, 'CatVoxAppCheckProviderFactory', /AppAttestProvider\s*\(/)) {
+      pushError(errors, 'CatVoxAppCheckProviderFactory must instantiate AppAttestProvider (the production App Check provider)');
     }
   }
 
@@ -319,8 +330,37 @@ export function classifyDebugRegions(source) {
       directive = 'endif';
     }
     const debugOnly = stack.some((frame) => frame.isDebugIf && !frame.inElse);
-    return { text, trimmed, directive, debugOnly };
+    // The Release branch of a `#if DEBUG`: inside its `#else`, and not nested
+    // under any still-truthy DEBUG frame.
+    const releaseOfDebug = !debugOnly && stack.some((frame) => frame.isDebugIf && frame.inElse);
+    return { text, trimmed, directive, debugOnly, releaseOfDebug };
   });
+}
+
+// True when the brace-balanced body of the named Swift type matches pattern.
+// Scopes a check to one declaration instead of the whole file, so a matching
+// string elsewhere cannot satisfy it.
+function typeBodyContains(source, typeName, pattern) {
+  const declaration = new RegExp(`\\b(?:class|struct|enum|extension)\\s+${typeName}\\b`).exec(source);
+  if (!declaration) {
+    return false;
+  }
+  const open = source.indexOf('{', declaration.index);
+  if (open === -1) {
+    return false;
+  }
+  let depth = 0;
+  for (let i = open; i < source.length; i += 1) {
+    if (source[i] === '{') {
+      depth += 1;
+    } else if (source[i] === '}') {
+      depth -= 1;
+      if (depth === 0) {
+        return pattern.test(source.slice(open + 1, i));
+      }
+    }
+  }
+  return false;
 }
 
 // Within the named computed property, assert the non-DEBUG branch returns false.
