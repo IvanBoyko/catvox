@@ -436,9 +436,9 @@ CatVox uses the repository-root `Makefile` as a thin facade for common developer
 GitHub Actions may call Makefile targets for the command body, but workflow YAML remains responsible for CI-only concerns such as checkout, toolchain installation, dependency caching, Workload Identity Federation authentication, path/event triggers, and PR comments. See ADR-0014.
 
 ### 8.0.1 Markdown Documentation Pipeline
-* **Trigger:** Pushes and pull requests targeting `main` when files under `docs/`, the top-level `README.md`, `.markdownlint.jsonc`, or the workflow file itself change. Manual `workflow_dispatch` runs are also supported.
+* **Trigger:** Pushes and pull requests targeting `main` when files under `docs/`, `terraform/README.md`, the top-level `README.md`, `.markdownlint.jsonc`, or the workflow file itself change. Manual `workflow_dispatch` runs are also supported.
 * **Runner:** Ubuntu latest.
-* **Steps:** Checkout → markdownlint over `README.md` and `docs/**/*.md` using the repository `.markdownlint.jsonc` config.
+* **Steps:** Checkout → markdownlint over `README.md`, `docs/**/*.md`, and `terraform/README.md` using the repository `.markdownlint.jsonc` config.
 * **Purpose:** Provides a cheap documentation-quality check for docs-heavy changes without waking the macOS iOS build workflow.
 
 ### 8.1 iOS Build Pipeline

@@ -183,11 +183,15 @@ security-tier flag), never from environment-specific code, env-specific script
 filenames, or per-environment "golden value" maps. Shared scripts take the
 environment as input (`scripts/validate-environment-config.mjs`,
 `scripts/smoke.mjs`; `make ios-validate-env-config-structure` /
-`make smoke` with `CATVOX_ENVIRONMENT=<env>`). Literal `dev`/`prod` belong only
-in the CI/CD pipeline that encodes code promotion between environments. See
-ADR-0026. The promotion topology itself — which environment deploys automatically
-versus which is a manually-gated step — belongs in that pipeline as explicit
-literal jobs, not abstracted behind a runtime environment chooser input;
+`make smoke` with `CATVOX_ENVIRONMENT=<env>`). Literal `dev`/`prod` belong only in: the `docs/TRD.md` §7.3 environment roster
+(the SSOT for the current environment list, one row per environment); the CI/CD
+promotion pipeline (TRD §8 and the GitHub Actions workflows); and real CI job
+identifiers (`deploy-prod`, `apply-prod`). Everywhere else — including all other
+documentation, `AGENTS.md`, and agent-facing prose — refer to environments by
+tier: **mutable** or **protected** (matching `CATVOX_ENVIRONMENT_PROTECTED` and
+ADR-0026). See ADR-0026. The promotion topology itself — which environment deploys
+automatically versus which is a manually-gated step — belongs in that pipeline as
+explicit literal jobs, not abstracted behind a runtime environment chooser input;
 environment-agnostic design governs per-environment behaviour, not the shape of
 the promotion.
 In `config/environments/*.xcconfig`, keys ending in `_HOST` or `_HOST_NAME`
