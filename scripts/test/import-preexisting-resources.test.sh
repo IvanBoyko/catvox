@@ -25,7 +25,7 @@ mkdir -p "${SANDBOX}/bin"
 
 cat > "${SANDBOX}/bin/terraform" <<'SH'
 #!/usr/bin/env bash
-if [[ "$1" == "-chdir=terraform" && "$2" == "state" && "$3" == "list" ]]; then
+if [[ "$1" == "-chdir=terraform/core" && "$2" == "state" && "$3" == "list" ]]; then
   printf '%s\n' ${MOCK_TF_STATE:-}
   exit 0
 fi
@@ -71,7 +71,7 @@ chmod +x "${SANDBOX}/bin/"*
 export CATVOX_ENVIRONMENT="prod"
 export CATVOX_PROJECT_ID="kathelix-catvox-prod"
 export CATVOX_IOS_BUNDLE_ID="com.kathelix.catvox"
-export CATVOX_TF_VARS_FILE="terraform/env/prod.tfvars"
+export CATVOX_TF_VARS_FILE="terraform/core/env/prod.tfvars"
 
 run_case() {
   : > "${IMPORT_LOG}"

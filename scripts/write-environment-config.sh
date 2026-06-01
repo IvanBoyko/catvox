@@ -105,7 +105,7 @@ set_xcconfig_value() {
 # so the value lands clean with no `%` end-of-line marker.
 tf_output() {
   local name="$1" val
-  if ! val="$(terraform -chdir="${REPO_ROOT}/terraform" output -raw "$name" 2>/dev/null)"; then
+  if ! val="$(terraform -chdir="${REPO_ROOT}/terraform/core" output -raw "$name" 2>/dev/null)"; then
     echo "ERROR: could not read Terraform output '${name}'." >&2
     echo "Run 'make terraform-init' (and apply) for ${ENVIRONMENT} first." >&2
     return 1

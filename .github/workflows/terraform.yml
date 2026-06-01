@@ -7,8 +7,7 @@ on:
   push:
     branches: [main]
     paths:
-      - 'terraform/**'
-      - '!terraform/posthog/**'
+      - 'terraform/core/**'
       - 'CatVox/Resources/Firebase/GoogleService-Info-*.plist'
       - 'Makefile'
       - 'config/environments/**'
@@ -25,8 +24,7 @@ on:
   pull_request:
     branches: [main]
     paths:
-      - 'terraform/**'
-      - '!terraform/posthog/**'
+      - 'terraform/core/**'
       - 'CatVox/Resources/Firebase/GoogleService-Info-*.plist'
       - 'Makefile'
       - 'config/environments/**'

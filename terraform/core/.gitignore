@@ -1,0 +1,15 @@
+# Terraform GCP/Firebase (core) root local files.
+#
+# Mirrors terraform/posthog/.gitignore so each root owns its own local-files
+# rules; the umbrella terraform/README.md documents the overall layout. The
+# provider lock file (.terraform.lock.hcl) is intentionally committed so CI and
+# local dev validate against identical provider versions and hashes.
+
+.terraform/
+*.tfstate
+*.tfstate.backup
+terraform.tfvars
+env/*.tfvars
+!env/*.tfvars.example
+backend/*.hcl
+!backend/*.hcl.example

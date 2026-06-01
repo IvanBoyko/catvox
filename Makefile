@@ -68,7 +68,7 @@ CATVOX_FIREBASE_FIRESTORE_APP_CHECK_ENFORCEMENT ?= UNENFORCED
 CATVOX_ENVIRONMENT_PROTECTED ?= false
 CATVOX_INTEGRATION_MUTATIONS_ALLOWED ?= 1
 CATVOX_INTEGRATION_SAFE_ENVIRONMENTS ?= dev
-CATVOX_TF_VARS_FILE ?= terraform/env/$(CATVOX_ENVIRONMENT).tfvars
+CATVOX_TF_VARS_FILE ?= terraform/core/env/$(CATVOX_ENVIRONMENT).tfvars
 CATVOX_TF_STATE_BUCKET ?= catvox-tf-state-$(CATVOX_PROJECT_ID)
 CATVOX_TF_STATE_PREFIX ?= catvox/state
 CATVOX_TF_INIT_FLAGS ?= -reconfigure
@@ -88,7 +88,7 @@ CATVOX_POSTHOG_TF_STATE_BUCKET ?= $(CATVOX_TF_STATE_BUCKET)
 CATVOX_POSTHOG_TF_STATE_PREFIX ?= posthog/state
 CATVOX_POSTHOG_TF_INIT_FLAGS ?= -reconfigure
 
-catvox_tf_vars_rel = $(patsubst terraform/%,%,$(CATVOX_TF_VARS_FILE))
+catvox_tf_vars_rel = $(patsubst terraform/core/%,%,$(CATVOX_TF_VARS_FILE))
 catvox_tf_backend_args = -backend-config="bucket=$(CATVOX_TF_STATE_BUCKET)" -backend-config="prefix=$(CATVOX_TF_STATE_PREFIX)"
 catvox_tf_var_file_arg = $(if $(wildcard $(CATVOX_TF_VARS_FILE)),-var-file="$(catvox_tf_vars_rel)",)
 catvox_tf_env_args = TF_VAR_environment_name="$(CATVOX_ENVIRONMENT)" TF_VAR_project_id="$(CATVOX_PROJECT_ID)" TF_VAR_region="$(CATVOX_FUNCTION_REGION)" TF_VAR_firestore_location="$(CATVOX_FIRESTORE_LOCATION)" TF_VAR_tf_state_bucket="$(CATVOX_TF_STATE_BUCKET)" TF_VAR_firebase_ios_bundle_id="$(CATVOX_IOS_BUNDLE_ID)" TF_VAR_firebase_ios_app_display_name="$(CATVOX_FIREBASE_IOS_APP_DISPLAY_NAME)" TF_VAR_firebase_ios_app_deletion_policy="$(CATVOX_FIREBASE_IOS_APP_DELETION_POLICY)" TF_VAR_firebase_apple_team_id="$(CATVOX_FIREBASE_APPLE_TEAM_ID)" TF_VAR_manage_gcf_sources_bucket_iam="$(CATVOX_MANAGE_GCF_SOURCES_BUCKET_IAM)" TF_VAR_github_ref="$(CATVOX_GCP_WIF_GITHUB_REF)" TF_VAR_firestore_app_check_enforcement="$(CATVOX_FIREBASE_FIRESTORE_APP_CHECK_ENFORCEMENT)"
@@ -252,7 +252,7 @@ ios-validate-env-config-structure:
 ios-validate-env-config-drift:
 	@tmpdir="$$(mktemp -d)"; \
 	trap 'rm -rf "$$tmpdir"' EXIT; \
-	cd terraform && terraform output -raw firebase_ios_plist_base64 | base64 --decode > "$$tmpdir/expected.plist"; \
+	cd terraform/core && terraform output -raw firebase_ios_plist_base64 | base64 --decode > "$$tmpdir/expected.plist"; \
 	diff -u "$$tmpdir/expected.plist" "$(CURDIR)/$(CATVOX_FIREBASE_PLIST_OUTPUT)"
 
 ios-analytics-guard:
@@ -407,26 +407,26 @@ backend-deploy: functions-deploy
 backend-integration: functions-integration
 
 terraform-fmt-check:
-	@cd terraform && terraform fmt -check -recursive
+	@cd terraform/core && terraform fmt -check -recursive
 
 terraform-check-env-paths:
 	$(call catvox_require_env_path,CATVOX_TF_VARS_FILE,.tfvars)
 	@bash scripts/guard-terraform-tfvars-private-only.sh "$(CATVOX_TF_VARS_FILE)" "$(CATVOX_ENVIRONMENT)"
 
 terraform-init: terraform-check-env-paths
-	@cd terraform && terraform init $(CATVOX_TF_INIT_FLAGS) $(catvox_tf_backend_args)
+	@cd terraform/core && terraform init $(CATVOX_TF_INIT_FLAGS) $(catvox_tf_backend_args)
 
 terraform-validate: terraform-check-env-paths
-	@cd terraform && terraform validate -no-color
+	@cd terraform/core && terraform validate -no-color
 
 terraform-test: terraform-check-env-paths
-	@cd terraform && terraform test
+	@cd terraform/core && terraform test
 
 terraform-plan: terraform-check-env-paths
-	@cd terraform && $(catvox_tf_env_args) GOOGLE_CLOUD_QUOTA_PROJECT="$(CATVOX_PROJECT_ID)" terraform fmt -check -recursive
-	@cd terraform && $(catvox_tf_env_args) GOOGLE_CLOUD_QUOTA_PROJECT="$(CATVOX_PROJECT_ID)" terraform init $(CATVOX_TF_INIT_FLAGS) $(catvox_tf_backend_args)
-	@cd terraform && $(catvox_tf_env_args) GOOGLE_CLOUD_QUOTA_PROJECT="$(CATVOX_PROJECT_ID)" terraform validate -no-color
-	@cd terraform && $(catvox_tf_env_args) GOOGLE_CLOUD_QUOTA_PROJECT="$(CATVOX_PROJECT_ID)" terraform plan -no-color $(catvox_tf_var_file_arg)
+	@cd terraform/core && $(catvox_tf_env_args) GOOGLE_CLOUD_QUOTA_PROJECT="$(CATVOX_PROJECT_ID)" terraform fmt -check -recursive
+	@cd terraform/core && $(catvox_tf_env_args) GOOGLE_CLOUD_QUOTA_PROJECT="$(CATVOX_PROJECT_ID)" terraform init $(CATVOX_TF_INIT_FLAGS) $(catvox_tf_backend_args)
+	@cd terraform/core && $(catvox_tf_env_args) GOOGLE_CLOUD_QUOTA_PROJECT="$(CATVOX_PROJECT_ID)" terraform validate -no-color
+	@cd terraform/core && $(catvox_tf_env_args) GOOGLE_CLOUD_QUOTA_PROJECT="$(CATVOX_PROJECT_ID)" terraform plan -no-color $(catvox_tf_var_file_arg)
 
 # CI-only plan. terraform -detailed-exitcode reports 0 = no changes, 2 = changes,
 # 1 = error. `make` collapses every non-zero recipe exit to 2, so it cannot carry
@@ -435,7 +435,7 @@ terraform-plan: terraform-check-env-paths
 # error fails). The plan workflow reads that marker to skip the PR comment — and
 # the email it triggers — on no-change runs. See .github/actions/terraform-ci-plan.
 terraform-ci-plan: terraform-check-env-paths
-	@cd terraform && $(catvox_tf_env_args) GOOGLE_CLOUD_QUOTA_PROJECT="$(CATVOX_PROJECT_ID)" terraform plan -detailed-exitcode -no-color $(catvox_tf_var_file_arg); \
+	@cd terraform/core && $(catvox_tf_env_args) GOOGLE_CLOUD_QUOTA_PROJECT="$(CATVOX_PROJECT_ID)" terraform plan -detailed-exitcode -no-color $(catvox_tf_var_file_arg); \
 		code=$$?; \
 		echo "CATVOX_TF_DETAILED_EXITCODE=$$code"; \
 		[ "$$code" = "2" ] && exit 0 || exit "$$code"
@@ -445,12 +445,12 @@ terraform-apply: terraform-check-env-paths
 		printf 'Refusing to run Terraform apply. Re-run as: make terraform-apply CONFIRM=apply\n' >&2; \
 		exit 1; \
 	fi
-	@cd terraform && $(catvox_tf_env_args) GOOGLE_CLOUD_QUOTA_PROJECT="$(CATVOX_PROJECT_ID)" terraform init $(CATVOX_TF_INIT_FLAGS) $(catvox_tf_backend_args)
-	@cd terraform && $(catvox_tf_env_args) GOOGLE_CLOUD_QUOTA_PROJECT="$(CATVOX_PROJECT_ID)" terraform plan -no-color $(catvox_tf_var_file_arg)
-	@cd terraform && $(catvox_tf_env_args) GOOGLE_CLOUD_QUOTA_PROJECT="$(CATVOX_PROJECT_ID)" terraform apply -no-color $(catvox_tf_var_file_arg)
+	@cd terraform/core && $(catvox_tf_env_args) GOOGLE_CLOUD_QUOTA_PROJECT="$(CATVOX_PROJECT_ID)" terraform init $(CATVOX_TF_INIT_FLAGS) $(catvox_tf_backend_args)
+	@cd terraform/core && $(catvox_tf_env_args) GOOGLE_CLOUD_QUOTA_PROJECT="$(CATVOX_PROJECT_ID)" terraform plan -no-color $(catvox_tf_var_file_arg)
+	@cd terraform/core && $(catvox_tf_env_args) GOOGLE_CLOUD_QUOTA_PROJECT="$(CATVOX_PROJECT_ID)" terraform apply -no-color $(catvox_tf_var_file_arg)
 
 terraform-ci-apply: terraform-check-env-paths
-	@cd terraform && $(catvox_tf_env_args) GOOGLE_CLOUD_QUOTA_PROJECT="$(CATVOX_PROJECT_ID)" terraform apply -auto-approve -no-color $(catvox_tf_var_file_arg)
+	@cd terraform/core && $(catvox_tf_env_args) GOOGLE_CLOUD_QUOTA_PROJECT="$(CATVOX_PROJECT_ID)" terraform apply -auto-approve -no-color $(catvox_tf_var_file_arg)
 
 # Import a single existing resource into Terraform state. Used by
 # scripts/import-preexisting-resources.sh for idempotent provisioning into a
@@ -461,7 +461,7 @@ terraform-import: terraform-check-env-paths
 		printf 'terraform-import requires ADDRESS=<resource address> and ID=<import id>; run after terraform-init.\n' >&2; \
 		exit 1; \
 	fi
-	@cd terraform && $(catvox_tf_env_args) GOOGLE_CLOUD_QUOTA_PROJECT="$(CATVOX_PROJECT_ID)" terraform import -no-color $(catvox_tf_var_file_arg) "$(ADDRESS)" "$(ID)"
+	@cd terraform/core && $(catvox_tf_env_args) GOOGLE_CLOUD_QUOTA_PROJECT="$(CATVOX_PROJECT_ID)" terraform import -no-color $(catvox_tf_var_file_arg) "$(ADDRESS)" "$(ID)"
 
 # Destroy the core Terraform-managed resources for an environment. Gated on
 # CONFIRM=destroy. Invoked by scripts/destroy-environment.sh after its own safety
@@ -471,8 +471,8 @@ terraform-destroy: terraform-check-env-paths
 		printf 'Refusing to run Terraform destroy. Re-run as: make terraform-destroy CONFIRM=destroy\n' >&2; \
 		exit 1; \
 	fi
-	@cd terraform && $(catvox_tf_env_args) GOOGLE_CLOUD_QUOTA_PROJECT="$(CATVOX_PROJECT_ID)" terraform init $(CATVOX_TF_INIT_FLAGS) $(catvox_tf_backend_args)
-	@cd terraform && $(catvox_tf_env_args) GOOGLE_CLOUD_QUOTA_PROJECT="$(CATVOX_PROJECT_ID)" terraform destroy -auto-approve -no-color $(catvox_tf_var_file_arg)
+	@cd terraform/core && $(catvox_tf_env_args) GOOGLE_CLOUD_QUOTA_PROJECT="$(CATVOX_PROJECT_ID)" terraform init $(CATVOX_TF_INIT_FLAGS) $(catvox_tf_backend_args)
+	@cd terraform/core && $(catvox_tf_env_args) GOOGLE_CLOUD_QUOTA_PROJECT="$(CATVOX_PROJECT_ID)" terraform destroy -auto-approve -no-color $(catvox_tf_var_file_arg)
 
 posthog-terraform-fmt-check:
 	@cd terraform/posthog && terraform fmt -check -recursive
@@ -538,7 +538,7 @@ smoke:
 
 terraform-output-firebase-plist:
 	@mkdir -p "$$(dirname "$(CATVOX_FIREBASE_PLIST_OUTPUT)")"
-	@cd terraform && terraform output -raw firebase_ios_plist_base64 | base64 --decode > "../$(CATVOX_FIREBASE_PLIST_OUTPUT)"
+	@cd terraform/core && terraform output -raw firebase_ios_plist_base64 | base64 --decode > "../../$(CATVOX_FIREBASE_PLIST_OUTPUT)"
 	@CATVOX_ENVIRONMENT="$(CATVOX_ENVIRONMENT)" \
 	 CATVOX_ENV_CONFIG="$(CATVOX_ENV_CONFIG)" \
 	 CATVOX_PROJECT_ID="$(CATVOX_PROJECT_ID)" \

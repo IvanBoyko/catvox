@@ -37,7 +37,7 @@ is_valid_app_check_debug_token() {
 }
 
 read_tfvars_app_check_debug_token() {
-  local tfvars_path="${1:-terraform/env/dev.tfvars}"
+  local tfvars_path="${1:-terraform/core/env/dev.tfvars}"
   if [[ ! -f "${tfvars_path}" ]]; then
     return 0
   fi
@@ -60,7 +60,7 @@ read_tfvars_app_check_debug_token() {
 
 read_catvox_app_check_debug_token() {
   local token="${CATVOX_APP_CHECK_DEBUG_TOKEN:-${TF_VAR_app_check_debug_token:-}}"
-  local tfvars_path="${1:-${CATVOX_TFVARS_PATH:-terraform/env/dev.tfvars}}"
+  local tfvars_path="${1:-${CATVOX_TFVARS_PATH:-terraform/core/env/dev.tfvars}}"
 
   if ! is_valid_app_check_debug_token "${token}"; then
     token="$(read_tfvars_app_check_debug_token "${tfvars_path}")"

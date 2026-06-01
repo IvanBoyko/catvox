@@ -62,16 +62,9 @@ fastlane/screenshots/**/*.png
 fastlane/test_output
 .aider*
 
-# Terraform — GCP root. The PostHog root carries its own .gitignore at
-# terraform/posthog/.gitignore so each root owns its local-files rules.
-terraform/.terraform/
-terraform/*.tfstate
-terraform/*.tfstate.backup
-terraform/terraform.tfvars
-terraform/env/*.tfvars
-!terraform/env/*.tfvars.example
-terraform/backend/*.hcl
-!terraform/backend/*.hcl.example
+# Terraform local files are ignored per-root: each Terraform root carries its
+# own .gitignore (terraform/core/.gitignore, terraform/posthog/.gitignore) so it
+# owns its local-files rules. See terraform/README.md.
 .env
 
 # Generated Makefile fragments — see scripts/lib/emit-xcconfig-env.sh and the
