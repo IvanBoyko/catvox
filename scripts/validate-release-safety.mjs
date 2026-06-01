@@ -137,15 +137,15 @@ function resolveEntitlementsPath({ explicit, projectSpec, root, errors }) {
   if (projectSpec == null) {
     return null; // project.yml read error already reported
   }
-  const match = projectSpec.match(/CODE_SIGN_ENTITLEMENTS:\s*(\S+)/);
-  if (!match) {
+  const relative = effectiveReleaseEntitlements(projectSpec);
+  if (!relative) {
     pushError(
       errors,
-      'project.yml must set CODE_SIGN_ENTITLEMENTS for the app target so the Release build signs with the committed entitlements'
+      'project.yml must set CODE_SIGN_ENTITLEMENTS for the app target (in base or the Release config) so the Release build signs with the committed entitlements'
     );
     return null;
   }
-  return join(root, match[1]);
+  return join(root, relative);
 }
 
 // (e) The entitlements the Release build signs with must select the production
@@ -458,6 +458,116 @@ function accessorReleaseBranchReturnsFalse(lines, accessorName) {
   return false;
 }
 
+// Minimal block-YAML reader — enough of YAML to navigate the xcodegen project
+// spec structurally (nested maps, scalars, lists, `#` comments, optional quotes)
+// instead of by brittle first-match regex. Constructs project.yml does not use —
+// flow syntax, anchors, multi-line scalars — are not modeled. Map/scalar lookups
+// are exact; list items are collected so they never corrupt a sibling map.
+export function parseProjectYaml(text) {
+  const root = {};
+  const stack = [{ indent: -1, container: root }];
+  for (const rawLine of text.split(/\r?\n/)) {
+    const line = stripInlineComment(rawLine);
+    if (line.trim() === '') {
+      continue;
+    }
+    const indent = line.length - line.trimStart().length;
+    const content = line.trim();
+    while (stack.length > 1 && indent <= stack[stack.length - 1].indent) {
+      stack.pop();
+    }
+    const frame = stack[stack.length - 1];
+    if (frame.container == null) {
+      // Realize a pending child now that its kind (map vs list) is known.
+      frame.container = content.startsWith('- ') ? [] : {};
+      frame.parent[frame.parentKey] = frame.container;
+    }
+    const container = frame.container;
+
+    if (content.startsWith('- ')) {
+      if (!Array.isArray(container)) {
+        continue;
+      }
+      const itemText = content.slice(2).trim();
+      const colon = itemText.indexOf(':');
+      if (colon === -1) {
+        container.push(unquote(itemText));
+      } else {
+        container.push({
+          [unquote(itemText.slice(0, colon).trim())]: unquote(itemText.slice(colon + 1).trim()),
+        });
+      }
+      continue;
+    }
+
+    if (Array.isArray(container)) {
+      continue;
+    }
+    const colon = content.indexOf(':');
+    if (colon === -1) {
+      continue;
+    }
+    const key = unquote(content.slice(0, colon).trim());
+    const rest = content.slice(colon + 1).trim();
+    if (rest === '') {
+      stack.push({ indent, container: null, parent: container, parentKey: key });
+    } else {
+      container[key] = unquote(rest);
+    }
+  }
+  return root;
+}
+
+function stripInlineComment(line) {
+  let inSingle = false;
+  let inDouble = false;
+  for (let i = 0; i < line.length; i += 1) {
+    const ch = line[i];
+    if (ch === "'" && !inDouble) {
+      inSingle = !inSingle;
+    } else if (ch === '"' && !inSingle) {
+      inDouble = !inDouble;
+    } else if (ch === '#' && !inSingle && !inDouble && (i === 0 || /\s/.test(line[i - 1]))) {
+      return line.slice(0, i);
+    }
+  }
+  return line;
+}
+
+function unquote(value) {
+  const trimmed = value.trim();
+  if (
+    trimmed.length >= 2 &&
+    ((trimmed.startsWith('"') && trimmed.endsWith('"')) ||
+      (trimmed.startsWith("'") && trimmed.endsWith("'")))
+  ) {
+    return trimmed.slice(1, -1);
+  }
+  return trimmed;
+}
+
+// The Release build's effective CODE_SIGN_ENTITLEMENTS for the app target: a
+// Release config-specific override wins over the target base, which wins over a
+// flat settings value (mirrors xcodegen precedence). Undefined when none is set.
+function effectiveReleaseEntitlements(projectSpec) {
+  let parsed;
+  try {
+    parsed = parseProjectYaml(projectSpec);
+  } catch {
+    return undefined;
+  }
+  const settings = parsed?.targets?.CatVox?.settings;
+  if (!settings || typeof settings !== 'object') {
+    return undefined;
+  }
+  const candidates = [
+    settings.configs?.Release?.CODE_SIGN_ENTITLEMENTS,
+    settings.base?.CODE_SIGN_ENTITLEMENTS,
+    settings.CODE_SIGN_ENTITLEMENTS,
+  ];
+  return candidates.find((value) => typeof value === 'string' && value.length > 0);
+}
+
 // (g) project.yml must bind the Release configuration to the protected tier and
 // the Debug configuration to a mutable tier, and every scheme must archive with
 // Release. Resolved through the configs themselves, so no environment is named.
@@ -465,21 +575,34 @@ export function assertArchiveBinding(spec, root, errors) {
   if (spec == null) {
     return; // project.yml read error already reported
   }
-
-  const bindings = new Map();
-  const bindingRe = /^\s*(Debug|Release):\s*(config\/environments\/\S+\.xcconfig)\s*$/gm;
-  let match;
-  while ((match = bindingRe.exec(spec)) !== null) {
-    bindings.set(match[1], match[2]);
+  let parsed;
+  try {
+    parsed = parseProjectYaml(spec);
+  } catch {
+    pushError(errors, 'project.yml could not be parsed for the archive-selection check');
+    return;
   }
 
-  assertBindingTier(root, bindings.get('Release'), 'Release', true, errors);
-  assertBindingTier(root, bindings.get('Debug'), 'Debug', false, errors);
+  const configFiles = parsed?.targets?.CatVox?.configFiles;
+  const releaseConfig = typeof configFiles?.Release === 'string' ? configFiles.Release : undefined;
+  const debugConfig = typeof configFiles?.Debug === 'string' ? configFiles.Debug : undefined;
+  assertBindingTier(root, releaseConfig, 'Release', true, errors);
+  assertBindingTier(root, debugConfig, 'Debug', false, errors);
 
-  const archiveConfigs = [...spec.matchAll(/archive:\s*\n\s*config:\s*(\w+)/g)].map((m) => m[1]);
+  const schemes = parsed?.schemes;
+  const archiveConfigs = [];
+  if (schemes && typeof schemes === 'object') {
+    for (const scheme of Object.values(schemes)) {
+      const config = scheme?.archive?.config;
+      if (typeof config === 'string') {
+        archiveConfigs.push(config);
+      }
+    }
+  }
   if (archiveConfigs.length === 0) {
     pushError(errors, 'project.yml declares no scheme archive configuration to verify');
   }
+  // Exact match: a custom config like `Release-dev` must not be accepted as Release.
   for (const config of archiveConfigs) {
     if (config !== 'Release') {
       pushError(errors, `Every scheme must archive with the Release configuration, found archive config: ${config}`);

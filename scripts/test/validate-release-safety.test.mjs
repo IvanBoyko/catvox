@@ -10,7 +10,7 @@ import assert from 'node:assert/strict';
 import { mkdtempSync, mkdirSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
-import { validateReleaseSafety } from '../validate-release-safety.mjs';
+import { validateReleaseSafety, parseProjectYaml } from '../validate-release-safety.mjs';
 
 const PROTECTED_BASE = {
   CATVOX_PROJECT_ID: 'kathelix-catvox-shielded',
@@ -132,26 +132,38 @@ function projectYml({
   debug = 'mutable',
   archive = 'Release',
   entitlements = 'CatVox/CatVox.entitlements',
+  releaseEntitlements = null,
 } = {}) {
-  const entitlementsSetting = entitlements
-    ? `
-    settings:
-      base:
-        CODE_SIGN_ENTITLEMENTS: ${entitlements}`
-    : '';
-  return `targets:
-  CatVox:
-    configFiles:
-      Debug: config/environments/${debug}.xcconfig
-      Release: config/environments/${release}.xcconfig${entitlementsSetting}
-schemes:
-  CatVox:
-    archive:
-      config: ${archive}
-  CatVoxUITests:
-    archive:
-      config: ${archive}
-`;
+  const lines = [
+    'targets:',
+    '  CatVox:',
+    '    configFiles:',
+    `      Debug: config/environments/${debug}.xcconfig`,
+    `      Release: config/environments/${release}.xcconfig`,
+  ];
+  if (entitlements || releaseEntitlements) {
+    lines.push('    settings:');
+    if (entitlements) {
+      lines.push('      base:', `        CODE_SIGN_ENTITLEMENTS: ${entitlements}`);
+    }
+    if (releaseEntitlements) {
+      lines.push(
+        '      configs:',
+        '        Release:',
+        `          CODE_SIGN_ENTITLEMENTS: ${releaseEntitlements}`
+      );
+    }
+  }
+  lines.push(
+    'schemes:',
+    '  CatVox:',
+    '    archive:',
+    `      config: ${archive}`,
+    '  CatVoxUITests:',
+    '    archive:',
+    `      config: ${archive}`
+  );
+  return lines.join('\n') + '\n';
 }
 
 function render(base, overrides) {
@@ -321,6 +333,21 @@ test('CODE_SIGN_ENTITLEMENTS repointed to a missing file is rejected', () => {
   );
 });
 
+test('a Release config-specific CODE_SIGN_ENTITLEMENTS override is honored over base', () => {
+  // base points at the production entitlements, but the Release config overrides
+  // it to a development file — the effective Release entitlement must be checked.
+  assert.throws(
+    () =>
+      run({
+        project: projectYml({ releaseEntitlements: 'CatVox/Dev.entitlements' }),
+        extraFiles: {
+          'CatVox/Dev.entitlements': PRODUCTION_ENTITLEMENTS.replace('production', 'development'),
+        },
+      }),
+    /appattest-environment|production/
+  );
+});
+
 test('the debug App Check provider escaping #if DEBUG is rejected', () => {
   const ungated = `import FirebaseAppCheck
 
@@ -451,4 +478,21 @@ test('binding the Release configuration to a mutable environment is rejected', (
 
 test('a scheme that archives with Debug is rejected', () => {
   assert.throws(() => run({ project: projectYml({ archive: 'Debug' }) }), /Release configuration/);
+});
+
+test('a scheme that archives with a Release-prefixed custom config is rejected', () => {
+  // `Release-dev` must not be accepted just because it starts with "Release".
+  assert.throws(() => run({ project: projectYml({ archive: 'Release-dev' }) }), /Release configuration/);
+});
+
+test('parseProjectYaml navigates nested maps and a config-specific override', () => {
+  const parsed = parseProjectYaml(projectYml({ releaseEntitlements: 'CatVox/Dev.entitlements' }));
+  assert.equal(parsed.targets.CatVox.configFiles.Release, 'config/environments/shielded.xcconfig');
+  assert.equal(parsed.targets.CatVox.settings.base.CODE_SIGN_ENTITLEMENTS, 'CatVox/CatVox.entitlements');
+  assert.equal(
+    parsed.targets.CatVox.settings.configs.Release.CODE_SIGN_ENTITLEMENTS,
+    'CatVox/Dev.entitlements'
+  );
+  assert.equal(parsed.schemes.CatVox.archive.config, 'Release');
+  assert.equal(parsed.schemes.CatVoxUITests.archive.config, 'Release');
 });
