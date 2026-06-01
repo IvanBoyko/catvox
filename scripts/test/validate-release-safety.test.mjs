@@ -133,7 +133,7 @@ function projectYml({
   archive = 'Release',
   entitlements = 'CatVox/CatVox.entitlements',
   releaseEntitlements = null,
-  infoProperties = null,
+  infoProperties = {},
 } = {}) {
   const lines = [
     'targets:',
@@ -155,9 +155,19 @@ function projectYml({
       );
     }
   }
-  if (infoProperties) {
+  // Required runtime keys default to valid xcconfig substitutions so the baseline
+  // project is launch-valid; a test overrides a key, or omits it by passing null.
+  const info = {
+    CatVoxEnvironment: '$(CATVOX_ENVIRONMENT)',
+    CatVoxSignedUploadURLEndpoint: 'https://$(CATVOX_SIGNED_UPLOAD_URL_HOST)',
+    CatVoxAnalyseVideoEndpoint: 'https://$(CATVOX_ANALYSE_VIDEO_HOST)',
+    CatVoxPostHogHost: 'https://$(CATVOX_POSTHOG_HOST_NAME)',
+    ...infoProperties,
+  };
+  const infoEntries = Object.entries(info).filter(([, value]) => value != null && value !== false);
+  if (infoEntries.length > 0) {
     lines.push('    info:', '      path: CatVox/Info.plist', '      properties:');
-    for (const [key, value] of Object.entries(infoProperties)) {
+    for (const [key, value] of infoEntries) {
       lines.push(`        ${key}: ${value}`);
     }
   }
@@ -334,6 +344,25 @@ test('a leftover placeholder hard-coded in info.properties is rejected', () => {
         project: projectYml({ infoProperties: { CatVoxPostHogProjectToken: 'replace-with-token' } }),
       }),
     /leftover placeholder/
+  );
+});
+
+test('a missing required Info.plist key is rejected', () => {
+  assert.throws(
+    () => run({ project: projectYml({ infoProperties: { CatVoxAnalyseVideoEndpoint: null } }) }),
+    /must define CatVoxAnalyseVideoEndpoint/
+  );
+});
+
+test('an unresolved Info.plist substitution is rejected', () => {
+  assert.throws(
+    () =>
+      run({
+        project: projectYml({
+          infoProperties: { CatVoxAnalyseVideoEndpoint: 'https://$(CATVOX_DOES_NOT_EXIST)' },
+        }),
+      }),
+    /unresolved substitution/
   );
 });
 

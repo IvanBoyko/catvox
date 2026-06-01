@@ -90,6 +90,7 @@ export function validateReleaseSafety({
     errors
   );
   assertNoForeignIdentifiers(values, infoValues, absConfig, errors);
+  assertRequiredInfoPlistKeys(infoValues, projectSpec, errors);
   assertDebugSurfacesGated(root, errors);
   assertArchiveBinding(projectSpec, root, errors);
 
@@ -152,6 +153,43 @@ function assertNoDebugTokenKeys(values, infoValues, errors) {
 function isProvisioningPlaceholder(value) {
   const lower = value.toLowerCase();
   return lower.includes('replace-with') || lower.includes('placeholder') || lower === 'todo';
+}
+
+// Info.plist keys a Release build requires at launch: CatVoxAppConfiguration reads
+// them, and in Release a missing key fatals while an unresolved $(...) ships as a
+// broken endpoint. CatVoxPostHogProjectToken is intentionally optional (analytics
+// disables gracefully), so it is not listed.
+const requiredInfoPlistKeys = [
+  'CatVoxEnvironment',
+  'CatVoxSignedUploadURLEndpoint',
+  'CatVoxAnalyseVideoEndpoint',
+  'CatVoxPostHogHost',
+];
+
+// (h) The generated Info.plist must actually contain the required runtime keys,
+// fully resolved. Scanning for bad content is not enough: a dropped key or an
+// unresolved $(...) substitution would fatal the Release app or ship a broken URL.
+function assertRequiredInfoPlistKeys(infoValues, projectSpec, errors) {
+  if (projectSpec == null) {
+    return; // project.yml read error already reported
+  }
+  const present = new Map(infoValues.map(([key, value]) => [key, normalize(value)]));
+  for (const key of requiredInfoPlistKeys) {
+    const value = present.get(key);
+    if (!value) {
+      pushError(
+        errors,
+        `Info.plist must define ${key}; a Release build requires it (set it in project.yml info.properties)`
+      );
+      continue;
+    }
+    if (value.includes('$(')) {
+      pushError(
+        errors,
+        `Info.plist value for ${key} has an unresolved substitution (${value}); it must resolve to a concrete value`
+      );
+    }
+  }
 }
 
 // The entitlements file the Release build actually signs with is whatever
