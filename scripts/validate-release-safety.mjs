@@ -214,6 +214,17 @@ function assertNoForeignIdentifiers(values, configPath, errors) {
         );
       }
     }
+    for (const token of foreign.posthogTokens) {
+      if (value.includes(token)) {
+        pushError(
+          errors,
+          `${key} must not reference another environment's PostHog project token (${token})`
+        );
+      }
+    }
+    if (foreign.posthogProjectIds.has(value)) {
+      pushError(errors, `${key} must not reference another environment's PostHog project id (${value})`);
+    }
   }
 }
 
@@ -229,12 +240,14 @@ export function collectForeignReleaseIdentifiers(configPath) {
   const bundleIds = new Set();
   const firebaseAppIds = new Set();
   const endpointHosts = new Set();
+  const posthogTokens = new Set();
+  const posthogProjectIds = new Set();
 
   let entries = [];
   try {
     entries = readdirSync(dir).filter((name) => name.endsWith('.xcconfig') && name !== self);
   } catch {
-    return { projectIds, bundleIds, firebaseAppIds, endpointHosts };
+    return { projectIds, bundleIds, firebaseAppIds, endpointHosts, posthogTokens, posthogProjectIds };
   }
 
   for (const entry of entries) {
@@ -249,8 +262,14 @@ export function collectForeignReleaseIdentifiers(configPath) {
     addIfReal(firebaseAppIds, values.get('CATVOX_FIREBASE_APP_ID'));
     addIfReal(endpointHosts, values.get('CATVOX_SIGNED_UPLOAD_URL_HOST'));
     addIfReal(endpointHosts, values.get('CATVOX_ANALYSE_VIDEO_HOST'));
+    // PostHog: only the per-project token and id are environment-unique and ship
+    // in the app (project.yml embeds the token as CatVoxPostHogProjectToken). The
+    // PostHog host and organization id are deliberately shared across
+    // environments, so they are not treated as foreign (ADR-0019, ADR-0020).
+    addIfReal(posthogTokens, values.get('CATVOX_POSTHOG_PROJECT_TOKEN'));
+    addIfReal(posthogProjectIds, values.get('CATVOX_POSTHOG_PROJECT_ID'));
   }
-  return { projectIds, bundleIds, firebaseAppIds, endpointHosts };
+  return { projectIds, bundleIds, firebaseAppIds, endpointHosts, posthogTokens, posthogProjectIds };
 }
 
 function addIfReal(set, raw) {

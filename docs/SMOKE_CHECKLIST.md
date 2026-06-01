@@ -59,8 +59,11 @@ manually:
 - The environment's secrets do not include `TF_VAR_APP_CHECK_DEBUG_TOKEN`.
 - Firebase App Check for the environment's iOS app uses App Attest only. No Debug
   Provider token is registered.
-- `CatVox/Resources/Firebase/GoogleService-Info-<env>.plist` exists, is committed
-  if that remains the chosen repo contract, and passes the automated plist check.
+- `CatVox/Resources/Firebase/GoogleService-Info-<env>.plist` exists and is
+  committed. The Build workflow validates the committed plist against the
+  environment's config for the protected environment too
+  (`make ios-validate-env-config CATVOX_ENVIRONMENT=<env>`), so a Release cannot
+  ship the wrong Firebase project, app ID, API key, or bundle ID.
 - Terraform plan output is reviewed by a human before any apply. A smoke run must
   never be used as approval to apply infrastructure.
 - Cloud Run / Cloud Functions endpoints match the committed hosts, and the smoke

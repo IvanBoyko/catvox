@@ -246,6 +246,20 @@ test('a foreign endpoint host in a Release value is rejected', () => {
   );
 });
 
+test('a foreign PostHog project token in a Release value is rejected', () => {
+  assert.throws(
+    () => run({ protectedOverrides: { CATVOX_POSTHOG_PROJECT_TOKEN: 'phc_mutable' } }),
+    /PostHog project token/
+  );
+});
+
+test('a foreign PostHog project id in a Release value is rejected', () => {
+  assert.throws(
+    () => run({ protectedOverrides: { CATVOX_POSTHOG_PROJECT_ID: '402530' } }),
+    /PostHog project id/
+  );
+});
+
 test('an App Check debug-token key in the Release config is rejected', () => {
   assert.throws(
     () => run({ protectedOverrides: { TF_VAR_APP_CHECK_DEBUG_TOKEN: 'a-debug-token-value' } }),
