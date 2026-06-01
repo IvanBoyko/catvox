@@ -2,7 +2,7 @@
 # CatVox AI — Terraform Variables
 # Non-secret per-environment values are sourced from
 # config/environments/<environment>.xcconfig by the Makefile and passed as
-# TF_VAR_* values. terraform/env/<environment>.tfvars is ignored and holds only
+# TF_VAR_* values. terraform/core/env/<environment>.tfvars is ignored and holds only
 # true secrets such as app_check_debug_token and alert_email.
 ###############################################################################
 
