@@ -85,17 +85,20 @@ step that is not satisfied and resolve it.
    exists with a required reviewer; the environment has **no**
    `TF_VAR_APP_CHECK_DEBUG_TOKEN` secret; App Check uses App Attest only with no
    Debug Provider token; `config/environments/$ENV.xcconfig` has no leftover
-   `replace-with-*` placeholders; and a Release archive selects this environment
-   and does not reference another environment's project IDs, bundle IDs, Debug
-   App Check providers, or debug-token variables.
+   `replace-with-*` placeholders. The Release config + archive-binding leak
+   checks (this environment selects itself and references no other environment's
+   identifiers or debug surfaces) are automated by `make ios-validate-release-safety`
+   in CI, so this is a confirmation rather than a manual audit.
 6. **Record the pre-launch data decision** (see "Pre-launch Data Handling"):
    Firestore, the uploads bucket, and the deployed function revisions inspected,
    with an explicit keep-or-clean decision noted alongside the release notes.
 7. **Build, archive, and submit the Release build** for the protected bundle ID.
    The Release configuration binds the protected environment automatically — do
    not pass an environment override. Archive and leak validation (no
-   mutable-environment endpoints, app IDs, debug tokens, or Debug provider paths
-   in Release) is hardened in #38 Step 5; do not duplicate it here.
+   mutable-environment endpoints, app IDs, Firebase app IDs, debug tokens, or
+   Debug provider paths in Release) is enforced in CI by
+   `make ios-validate-release-safety` (see `docs/SMOKE_CHECKLIST.md`); the
+   remaining manual step is building and signing the physical archive itself.
 8. **Enable App Store traffic** — release the approved build, or begin the phased
    rollout. This is the point of no easy return for the *app* layer: everything
    above must be green first, because the embedded config is now frozen on

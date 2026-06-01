@@ -405,7 +405,7 @@ CI authenticates to GCP via keyless Workload Identity Federation (§8.2). Each e
 
 ### 7.6 App Check Enforcement per Tier
 
-`CATVOX_FIREBASE_FIRESTORE_APP_CHECK_ENFORCEMENT` (`OFF`, `UNENFORCED`, or `ENFORCED`) sets Firestore App Check enforcement per environment: `UNENFORCED` for mutable environments (keeps the debug-token developer path frictionless) and `ENFORCED` for protected environments (client SDK access requires a valid App Attest token). Service-account and Admin SDK access — the backend SA and CI integration probes via `@google-cloud/firestore` — bypass App Check regardless of this setting. The Functions-layer App Check (App Attest in Release, Debug Provider locally) is described in §6.3. See ADR-0025.
+`CATVOX_FIREBASE_FIRESTORE_APP_CHECK_ENFORCEMENT` (`OFF`, `UNENFORCED`, or `ENFORCED`) sets Firestore App Check enforcement per environment: `UNENFORCED` for mutable environments (keeps the debug-token developer path frictionless) and `ENFORCED` for protected environments (client SDK access requires a valid App Attest token). Service-account and Admin SDK access — the backend SA and CI integration probes via `@google-cloud/firestore` — bypass App Check regardless of this setting. The Functions-layer App Check (App Attest in Release, Debug Provider locally) is described in §6.3. For a protected environment, `make ios-validate-release-safety` (run in the Build workflow) enforces this boundary at the config and source level: the Release-embedded configuration references no other environment's identifiers, carries no App Check debug-token key, selects the production App Attest entitlement, and keeps the Swift debug provider and debug-token surfaces behind `#if DEBUG`. See ADR-0025.
 
 ### 7.7 Integration-Safe Environments
 

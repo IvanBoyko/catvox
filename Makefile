@@ -108,7 +108,7 @@ endef
 .PHONY: help doctor scripts-test \
 	setup-local-ai-loop ai-loop-start ai-loop-answer \
 	ios-generate ios-build ios-build-only ios-test ios-test-only ios-ui-test ios-ui-test-only ios-ci ios-device-launch ios-device-console app-deploy \
-	ios-validate-env-config ios-validate-env-config-structure ios-validate-env-config-drift ios-analytics-guard \
+	ios-validate-env-config ios-validate-env-config-structure ios-validate-env-config-drift ios-analytics-guard ios-validate-release-safety \
 	functions-install functions-build functions-test functions-deploy functions-integration functions-ci \
 	backend-build backend-deploy backend-integration \
 	terraform-check-env-paths terraform-fmt-check terraform-init terraform-validate terraform-test terraform-plan terraform-ci-plan terraform-apply terraform-ci-apply terraform-import terraform-output-firebase-plist \
@@ -132,6 +132,7 @@ help:
 		'  make ios-validate-env-config-structure Validate <env> xcconfig structure before plist lands' \
 		'  make ios-validate-env-config-drift Compare committed Firebase plist to Terraform output' \
 		'  make ios-analytics-guard    Verify PostHog SDK usage stays behind AnalyticsService' \
+		'  make ios-validate-release-safety [CATVOX_ENVIRONMENT=<env>] Validate protected Release safety; auto-discovers the protected env (no foreign-env leak, debug surfaces gated)' \
 		'  make ios-ci                 Generate, build, and test like CI' \
 		'  make ios-device-launch      Build, install, and launch on DEVICE_ID or default iPhone' \
 		'  make ios-device-console     Build, install, and launch with devicectl console' \
@@ -219,7 +220,7 @@ scripts-test:
 	@bash scripts/test/environment-doctor.test.sh
 	@bash scripts/test/write-environment-config.test.sh
 	@bash scripts/test/destroy-environment.test.sh
-	@node --test scripts/test/validate-environment-config.test.mjs scripts/test/find-firebase-ios-app-id.test.mjs scripts/test/docs-environment-model-sst.test.mjs
+	@node --test scripts/test/validate-environment-config.test.mjs scripts/test/validate-release-safety.test.mjs scripts/test/find-firebase-ios-app-id.test.mjs scripts/test/docs-environment-model-sst.test.mjs
 	@python3 tools/ai-loop/ai_loop_test.py
 
 setup-local-ai-loop:
@@ -256,6 +257,14 @@ ios-validate-env-config-drift:
 
 ios-analytics-guard:
 	@scripts/guard-analytics-capture-boundary.sh
+
+# Release safety is a protected-tier check. With no override it auto-discovers
+# the protected environment; pass CATVOX_ENVIRONMENT=<env> to target a specific
+# config. The repo default (CATVOX_ENVIRONMENT ?= dev) is deliberately not
+# forwarded, so a bare invocation validates the protected tier rather than dev.
+ios-validate-release-safety:
+	@node scripts/validate-release-safety.mjs \
+	 $(if $(filter-out file default undefined,$(origin CATVOX_ENVIRONMENT)),"$(CATVOX_ENVIRONMENT)")
 
 ios-build: ios-generate ios-build-only
 
