@@ -85,7 +85,7 @@ export function validateReleaseSafety({
     resolveEntitlementsPath({ explicit: entitlementsPath, projectSpec, root, errors }),
     errors
   );
-  assertNoForeignIdentifiers(values, absConfig, errors);
+  assertNoForeignIdentifiers(values, absConfig, projectSpec, errors);
   assertDebugSurfacesGated(root, errors);
   assertArchiveBinding(projectSpec, root, errors);
 
@@ -171,23 +171,49 @@ function assertAppAttestEntitlement(entitlementsPath, errors) {
   }
 }
 
+// The Info.plist the archive embeds is generated from project.yml's
+// info.properties, with $(...) references resolved against the xcconfig. Return
+// those resolved values so a foreign identifier hard-coded directly in
+// info.properties — not only one reached through the xcconfig — is scanned.
+function resolveInfoPlistValues(projectSpec, values) {
+  if (projectSpec == null) {
+    return [];
+  }
+  let parsed;
+  try {
+    parsed = parseProjectYaml(projectSpec);
+  } catch {
+    return [];
+  }
+  const properties = parsed?.targets?.CatVox?.info?.properties;
+  if (!properties || typeof properties !== 'object' || Array.isArray(properties)) {
+    return [];
+  }
+  const resolved = [];
+  for (const [key, raw] of Object.entries(properties)) {
+    if (typeof raw !== 'string') {
+      continue;
+    }
+    const value = raw.replace(/\$\(([A-Za-z_][A-Za-z0-9_]*)\)/g, (match, name) => {
+      const resolvedRef = normalize(values.get(name));
+      return resolvedRef != null ? resolvedRef : match;
+    });
+    resolved.push([`Info.plist:${key}`, value]);
+  }
+  return resolved;
+}
+
 // (c) The heart of the leak check: no value the Release build embeds may
 // reference another committed environment. Project ids match as substrings
 // (they appear inside derived bucket / service-account / app-id strings);
 // bundle ids match exactly (so a longer bundle that merely shares a prefix is
-// not flagged); Firebase app ids and endpoint hosts match as substrings. The
-// scan surface includes the composed https:// endpoints exactly as project.yml
-// writes them into Info.plist, not just the bare hostname fields.
-function assertNoForeignIdentifiers(values, configPath, errors) {
+// not flagged); Firebase app ids, API keys, endpoint hosts, and the PostHog
+// token match as substrings; the PostHog project id matches exactly. The scan
+// surface is every xcconfig value plus the generated Info.plist values.
+function assertNoForeignIdentifiers(values, configPath, projectSpec, errors) {
   const foreign = collectForeignReleaseIdentifiers(configPath);
 
-  const scan = [...values.entries()];
-  const signedHost = normalize(values.get('CATVOX_SIGNED_UPLOAD_URL_HOST'));
-  const analyseHost = normalize(values.get('CATVOX_ANALYSE_VIDEO_HOST'));
-  const postHogHost = normalize(values.get('CATVOX_POSTHOG_HOST_NAME'));
-  if (signedHost) scan.push(['CatVoxSignedUploadURLEndpoint', `https://${signedHost}`]);
-  if (analyseHost) scan.push(['CatVoxAnalyseVideoEndpoint', `https://${analyseHost}`]);
-  if (postHogHost) scan.push(['CatVoxPostHogHost', `https://${postHogHost}`]);
+  const scan = [...values.entries(), ...resolveInfoPlistValues(projectSpec, values)];
 
   for (const [key, value] of scan) {
     for (const projectId of foreign.projectIds) {

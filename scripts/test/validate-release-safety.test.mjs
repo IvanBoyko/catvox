@@ -133,6 +133,7 @@ function projectYml({
   archive = 'Release',
   entitlements = 'CatVox/CatVox.entitlements',
   releaseEntitlements = null,
+  infoProperties = null,
 } = {}) {
   const lines = [
     'targets:',
@@ -152,6 +153,12 @@ function projectYml({
         '        Release:',
         `          CODE_SIGN_ENTITLEMENTS: ${releaseEntitlements}`
       );
+    }
+  }
+  if (infoProperties) {
+    lines.push('    info:', '      path: CatVox/Info.plist', '      properties:');
+    for (const [key, value] of Object.entries(infoProperties)) {
+      lines.push(`        ${key}: ${value}`);
     }
   }
   lines.push(
@@ -277,6 +284,37 @@ test('a foreign PostHog project id in a Release value is rejected', () => {
     () => run({ protectedOverrides: { CATVOX_POSTHOG_PROJECT_ID: '402530' } }),
     /PostHog project id/
   );
+});
+
+test('a foreign endpoint hard-coded in info.properties is rejected', () => {
+  assert.throws(
+    () =>
+      run({
+        project: projectYml({
+          infoProperties: { CatVoxAnalyseVideoEndpoint: 'https://analyse.mutable.run.app' },
+        }),
+      }),
+    /endpoint host/
+  );
+});
+
+test('a foreign PostHog token hard-coded in info.properties is rejected', () => {
+  assert.throws(
+    () => run({ project: projectYml({ infoProperties: { CatVoxPostHogProjectToken: 'phc_mutable' } }) }),
+    /PostHog project token/
+  );
+});
+
+test('info.properties with valid xcconfig substitutions passes', () => {
+  const result = run({
+    project: projectYml({
+      infoProperties: {
+        CatVoxSignedUploadURLEndpoint: 'https://$(CATVOX_SIGNED_UPLOAD_URL_HOST)',
+        CatVoxPostHogProjectToken: '$(CATVOX_POSTHOG_PROJECT_TOKEN)',
+      },
+    }),
+  });
+  assert.equal(result.isProtected, true);
 });
 
 test('an App Check debug-token key in the Release config is rejected', () => {
