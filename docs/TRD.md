@@ -358,25 +358,34 @@ Per-environment conventions:
 
 ### 7.3 Current Environments
 
-`CATVOX_ENVIRONMENT_PROTECTED` (`true`/`false`) is the single config switch that classifies an environment's security tier (ADR-0026): a **mutable** environment keeps the developer path frictionless, a **protected** environment is secure-by-default. The table below is the authoritative roster of the environments that currently exist and every way they differ — it is the single source of truth for the current environment list. The rest of this section, and the other documents, refer to environments by tier rather than by name. Rows marked `yes` under *Validator-enforced* are checked by `scripts/validate-environment-config.mjs` (run as `make ios-validate-env-config-structure`) when `CATVOX_ENVIRONMENT_PROTECTED=true`; `—` marks an identity value that simply differs per environment.
+`CATVOX_ENVIRONMENT_PROTECTED` (`true`/`false`) is the single config switch that classifies an environment's security tier (ADR-0026): a **mutable** environment keeps the developer path frictionless, a **protected** environment is secure-by-default.
 
-| Dimension | `dev` | `prod` | Controlled by | Validator-enforced | Source |
-|---|---|---|---|---|---|
-| Security tier | mutable | protected | `CATVOX_ENVIRONMENT_PROTECTED` (`false` / `true`) | yes | ADR-0026 |
-| GCP/Firebase project | `kathelix-catvox-dev` | `kathelix-catvox-prod` | `CATVOX_PROJECT_ID` | — | ADR-0017, ADR-0018 |
-| iOS bundle ID | `com.kathelix.catvox.dev` | `com.kathelix.catvox` | `CATVOX_IOS_BUNDLE_ID` | — | — |
-| PostHog analytics project | `CatVox Dev` | `CatVox Prod` | `CATVOX_POSTHOG_PROJECT_ID` | — | ADR-0019, ADR-0020 |
-| Firestore App Check | `UNENFORCED` (debug-token path frictionless) | `ENFORCED` (client SDK needs a valid App Attest token) | `CATVOX_FIREBASE_FIRESTORE_APP_CHECK_ENFORCEMENT` | yes | ADR-0025 |
-| WIF ref scope | empty — trusts any ref | pinned `refs/heads/main`; CI auth also requires `assertion.ref` | `CATVOX_GCP_WIF_GITHUB_REF` | yes | ADR-0024 |
-| Firebase iOS app deletion policy | `DELETE` (disposable) | `ABANDON` | `CATVOX_FIREBASE_IOS_APP_DELETION_POLICY` | yes | ADR-0026 |
-| Integration-safe | listed; Firestore-mutating integration tests permitted | excluded; non-invasive smoke only | `CATVOX_INTEGRATION_SAFE_ENVIRONMENTS` | yes | ADR-0026 |
-| App Check debug token | allowed | never registered | `TF_VAR_APP_CHECK_DEBUG_TOKEN` presence | no | ADR-0026, runbook |
-| GitHub Environment protection | may be unprotected | required reviewers + deployment-branch policy pinned to the WIF ref's branch | `make configure-github-environment` | no | ADR-0024, runbook |
-| First Terraform apply | may run via CI once identity exists | operator-local (creates the WIF pool + `catvox-ci-sa`); later applies via CI | operator runbook | no | ADR-0024 |
-| Promotion path | automatic on merge to `main` | manual, environment-gated, approval-required | CI/CD pipeline (§8) | no | runbook |
-| Destroy gate | `CONFIRM=destroy` | `CONFIRM=destroy` plus `ALLOW_PROTECTED_DESTROY=<env>` | `make environment-destroy` | no | runbook |
+The roster below is the single source of truth for the environments that currently exist — **one row per environment**, so adding or removing an environment is a single-line edit. Each column is one way environments differ; the rest of this section, and the other documents, refer to environments by tier rather than by name.
 
-Service-account and Admin SDK access bypasses App Check regardless of tier (§7.6). See ADR-0024, ADR-0025, and ADR-0026.
+| Environment | Tier | GCP/Firebase project | iOS bundle ID | PostHog project | Firestore App Check | WIF ref scope | iOS app deletion policy | Integration-safe | App Check debug token | GitHub Environment protection | First Terraform apply | Promotion path | Destroy gate |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| `dev` | mutable | `kathelix-catvox-dev` | `com.kathelix.catvox.dev` | `CatVox Dev` | `UNENFORCED` | empty (any ref) | `DELETE` | listed | allowed | unprotected | via CI once identity exists | automatic on merge to `main` | `CONFIRM=destroy` |
+| `prod` | protected | `kathelix-catvox-prod` | `com.kathelix.catvox` | `CatVox Prod` | `ENFORCED` | `refs/heads/main` | `ABANDON` | excluded | never registered | required reviewers + branch policy | operator-local | manual, approval-gated | `CONFIRM=destroy` + `ALLOW_PROTECTED_DESTROY=<env>` |
+
+Each column is governed by one config key or mechanism. The table below records that key, where it is specified, and whether `scripts/validate-environment-config.mjs` (run as `make ios-validate-env-config-structure`) enforces it for protected environments — `—` marks an identity value that simply differs per environment:
+
+| Difference | Controlled by | Validator-enforced | Source |
+|---|---|---|---|
+| Tier | `CATVOX_ENVIRONMENT_PROTECTED` | yes | ADR-0026 |
+| GCP/Firebase project | `CATVOX_PROJECT_ID` | — | ADR-0017, ADR-0018 |
+| iOS bundle ID | `CATVOX_IOS_BUNDLE_ID` | — | — |
+| PostHog project | `CATVOX_POSTHOG_PROJECT_ID` | — | ADR-0019, ADR-0020 |
+| Firestore App Check | `CATVOX_FIREBASE_FIRESTORE_APP_CHECK_ENFORCEMENT` | yes | ADR-0025 |
+| WIF ref scope | `CATVOX_GCP_WIF_GITHUB_REF` | yes | ADR-0024 |
+| iOS app deletion policy | `CATVOX_FIREBASE_IOS_APP_DELETION_POLICY` | yes | ADR-0026 |
+| Integration-safe | `CATVOX_INTEGRATION_SAFE_ENVIRONMENTS` | yes | ADR-0026 |
+| App Check debug token | `TF_VAR_APP_CHECK_DEBUG_TOKEN` presence | no | ADR-0026 |
+| GitHub Environment protection | `make configure-github-environment` | no | ADR-0024 |
+| First Terraform apply | operator runbook | no | ADR-0024 |
+| Promotion path | CI/CD pipeline (§8) | no | runbook |
+| Destroy gate | `make environment-destroy` | no | runbook |
+
+Mutable values keep the developer path frictionless; protected values are secure-by-default (App Check `ENFORCED`, a pinned WIF ref, `ABANDON` deletion, excluded from the integration-safe set). Service-account and Admin SDK access bypasses App Check regardless of tier (§7.6). See ADR-0024, ADR-0025, and ADR-0026.
 
 ### 7.4 Parameterization Pipeline
 
