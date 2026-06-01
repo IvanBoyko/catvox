@@ -12,6 +12,13 @@ updates:
     open-pull-requests-limit: 10
     labels:
       - maintenance
+    # @types/node tracks the deployed Functions runtime major (Node 22; see #42).
+    # Take 22.x minor/patch, but ignore major bumps (23/24/25) until the runtime
+    # itself moves. Bump this manually when the Functions runtime changes.
+    ignore:
+      - dependency-name: "@types/node"
+        update-types:
+          - version-update:semver-major
     groups:
       # Group minor/patch updates of the tightly-coupled Google/Firebase SDK
       # stack so they ship as one PR; majors remain individual PRs so each
