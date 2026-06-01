@@ -219,7 +219,7 @@ scripts-test:
 	@bash scripts/test/environment-doctor.test.sh
 	@bash scripts/test/write-environment-config.test.sh
 	@bash scripts/test/destroy-environment.test.sh
-	@node --test scripts/test/validate-environment-config.test.mjs scripts/test/find-firebase-ios-app-id.test.mjs
+	@node --test scripts/test/validate-environment-config.test.mjs scripts/test/find-firebase-ios-app-id.test.mjs scripts/test/docs-environment-model-sst.test.mjs
 	@python3 tools/ai-loop/ai_loop_test.py
 
 setup-local-ai-loop:

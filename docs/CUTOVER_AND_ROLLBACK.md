@@ -2,9 +2,9 @@
 
 This runbook covers taking a **protected** environment live (cutover) and backing
 changes out (rollback). It is environment-agnostic: run every command with
-`CATVOX_ENVIRONMENT=<env>`, with `prod` as the worked example. Environment names
-are data; behaviour comes from `config/environments/<env>.xcconfig`, not from
-environment-specific code (see ADR-0026).
+`CATVOX_ENVIRONMENT=<env>`. Environment names are data; behaviour comes from
+`config/environments/<env>.xcconfig`, not from environment-specific code (see
+ADR-0026).
 
 It assumes the environment is already stood up per
 `docs/CREATE_NEW_ENVIRONMENT.md` ("Operator Checklist: Standing Up a Protected
@@ -14,7 +14,7 @@ before public traffic, and how to recover each layer when something is wrong.
 CatVox is an iOS app. "Enabling public traffic" means shipping the **Release**
 build on the App Store — the Release configuration binds to the protected
 environment at build time (`project.yml` maps `Release →
-config/environments/prod.xcconfig`, and the build loads
+config/environments/<protected-env>.xcconfig`, and the build loads
 `GoogleService-Info-$(CATVOX_ENVIRONMENT).plist`). There is no DNS or
 load-balancer cutover. The single most important consequence runs through the
 whole rollback section: a shipped App Store binary's embedded backend hosts and
@@ -24,10 +24,10 @@ project IDs **cannot** be rolled back remotely — only the backend
 Set the session variables once (substitute your environment):
 
 ```bash
-export ENV=prod
-export PROJECT_ID=kathelix-catvox-prod
+export ENV=<protected-env>
+export PROJECT_ID=kathelix-catvox-<protected-env>
 # Region is data (config/environments/$ENV.xcconfig → CATVOX_FUNCTION_REGION);
-# the raw gcloud commands below need it in the shell. For the prod example:
+# the raw gcloud commands below need it in the shell, e.g.:
 export CATVOX_FUNCTION_REGION=us-central1
 ```
 
@@ -47,8 +47,8 @@ step that is not satisfied and resolve it.
      main`).
    - **Functions:** the `deploy-prod` job in `.github/workflows/functions.yml`
      (`needs: integration-after-deploy`) was approved at the `$ENV` Environment
-     gate and is green. It runs only after the dev deploy and dev integration
-     pass; approving the gate is the manual promote.
+     gate and is green. It runs only after the mutable-environment deploy and
+     integration pass; approving the gate is the manual promote.
 2. **Preflight the prerequisites (read-only).**
 
    ```bash
@@ -91,11 +91,11 @@ step that is not satisfied and resolve it.
 6. **Record the pre-launch data decision** (see "Pre-launch Data Handling"):
    Firestore, the uploads bucket, and the deployed function revisions inspected,
    with an explicit keep-or-clean decision noted alongside the release notes.
-7. **Build, archive, and submit the Release build** for the protected bundle ID
-   (`com.kathelix.catvox`). The Release configuration binds the protected
-   environment automatically — do not pass an environment override. Archive and
-   leak validation (no Dev endpoints, app IDs, debug tokens, or Debug provider
-   paths in Release) is hardened in #38 Step 5; do not duplicate it here.
+7. **Build, archive, and submit the Release build** for the protected bundle ID.
+   The Release configuration binds the protected environment automatically — do
+   not pass an environment override. Archive and leak validation (no
+   mutable-environment endpoints, app IDs, debug tokens, or Debug provider paths
+   in Release) is hardened in #38 Step 5; do not duplicate it here.
 8. **Enable App Store traffic** — release the approved build, or begin the phased
    rollout. This is the point of no easy return for the *app* layer: everything
    above must be green first, because the embedded config is now frozen on
@@ -103,8 +103,8 @@ step that is not satisfied and resolve it.
 
 ## Pre-launch Data Handling
 
-Prod smoke is read-only, and Firestore-mutating integration tests never run
-against a protected environment (it must be absent from
+Protected-environment smoke is read-only, and Firestore-mutating integration
+tests never run against a protected environment (it must be absent from
 `CATVOX_INTEGRATION_SAFE_ENVIRONMENTS`). So a protected environment should
 already be free of test-generated data. This is a **verify-then-decide** step,
 not a scheduled wipe. Default to **keep**; clean only what inspection shows is
@@ -154,8 +154,8 @@ the problem without an app respin.
 
 "App config" is `config/environments/$ENV.xcconfig` plus
 `GoogleService-Info-$ENV.plist`, bound into the **Release** build via
-`project.yml` (`Release → config/environments/prod.xcconfig`; the plist is
-selected by `GoogleService-Info-$(CATVOX_ENVIRONMENT).plist`).
+`project.yml` (`Release → config/environments/<protected-env>.xcconfig`; the plist
+is selected by `GoogleService-Info-$(CATVOX_ENVIRONMENT).plist`).
 
 - **Before submission** (the binary is not yet shipped): revert the offending
   commit to the xcconfig or plist on a reviewed PR, then re-validate and rebuild.
@@ -176,10 +176,10 @@ selected by `GoogleService-Info-$(CATVOX_ENVIRONMENT).plist`).
 ### Functions deployment
 
 - **Forward-fix (preferred, matches the protected pipeline).** Revert the
-  offending change on a reviewed PR to `main`. On merge it auto-deploys to dev
-  and runs dev integration, then **re-promote** by approving the `deploy-prod`
-  gate on the `$ENV` Environment — the same path as the original promote in
-  `.github/workflows/functions.yml`.
+  offending change on a reviewed PR to `main`. On merge it auto-deploys to the
+  mutable environment and runs its integration suite, then **re-promote** by
+  approving the `deploy-prod` gate on the `$ENV` Environment — the same path as
+  the original promote in `.github/workflows/functions.yml`.
 - **Emergency stop (a bad revision must stop serving immediately).** Shift Cloud
   Run traffic back to the prior known-good revision. A Gen2 function's Cloud Run
   **service ID is the lowercased function name** — `getSignedUploadURL` →
@@ -238,8 +238,8 @@ gh secret set <NAME> --env "$ENV" --repo kathelix/catvox
 ### Terraform changes
 
 - **Forward-fix.** Revert the offending Terraform commit on a reviewed PR; the PR
-  gets the automatic dev plan/apply, and prod re-applies through the manual
-  dispatch approved on the `$ENV` Environment.
+  gets the automatic mutable-environment plan/apply, and the protected environment
+  re-applies through the manual dispatch approved on the `$ENV` Environment.
 
   ```bash
   gh workflow run terraform.yml --ref main   # apply-prod, then approve the gate
@@ -278,7 +278,7 @@ integration tests for smoke.
 - Bad **app config** caught before submission → "App configuration".
 
 The quick follow-up path is the same protected promotion path used in reverse: a
-fix or revert PR → dev auto-deploy and dev integration → re-approve the
+fix or revert PR → mutable-environment auto-deploy and integration → re-approve the
 `deploy-prod` gate (Functions) and/or re-dispatch and approve `apply-prod`
 (Terraform). Because the protected path is approval-gated, the follow-up is fast
 but still gated on a human approval at the `$ENV` Environment — there is no

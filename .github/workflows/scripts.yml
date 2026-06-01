@@ -9,6 +9,12 @@ on:
       - 'scripts/test/**'
       - 'tools/ai-loop/**'
       - 'config/environments/**'
+      # Docs read by scripts/test/docs-environment-model-sst.test.mjs — the
+      # single-source-of-truth contract must re-run when these change.
+      - 'docs/TRD.md'
+      - 'docs/HLD.md'
+      - 'docs/CREATE_NEW_ENVIRONMENT.md'
+      - 'terraform/README.md'
       - '.github/workflows/scripts.yml'
   pull_request:
     branches: [main]
@@ -18,6 +24,12 @@ on:
       - 'scripts/test/**'
       - 'tools/ai-loop/**'
       - 'config/environments/**'
+      # Docs read by scripts/test/docs-environment-model-sst.test.mjs — the
+      # single-source-of-truth contract must re-run when these change.
+      - 'docs/TRD.md'
+      - 'docs/HLD.md'
+      - 'docs/CREATE_NEW_ENVIRONMENT.md'
+      - 'terraform/README.md'
       - '.github/workflows/scripts.yml'
   workflow_dispatch:
 
