@@ -206,6 +206,14 @@ function assertNoForeignIdentifiers(values, configPath, errors) {
         );
       }
     }
+    for (const apiKey of foreign.firebaseApiKeys) {
+      if (value.includes(apiKey)) {
+        pushError(
+          errors,
+          `${key} must not reference another environment's Firebase API key (${apiKey})`
+        );
+      }
+    }
     for (const host of foreign.endpointHosts) {
       if (value.includes(host)) {
         pushError(
@@ -228,10 +236,14 @@ function assertNoForeignIdentifiers(values, configPath, errors) {
   }
 }
 
-// Gather the identifiers of every OTHER committed environment in the same
-// directory. Extends the project/bundle pair scanned by the base validator with
-// Firebase app ids and backend endpoint hosts. Placeholders and unparseable
-// siblings are skipped.
+// Gather every OTHER committed environment's app-visible, environment-unique
+// identifiers, so a value that would ship in the Release artifact can be checked
+// against them. Covers what the app embeds: project id, bundle id, Firebase app
+// id and API key, backend endpoint hosts, and the PostHog project token and id.
+// Deliberately excluded: identifiers shared across environments by design (the
+// PostHog host and organization id), and CI-only identity that never ships in
+// the app (WIF provider, service account), which the base config validator
+// already checks. Placeholders and unparseable siblings are skipped.
 export function collectForeignReleaseIdentifiers(configPath) {
   const absolute = resolve(configPath);
   const dir = dirname(absolute);
@@ -239,15 +251,25 @@ export function collectForeignReleaseIdentifiers(configPath) {
   const projectIds = new Set();
   const bundleIds = new Set();
   const firebaseAppIds = new Set();
+  const firebaseApiKeys = new Set();
   const endpointHosts = new Set();
   const posthogTokens = new Set();
   const posthogProjectIds = new Set();
+  const collected = {
+    projectIds,
+    bundleIds,
+    firebaseAppIds,
+    firebaseApiKeys,
+    endpointHosts,
+    posthogTokens,
+    posthogProjectIds,
+  };
 
   let entries = [];
   try {
     entries = readdirSync(dir).filter((name) => name.endsWith('.xcconfig') && name !== self);
   } catch {
-    return { projectIds, bundleIds, firebaseAppIds, endpointHosts, posthogTokens, posthogProjectIds };
+    return collected;
   }
 
   for (const entry of entries) {
@@ -260,6 +282,7 @@ export function collectForeignReleaseIdentifiers(configPath) {
     addIfReal(projectIds, values.get('CATVOX_PROJECT_ID'));
     addIfReal(bundleIds, values.get('CATVOX_IOS_BUNDLE_ID'));
     addIfReal(firebaseAppIds, values.get('CATVOX_FIREBASE_APP_ID'));
+    addIfReal(firebaseApiKeys, values.get('CATVOX_FIREBASE_API_KEY'));
     addIfReal(endpointHosts, values.get('CATVOX_SIGNED_UPLOAD_URL_HOST'));
     addIfReal(endpointHosts, values.get('CATVOX_ANALYSE_VIDEO_HOST'));
     // PostHog: only the per-project token and id are environment-unique and ship
@@ -269,7 +292,7 @@ export function collectForeignReleaseIdentifiers(configPath) {
     addIfReal(posthogTokens, values.get('CATVOX_POSTHOG_PROJECT_TOKEN'));
     addIfReal(posthogProjectIds, values.get('CATVOX_POSTHOG_PROJECT_ID'));
   }
-  return { projectIds, bundleIds, firebaseAppIds, endpointHosts, posthogTokens, posthogProjectIds };
+  return collected;
 }
 
 function addIfReal(set, raw) {

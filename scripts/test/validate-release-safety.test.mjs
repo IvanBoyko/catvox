@@ -239,6 +239,13 @@ test('a foreign Firebase app id in a Release value is rejected', () => {
   );
 });
 
+test('a foreign Firebase API key in a Release value is rejected', () => {
+  assert.throws(
+    () => run({ protectedOverrides: { CATVOX_FIREBASE_API_KEY: 'AIzaMutableKey00000000000000000000000' } }),
+    /Firebase API key/
+  );
+});
+
 test('a foreign endpoint host in a Release value is rejected', () => {
   assert.throws(
     () => run({ protectedOverrides: { CATVOX_SIGNED_UPLOAD_URL_HOST: 'signed.mutable.run.app' } }),
