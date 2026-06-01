@@ -73,6 +73,7 @@ Each ADR should usually contain:
 | 0024 | Scope CI WIF Trust to GitHub Environment and Branch Ref | Accepted |
 | 0025 | Enforce App Check on Cloud Firestore per Environment | Accepted |
 | 0026 | Classify Environments by Security Tier in Config | Accepted |
+| 0027 | Place Each Terraform Root in Its Own Subdirectory | Accepted |
 
 ## Workflow
 

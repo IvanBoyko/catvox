@@ -158,7 +158,7 @@ with `count: 5`, calls `getSignedUploadURL`, verifies the machine-readable HTTP
 deletes temporary Firestore documents in a `finally` block.
 
 Prefer the Makefile target because it accepts `CATVOX_APP_CHECK_DEBUG_TOKEN`,
-`TF_VAR_app_check_debug_token`, or the selected local `terraform/env/<environment>.tfvars`
+`TF_VAR_app_check_debug_token`, or the selected local `terraform/core/env/<environment>.tfvars`
 fallback:
 
 ```bash
@@ -195,7 +195,7 @@ CATVOX_APP_CHECK_DEBUG_TOKEN=<registered-token> make ios-device-launch
 ```
 
 `make ios-device-launch` also accepts `TF_VAR_app_check_debug_token` and falls
-back to the selected local `terraform/env/<environment>.tfvars` when present. It passes the token to
+back to the selected local `terraform/core/env/<environment>.tfvars` when present. It passes the token to
 `devicectl` without printing it. After that launch, later Debug app-icon
 launches reuse the locally persisted token for Firebase App Check refreshes.
 
@@ -241,12 +241,12 @@ logs reactively. Below are the options for moving to proactive detection.
 A Cloud Monitoring alerting policy fires directly on ERROR-level log entries
 from either Cloud Function, with no manual console steps required.
 
-**This is already implemented in `terraform/monitoring.tf`.** Add your email
-to the selected ignored `terraform/env/<environment>.tfvars` and the next
+**This is already implemented in `terraform/core/monitoring.tf`.** Add your email
+to the selected ignored `terraform/core/env/<environment>.tfvars` and the next
 `terraform apply` (or CI merge) activates it:
 
 ```hcl
-# terraform/env/dev.tfvars
+# terraform/core/env/dev.tfvars
 alert_email = "you@example.com"
 ```
 

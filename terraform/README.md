@@ -1,12 +1,12 @@
 # Terraform Environment Conventions
 
-CatVox's Terraform layout has three kinds of directories under `terraform/`:
+CatVox's Terraform layout places each Terraform root in its own subdirectory
+under `terraform/` (a pure container):
 
 | Path | Kind | Purpose |
 |---|---|---|
-| `terraform/` | Terraform root (GCP/Firebase foundation) | `.tf` files for GCP/Firebase infrastructure. State prefix `catvox/state`. CI workflow `.github/workflows/terraform.yml`. |
+| `terraform/core/` | Terraform root (GCP/Firebase foundation) | `.tf` files for GCP/Firebase infrastructure. State prefix `catvox/state`. CI workflow `.github/workflows/terraform.yml`. |
 | `terraform/posthog/` | Terraform root (PostHog analytics) | `.tf` files for PostHog projects/dashboards/insights. State prefix `posthog/state`. CI workflow `.github/workflows/posthog-terraform.yml`. See `terraform/posthog/README.md` and ADR-0020. |
-| `terraform/env/` | Per-environment private inputs | Holds secrets-only `.tfvars` files. Not a Terraform root in its own right — no `.tf` files. Passed to a root's `terraform plan/apply -var-file=…`. |
 
 The two Terraform roots share the same per-environment GCS state bucket
 (`catvox-tf-state-<gcp-project-id>`); only the prefix differs. Per-environment
@@ -18,7 +18,7 @@ state/config conventions are specified in the Environment Model section of
 
 Both Terraform roots commit their provider lock files:
 
-- `terraform/.terraform.lock.hcl`
+- `terraform/core/.terraform.lock.hcl`
 - `terraform/posthog/.terraform.lock.hcl`
 
 When provider constraints change, regenerate the affected root's lock file with
@@ -33,11 +33,11 @@ terraform -chdir=<root> providers lock \
 
 Do not use `terraform init -upgrade` unless the provider upgrade is intentional.
 
-## GCP root (`terraform/`)
+## GCP/Firebase root (`terraform/core/`)
 
 Named environments use explicit files keyed by environment name:
 
-- `terraform/env/<environment>.tfvars` for environment-specific private values
+- `terraform/core/env/<environment>.tfvars` for environment-specific private values
 
 Non-secret foundation values live in
 `config/environments/<environment>.xcconfig` and are passed by the Makefile as
@@ -50,7 +50,7 @@ parameterization model is specified in the Environment Model section of
 Example local flow:
 
 ```bash
-cp env/<env>.tfvars.example env/<env>.tfvars
+cp terraform/core/env/<env>.tfvars.example terraform/core/env/<env>.tfvars
 # Fill in private values
 make terraform-plan CATVOX_ENVIRONMENT=<env>
 ```

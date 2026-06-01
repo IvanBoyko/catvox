@@ -228,7 +228,7 @@ percentage. See ADR-0010 and ADR-0012.
 
 ### 6.3 Security & Identity
 * **App Verification:** Firebase App Check mandatory for all backend entry points. App Attest is the production provider for Apple platforms; Debug Provider is used for local development. (See ADR-0002.)
-* **Debug App Check Token Persistence:** Debug iPhone builds persist a registered App Check debug token in local app `UserDefaults` after launch with `AppCheckDebugToken` or `FIRAAppCheckDebugToken`. Later Debug launches from the app icon restore that token into the process environment before Firebase App Check initializes, so token refreshes do not fall back to an unregistered generated token. If Firebase rejects the restored token, CatVox clears the stored Debug token and reports an app verification failure instead of surfacing Firebase's raw token-exchange response. This bootstrap is compiled out of Release builds; production App Check remains App Attest-only. `make ios-device-launch` passes the registered debug token from local environment variables or the selected ignored `terraform/env/<environment>.tfvars` without printing it. (See ADR-0016.)
+* **Debug App Check Token Persistence:** Debug iPhone builds persist a registered App Check debug token in local app `UserDefaults` after launch with `AppCheckDebugToken` or `FIRAAppCheckDebugToken`. Later Debug launches from the app icon restore that token into the process environment before Firebase App Check initializes, so token refreshes do not fall back to an unregistered generated token. If Firebase rejects the restored token, CatVox clears the stored Debug token and reports an app verification failure instead of surfacing Firebase's raw token-exchange response. This bootstrap is compiled out of Release builds; production App Check remains App Attest-only. `make ios-device-launch` passes the registered debug token from local environment variables or the selected ignored `terraform/core/env/<environment>.tfvars` without printing it. (See ADR-0016.)
 * **Secrets:** No credentials or private operator values are committed. Runtime project identity is non-secret environment configuration; true secrets remain in Secret Manager or per-environment GitHub Environment secrets.
 * **Service Account: `catvox-backend-sa`** — Runtime identity for Cloud Functions. Holds only the minimal roles required at runtime; never has CI-level access.
     * `roles/aiplatform.user` — invoke Gemini 2.5 Flash via Vertex AI.
@@ -397,7 +397,7 @@ Committed `config/environments/<environment>.xcconfig` files are the source of t
 
 Foundation values sourced from xcconfig include `CATVOX_PROJECT_ID`, `CATVOX_GCP_CI_SERVICE_ACCOUNT`, `CATVOX_GCP_WIF_PROVIDER`, `CATVOX_FUNCTION_REGION`, `CATVOX_FIRESTORE_LOCATION`, `CATVOX_TF_STATE_BUCKET`, `CATVOX_IOS_BUNDLE_ID`, the `CATVOX_FIREBASE_*` identifiers, and `CATVOX_MANAGE_GCF_SOURCES_BUCKET_IAM`. Committed boolean values use lowercase `true`/`false` only.
 
-The secret/non-secret split: GitHub Environment secrets and ignored `terraform/env/<environment>.tfvars` files hold only true secrets or deliberately private values — `POSTHOG_API_KEY`, the App Check debug token, and `alert_email`. Everything else is committed non-secret config. See ADR-0021 and ADR-0022.
+The secret/non-secret split: GitHub Environment secrets and ignored `terraform/core/env/<environment>.tfvars` files hold only true secrets or deliberately private values — `POSTHOG_API_KEY`, the App Check debug token, and `alert_email`. Everything else is committed non-secret config. See ADR-0021 and ADR-0022.
 
 ### 7.5 WIF Trust Scoping
 
@@ -419,7 +419,7 @@ Creating an environment touches only these per-environment files and resources:
 
 * `config/environments/<environment>.xcconfig` — committed, non-secret
 * `CatVox/Resources/Firebase/GoogleService-Info-<environment>.plist` — committed after validation
-* `terraform/env/<environment>.tfvars` — ignored, secrets-only (commit only the `.example`)
+* `terraform/core/env/<environment>.tfvars` — ignored, secrets-only (commit only the `.example`)
 * a `<environment>` GitHub Environment — secrets only
 
 No `.tf`, Swift, script, Makefile, or workflow file changes are needed; the plist and tfvars are per-environment instances of existing templates.
@@ -456,7 +456,7 @@ GitHub Actions may call Makefile targets for the command body, but workflow YAML
 * **Extension path:** The suite remains native XCUITest and launch-argument driven so it can later run on real devices through Firebase Test Lab or BrowserStack without changing app behavior or adopting a second UI automation framework. See `docs/UI_TESTING.md`.
 
 ### 8.2 Terraform Infrastructure Pipeline
-* **Trigger:** Push or pull request targeting `main` when files under `terraform/`, the repository `Makefile`, or the workflow file itself change.
+* **Trigger:** Push or pull request targeting `main` when files under `terraform/core/`, the repository `Makefile`, or the workflow file itself change.
 * **Authentication:** Keyless via **Workload Identity Federation (WIF)**. GitHub Actions presents its OIDC token; GCP exchanges it for a short-lived credential scoped to `catvox-ci-sa` (the dedicated Terraform CI identity). No long-lived service account keys are stored anywhere.
 * **Plan job (on PR):**
     1. Authenticate to GCP via WIF.
@@ -464,7 +464,7 @@ GitHub Actions may call Makefile targets for the command body, but workflow YAML
     3. Post a structured comment to the PR with fmt/init outcomes and the full plan output (collapsible, truncated at 60k characters if needed).
     4. Fail the job if the plan step fails, surfacing the error in the PR comment.
 * **Apply job (on merge to `main`):** `make terraform-init` → `make terraform-ci-apply` (`terraform apply -auto-approve -no-color`).
-* **Variables:** The workflow reads `config/environments/<environment>.xcconfig` before WIF authentication, then the Makefile passes non-secret GCP/Firebase foundation values to Terraform as `TF_VAR_*` values (see §7.4 for the parameterization model). Environment-scoped GitHub secrets supply only `TF_VAR_app_check_debug_token` and `TF_VAR_alert_email`. Local ignored `terraform/env/<environment>.tfvars` files should contain only `app_check_debug_token` and `alert_email`.
+* **Variables:** The workflow reads `config/environments/<environment>.xcconfig` before WIF authentication, then the Makefile passes non-secret GCP/Firebase foundation values to Terraform as `TF_VAR_*` values (see §7.4 for the parameterization model). Environment-scoped GitHub secrets supply only `TF_VAR_app_check_debug_token` and `TF_VAR_alert_email`. Local ignored `terraform/core/env/<environment>.tfvars` files should contain only `app_check_debug_token` and `alert_email`.
 * **Local apply guard:** Developers must run `make terraform-plan` before review, and local `make terraform-apply` refuses to run unless invoked as `make terraform-apply CONFIRM=apply`. The target still uses Terraform's interactive apply prompt.
 
 ### 8.3 Firebase Cloud Functions Pipeline
@@ -474,7 +474,7 @@ GitHub Actions may call Makefile targets for the command body, but workflow YAML
 * **Deploy job (on merge to `main`):** Runs after build passes → `make functions-deploy` (`npm --prefix functions run build` plus `firebase deploy --only functions`).
 * **Integration job (after merge-to-main deploy):** Runs `make functions-integration` against the currently deployed integration-safe Dev environment in `kathelix-catvox-dev`. Integration tests may write temporary Dev data when required and must clean it up. The current suite exchanges the registered App Check debug token for a valid App Check token, verifies that both HTTP Functions reject missing App Check tokens with `401 app_check_unauthorized`, verifies the Firestore quota reservation race contract with temporary `usage/{userId}` data through a direct `@google-cloud/firestore` probe, verifies the machine-readable daily-quota HTTP `429` response and structured Cloud Logging entry, then deletes temporary documents. See ADR-0015, ADR-0017, and ADR-0018.
 * **Integration auth boundary:** GitHub Actions WIF produces an external-account Application Default Credentials (ADC) file. Direct data-plane probes in `functions/integration/**` should use Google Cloud client libraries such as `@google-cloud/firestore`, which accept that ADC path. Do not initialize Firebase Admin SDK inside the integration test harness unless it has been explicitly verified under GitHub Actions WIF; Admin ADC loading can reject the CI credentials even when the deployed Cloud Functions runtime uses Firebase Admin correctly.
-* **Local Dev integration command:** Developers can run the same backend integration suite against the currently deployed Dev backend with `make functions-integration` or `npm --prefix functions run test:integration`. The Makefile target supplies selected environment values from `CATVOX_ENV_CONFIG`, sets `CATVOX_INTEGRATION_MUTATIONS_ALLOWED=1`, and passes `CATVOX_INTEGRATION_SAFE_ENVIRONMENTS=dev` for the integration-safe Dev environment. It preserves an explicitly supplied `CATVOX_APP_CHECK_DEBUG_TOKEN`; when no App Check token environment variable is present, it silently falls back to `app_check_debug_token` in the selected ignored `terraform/env/<environment>.tfvars` if that file/value exists. Direct `npm --prefix functions run test:integration` runs must provide the required `CATVOX_*` environment values or an integration env file.
+* **Local Dev integration command:** Developers can run the same backend integration suite against the currently deployed Dev backend with `make functions-integration` or `npm --prefix functions run test:integration`. The Makefile target supplies selected environment values from `CATVOX_ENV_CONFIG`, sets `CATVOX_INTEGRATION_MUTATIONS_ALLOWED=1`, and passes `CATVOX_INTEGRATION_SAFE_ENVIRONMENTS=dev` for the integration-safe Dev environment. It preserves an explicitly supplied `CATVOX_APP_CHECK_DEBUG_TOKEN`; when no App Check token environment variable is present, it silently falls back to `app_check_debug_token` in the selected ignored `terraform/core/env/<environment>.tfvars` if that file/value exists. Direct `npm --prefix functions run test:integration` runs must provide the required `CATVOX_*` environment values or an integration env file.
 
 ### 8.4 CI Bootstrap & GitHub Environment Secrets
 One-time repository setup, GitHub Actions availability, GitHub Environment protection, and the WIF trust model are documented in `docs/CI_BOOTSTRAP.md`.

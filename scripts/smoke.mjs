@@ -110,25 +110,25 @@ async function runTerraformRefreshOnlyPlan() {
   }
 
   const tfvarsRel = `env/${environmentName}.tfvars`;
-  const tfvarsPath = resolve(repoRoot, `terraform/${tfvarsRel}`);
+  const tfvarsPath = resolve(repoRoot, `terraform/core/${tfvarsRel}`);
   if (!process.env.TF_VAR_alert_email && !existsSync(tfvarsPath)) {
     skip(
       'Terraform refresh-only plan',
-      `TF_VAR_alert_email or terraform/${tfvarsRel} is required`
+      `TF_VAR_alert_email or terraform/core/${tfvarsRel} is required`
     );
     return;
   }
 
   const terraformEnv = terraformEnvironment();
   runChecked('terraform', [
-    '-chdir=terraform',
+    '-chdir=terraform/core',
     'init',
     '-reconfigure',
     `-backend-config=bucket=${requiredValue('CATVOX_TF_STATE_BUCKET')}`,
     `-backend-config=prefix=${process.env.CATVOX_TF_STATE_PREFIX || 'catvox/state'}`,
   ], terraformEnv);
   runChecked('terraform', [
-    '-chdir=terraform',
+    '-chdir=terraform/core',
     'plan',
     '-refresh-only',
     '-no-color',

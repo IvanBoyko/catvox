@@ -62,16 +62,22 @@ fastlane/screenshots/**/*.png
 fastlane/test_output
 .aider*
 
-# Terraform — GCP root. The PostHog root carries its own .gitignore at
-# terraform/posthog/.gitignore so each root owns its local-files rules.
+# Terraform local files are ignored per-root: each Terraform root carries its
+# own .gitignore (terraform/core/.gitignore, terraform/posthog/.gitignore) so it
+# owns its local-files rules. See terraform/README.md.
+
+# Legacy old-path ignores (pre-ADR-0027 layout, when the GCP/Firebase root lived
+# at terraform/ instead of terraform/core/). Kept transitionally so that leftover
+# local files in clones created before the move — secrets at
+# terraform/env/*.tfvars, plus old state/cache — stay ignored and cannot be
+# accidentally staged after pulling this change. Safe to remove once all clones
+# have migrated.
 terraform/.terraform/
 terraform/*.tfstate
 terraform/*.tfstate.backup
 terraform/terraform.tfvars
 terraform/env/*.tfvars
-!terraform/env/*.tfvars.example
 terraform/backend/*.hcl
-!terraform/backend/*.hcl.example
 .env
 
 # Generated Makefile fragments — see scripts/lib/emit-xcconfig-env.sh and the

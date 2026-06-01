@@ -1,5 +1,5 @@
 # CatVox Dev Terraform values.
-# Copy to terraform/env/dev.tfvars and fill secret values locally or via CI.
+# Copy to terraform/core/env/dev.tfvars and fill secret values locally or via CI.
 # Non-secret environment values live in config/environments/dev.xcconfig.
 
 app_check_debug_token = "YOUR-UUID4-APP-CHECK-DEBUG-TOKEN"

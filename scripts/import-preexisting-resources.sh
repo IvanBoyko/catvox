@@ -28,10 +28,10 @@ cd "${REPO_ROOT}"
 ENVIRONMENT="${CATVOX_ENVIRONMENT:?CATVOX_ENVIRONMENT is required}"
 PROJECT_ID="${CATVOX_PROJECT_ID:?CATVOX_PROJECT_ID is required}"
 IOS_BUNDLE_ID="${CATVOX_IOS_BUNDLE_ID:?CATVOX_IOS_BUNDLE_ID is required}"
-TFVARS_FILE="${CATVOX_TF_VARS_FILE:-terraform/env/${ENVIRONMENT}.tfvars}"
+TFVARS_FILE="${CATVOX_TF_VARS_FILE:-terraform/core/env/${ENVIRONMENT}.tfvars}"
 
 terraform_state_has() {
-  terraform -chdir=terraform state list 2>/dev/null | grep -Fxq "$1"
+  terraform -chdir=terraform/core state list 2>/dev/null | grep -Fxq "$1"
 }
 
 run_terraform_import() {

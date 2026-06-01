@@ -22,7 +22,7 @@ Each environment owns these artifacts:
 | App/runtime config | `config/environments/<env>.xcconfig` | Committed. Source of truth for non-secret app, backend, CI-auth identity, analytics, and Terraform environment values. Host fields store hostnames only, with no `https://`, path, or trailing slash. Do not put secrets or private operator values here. |
 | Firebase iOS plist | `CatVox/Resources/Firebase/GoogleService-Info-<env>.plist` | Committed only after validation. The app loads the plist matching `CATVOX_ENVIRONMENT`. |
 
-| Terraform variables | `terraform/env/<env>.tfvars` | Ignored. Contains only true secrets or deliberately private values: `app_check_debug_token` and `alert_email`. Commit only `.example` files. |
+| Terraform variables | `terraform/core/env/<env>.tfvars` | Ignored. Contains only true secrets or deliberately private values: `app_check_debug_token` and `alert_email`. Commit only `.example` files. |
 | GitHub Environment | `<env>` | Stores environment-scoped Actions secrets only. Mutable environments may be unprotected; protected environments must use a protected GitHub Environment. |
 | Bundle ID | Terraform + xcconfig | Each environment sets its own bundle ID via `CATVOX_IOS_BUNDLE_ID`. |
 | Apple Developer App ID | Apple Developer team | Conditional. Required only when the environment introduces a new iOS bundle ID that will be installed on physical devices or use App Attest. |
@@ -110,7 +110,7 @@ The script:
 3. Enables Firebase on the project.
 4. Bootstraps the GCS Terraform state bucket with versioning.
 5. Creates the Cloud Functions Gen 2 source bucket so Terraform can manage its IAM before the first deploy.
-6. Creates secrets-only `terraform/env/<env>.tfvars` if it does not already exist.
+6. Creates secrets-only `terraform/core/env/<env>.tfvars` if it does not already exist.
 7. Runs Terraform init and plan.
 8. Optionally applies Terraform.
 9. Writes and validates `CatVox/Resources/Firebase/GoogleService-Info-<env>.plist`.
@@ -202,15 +202,15 @@ mistake. Read each with a trailing newline — or send it straight to the clipbo
 
 ```bash
 # Print on its own newline-terminated line (no trailing % to mis-copy):
-terraform -chdir=terraform output -raw ci_service_account_email; echo
-terraform -chdir=terraform output -raw github_actions_wif_provider; echo
+terraform -chdir=terraform/core output -raw ci_service_account_email; echo
+terraform -chdir=terraform/core output -raw github_actions_wif_provider; echo
 
 # …or copy a single value directly to the macOS clipboard (nothing displayed):
-terraform -chdir=terraform output -raw ci_service_account_email | pbcopy
+terraform -chdir=terraform/core output -raw ci_service_account_email | pbcopy
 ```
 
 Keep `CATVOX_GCP_CI_SERVICE_ACCOUNT` and `CATVOX_GCP_WIF_PROVIDER` as full
-strings, not composed pieces. **Note for App Check:** `config/environments/<env>.xcconfig` no longer requires App Check debug token boolean flags. The token itself in `terraform/env/<env>.tfvars` or the GitHub Environment secret determines registration.
+strings, not composed pieces. **Note for App Check:** `config/environments/<env>.xcconfig` no longer requires App Check debug token boolean flags. The token itself in `terraform/core/env/<env>.tfvars` or the GitHub Environment secret determines registration.
 Committed boolean values must be lowercase `true` or `false`; do not use `1`,
 `0`, `yes`, or `no`.
 
