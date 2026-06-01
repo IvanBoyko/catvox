@@ -7,7 +7,6 @@ under `terraform/` (a pure container):
 |---|---|---|
 | `terraform/core/` | Terraform root (GCP/Firebase foundation) | `.tf` files for GCP/Firebase infrastructure. State prefix `catvox/state`. CI workflow `.github/workflows/terraform.yml`. |
 | `terraform/posthog/` | Terraform root (PostHog analytics) | `.tf` files for PostHog projects/dashboards/insights. State prefix `posthog/state`. CI workflow `.github/workflows/posthog-terraform.yml`. See `terraform/posthog/README.md` and ADR-0020. |
-| `terraform/core/env/` | Per-environment private inputs | Holds secrets-only `.tfvars` files. Not a Terraform root in its own right — no `.tf` files. Passed to the core root's `terraform plan/apply -var-file=…`. |
 
 The two Terraform roots share the same per-environment GCS state bucket
 (`catvox-tf-state-<gcp-project-id>`); only the prefix differs. Per-environment
