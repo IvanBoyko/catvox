@@ -9,6 +9,7 @@ on:
       - 'AGENTS.md'
       - 'CLAUDE.md'
       - 'docs/**'
+      - 'terraform/README.md'
       - 'tools/ai-loop/**/*.md'
       - '.markdownlint.jsonc'
       - '.github/workflows/markdownlint.yml'
@@ -20,6 +21,7 @@ on:
       - 'AGENTS.md'
       - 'CLAUDE.md'
       - 'docs/**'
+      - 'terraform/README.md'
       - 'tools/ai-loop/**/*.md'
       - '.markdownlint.jsonc'
       - '.github/workflows/markdownlint.yml'
@@ -51,4 +53,5 @@ jobs:
             AGENTS.md
             CLAUDE.md
             docs/**/*.md
+            terraform/README.md
             tools/ai-loop/**/*.md

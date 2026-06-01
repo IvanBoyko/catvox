@@ -329,67 +329,113 @@ percentage. See ADR-0010 and ADR-0012.
     * `scan_deleted`
     * `upgrade_to_pro_tapped`
 
-### 6.7 Named Environment Configuration
-CatVox uses named environments. Initial names are `dev` and `prod`, but product code, scripts, CI, and Terraform conventions must treat the environment name as data so future environments can be added without source-level branching. See ADR-0017.
+---
 
-Each environment owns its own GCP/Firebase project, Firebase iOS app, App Check configuration, backend endpoints, PostHog project/token configuration, GitHub Environment secret set, and Terraform state. PostHog Terraform automation lives in the `terraform/posthog/` root with state under prefix `posthog/state` in the matching environment's GCS bucket; operational PostHog API credentials live in per-environment GitHub Environment secrets (`POSTHOG_API_KEY`), while the PostHog API host, project ID, and organization ID remain in `config/environments/<environment>.xcconfig` as `CATVOX_POSTHOG_API_HOST_NAME`, `CATVOX_POSTHOG_PROJECT_ID`, and `CATVOX_POSTHOG_ORGANIZATION_ID` so app config is the source of truth. `make posthog-environment-provision` configures/verifies the matching GitHub Environment, stores `POSTHOG_API_KEY`, applies the PostHog root, and writes the public project ID/token back to xcconfig. See ADR-0020.
+## 7. Environment Model
 
-Active Dev defaults point at `kathelix-catvox-dev`. Committed `config/environments/<environment>.xcconfig` files are the source of truth for non-secret app, backend, CI-auth identity, analytics, and Terraform environment values so bare Xcode runs and Makefile-driven automation read the same values. XcodeGen attaches the selected xcconfig to the app target and passes values through build settings into `Info.plist`; URL values in xcconfig are stored as hostnames and composed into `https://` URLs at the Info.plist and Makefile boundaries. The Makefile derives the matching `CATVOX_ENV_CONFIG` and Terraform tfvars basename from `CATVOX_ENVIRONMENT` by default, and Terraform targets reject tfvars basenames that do not match `CATVOX_ENVIRONMENT`. GitHub Environment secrets and ignored `terraform/env/<environment>.tfvars` files hold only true secrets or deliberately private values: `POSTHOG_API_KEY`, App Check debug tokens, and `alert_email`. See ADR-0021 and ADR-0022.
+This section is the single source of truth for how CatVox models environments. `docs/HLD.md`, `docs/CREATE_NEW_ENVIRONMENT.md`, and `terraform/README.md` point here rather than restating these rules; the ADRs cited below remain the dated rationale. The first environments are `dev` (mutable) and `prod` (protected).
 
-GCP/Firebase foundation values sourced from xcconfig include:
-* `CATVOX_PROJECT_ID`
-* `CATVOX_GCP_CI_SERVICE_ACCOUNT` and `CATVOX_GCP_WIF_PROVIDER` as full strings
-* `CATVOX_FUNCTION_REGION`, `CATVOX_FIRESTORE_LOCATION`, and `CATVOX_TF_STATE_BUCKET`
-* `CATVOX_IOS_BUNDLE_ID`
-* `CATVOX_FIREBASE_IOS_APP_DISPLAY_NAME`, `CATVOX_FIREBASE_IOS_APP_DELETION_POLICY`, and `CATVOX_FIREBASE_APPLE_TEAM_ID`
-* `CATVOX_MANAGE_GCF_SOURCES_BUCKET_IAM` — boolean toggle for environment provisioning.
+### 7.1 Environment as Data
 
-Committed boolean environment values use lowercase `true` or `false` only.
-Do not use numeric or yes/no forms.
+CatVox uses named environments. Product code, scripts, CI, and Terraform conventions treat the environment name as configuration data, so environments can be added or removed without source-level branching. Behaviour differences between environments come only from `config/environments/<environment>.xcconfig` — never from environment-specific source, env-specific script filenames, or per-environment "golden value" maps. Literal `dev`/`prod` names belong only to the CI/CD promotion pipeline that encodes code promotion between environments (§8). See ADR-0017 and ADR-0026.
 
-Initial iOS bundle ID convention:
-* `com.kathelix.catvox.dev` for Dev/internal builds
-* `com.kathelix.catvox` for future App Store Prod
+### 7.2 Per-Environment Ownership
 
-Any environment bundle ID that needs physical-device builds or App Attest must
-exist as an explicit Apple Developer App ID under team `QYT76L5836`, with a
-development provisioning profile for local device proof. Local Xcode account
-configuration is workstation setup, not a per-environment cloud artifact.
+Each environment owns its own:
 
-Cloud Functions runtime settings:
-* Each environment derives the same runtime service-account name, `catvox-backend-sa`, inside that environment's own GCP project. The resulting IAM principals are therefore distinct per environment, for example `catvox-backend-sa@<project-id>.iam.gserviceaccount.com`.
-* Function region defaults to `us-central1`; `CATVOX_FUNCTION_REGION` overrides the Cloud Functions region, and `CATVOX_VERTEX_LOCATION` can separately override the Vertex AI location when a future environment needs different model locality.
+* GCP/Firebase project and Firebase iOS app
+* Firebase App Check configuration
+* backend endpoints (the deployed Cloud Functions hosts)
+* PostHog project/token — analytics isolation maps 1:1 to environments (see §6.6, ADR-0019, ADR-0020)
+* GitHub Environment secret set
+* Terraform state — a per-environment GCS bucket shared by the GCP root (prefix `catvox/state`) and the PostHog root (prefix `posthog/state`); see §6.1, ADR-0020
 
-Firebase plist convention:
-* `CatVox/Resources/Firebase/GoogleService-Info-<environment>.plist`
-* The app loads the plist matching `CATVOX_ENVIRONMENT`.
-* `make ios-validate-env-config` and the app target pre-build script validate that the selected plist matches the selected environment project ID, Firebase app ID, API key, and bundle ID.
-* Until the real Prod plist lands, CI must still run structural Prod config validation against `config/environments/prod.xcconfig`. That structural check may allow only the explicitly deferred Step 3 values for Firebase app ID, Firebase API key, and backend endpoint hosts.
+Per-environment conventions:
 
-Mutable live integration tests may run only against environments explicitly marked integration-safe with `CATVOX_INTEGRATION_SAFE_ENVIRONMENTS`. Protected environments get non-invasive smoke tests only through `CATVOX_ENVIRONMENT=<env> make smoke` and `docs/SMOKE_CHECKLIST.md`.
+* **Firebase plist:** `CatVox/Resources/Firebase/GoogleService-Info-<environment>.plist`; the app loads the plist matching `CATVOX_ENVIRONMENT`. `make ios-validate-env-config` (and the app pre-build script) validate the selected plist against the environment's project ID, Firebase app ID, API key, and bundle ID, and CI runs the environment-agnostic structural validator `make ios-validate-env-config-structure`.
+* **iOS bundle ID:** `com.kathelix.catvox.dev` for Dev/internal builds, `com.kathelix.catvox` for App Store Prod. A bundle ID that needs physical-device builds or App Attest must exist as an explicit Apple Developer App ID under team `QYT76L5836`; local Xcode account setup is workstation configuration, not a per-environment cloud artifact.
+* **Cloud Functions runtime SA:** each environment derives the same name `catvox-backend-sa` inside its own project, so the IAM principal is distinct per environment (`catvox-backend-sa@<project-id>.iam.gserviceaccount.com`). `CATVOX_FUNCTION_REGION` (default `us-central1`) and `CATVOX_VERTEX_LOCATION` are per-environment overrides.
+
+### 7.3 Security Tiers
+
+`CATVOX_ENVIRONMENT_PROTECTED` (`true`/`false`) is the single config switch that classifies an environment's security tier (ADR-0026). The table below is the complete set of behavioural differences between a **mutable** and a **protected** environment. The rows marked `yes` under *Validator-enforced* are checked by `scripts/validate-environment-config.mjs` (run as `make ios-validate-env-config-structure`) whenever `CATVOX_ENVIRONMENT_PROTECTED=true`; the remaining rows are operational differences enforced by the runbook and the promotion pipeline.
+
+| Dimension | Mutable (`false`) | Protected (`true`) | Controlled by | Validator-enforced | Source |
+|---|---|---|---|---|---|
+| Security tier flag | `false` | `true` | `CATVOX_ENVIRONMENT_PROTECTED` | yes | ADR-0026 |
+| Firestore App Check | `UNENFORCED` (debug-token path frictionless) | `ENFORCED` (client SDK needs a valid App Attest token) | `CATVOX_FIREBASE_FIRESTORE_APP_CHECK_ENFORCEMENT` | yes | ADR-0025 |
+| WIF ref scope | empty — trusts any ref | pinned (`refs/heads/main`); CI auth also requires `assertion.ref` | `CATVOX_GCP_WIF_GITHUB_REF` | yes | ADR-0024 |
+| Firebase iOS app deletion policy | `DELETE` allowed (disposable env) | must be `ABANDON` | `CATVOX_FIREBASE_IOS_APP_DELETION_POLICY` | yes | ADR-0026 |
+| Integration-safe membership | may be listed; Firestore-mutating integration tests permitted | must be absent; non-invasive smoke only | `CATVOX_INTEGRATION_SAFE_ENVIRONMENTS` | yes | ADR-0026 |
+| App Check debug token | allowed | never registered | `TF_VAR_APP_CHECK_DEBUG_TOKEN` presence | no | ADR-0026, runbook |
+| GitHub Environment protection | may be unprotected | required reviewers + deployment-branch policy pinned to the WIF ref's branch | `make configure-github-environment` | no | ADR-0024, runbook |
+| First Terraform apply | may run via CI once identity exists | operator-local (creates the WIF pool + `catvox-ci-sa`); later applies via CI | operator runbook | no | ADR-0024 |
+| Promotion path | automatic | manual, environment-gated, approval-required | CI/CD pipeline (§8) | no | runbook |
+| Destroy gate | `CONFIRM=destroy` | `CONFIRM=destroy` plus `ALLOW_PROTECTED_DESTROY=<env>` | `make environment-destroy` | no | runbook |
+
+Service-account and Admin SDK access bypasses App Check regardless of tier (§7.6). See ADR-0024, ADR-0025, and ADR-0026.
+
+### 7.4 Parameterization Pipeline
+
+Committed `config/environments/<environment>.xcconfig` files are the source of truth for non-secret app, backend, CI-auth identity, analytics, and Terraform values, so bare Xcode runs and Makefile-driven automation read the same values:
+
+* **App:** XcodeGen attaches the selected xcconfig to the app target and passes values through build settings into `Info.plist`.
+* **Terraform / CLI:** the Makefile derives `CATVOX_ENV_CONFIG` and the Terraform tfvars basename from `CATVOX_ENVIRONMENT`, then passes non-secret foundation values as `TF_VAR_*` and inline `-backend-config` arguments; Terraform targets reject a tfvars basename that does not match `CATVOX_ENVIRONMENT`.
+* **URL convention:** keys ending in `_HOST` or `_HOST_NAME` store hostnames only; `https://` URLs are composed at the `Info.plist` and Makefile boundaries.
+
+Foundation values sourced from xcconfig include `CATVOX_PROJECT_ID`, `CATVOX_GCP_CI_SERVICE_ACCOUNT`, `CATVOX_GCP_WIF_PROVIDER`, `CATVOX_FUNCTION_REGION`, `CATVOX_FIRESTORE_LOCATION`, `CATVOX_TF_STATE_BUCKET`, `CATVOX_IOS_BUNDLE_ID`, the `CATVOX_FIREBASE_*` identifiers, and `CATVOX_MANAGE_GCF_SOURCES_BUCKET_IAM`. Committed boolean values use lowercase `true`/`false` only.
+
+The secret/non-secret split: GitHub Environment secrets and ignored `terraform/env/<environment>.tfvars` files hold only true secrets or deliberately private values — `POSTHOG_API_KEY`, the App Check debug token, and `alert_email`. Everything else is committed non-secret config. See ADR-0021 and ADR-0022.
+
+### 7.5 WIF Trust Scoping
+
+CI authenticates to GCP via keyless Workload Identity Federation (§8.2). Each environment's WIF trust is scoped to the GitHub Environment whose name equals `CATVOX_ENVIRONMENT`, and optionally to a Git ref via `CATVOX_GCP_WIF_GITHUB_REF` (empty trusts any ref; a protected environment pins `refs/heads/main`). Consequently the GitHub Environment name must equal the CatVox environment name, and every CI job that authenticates via WIF must declare the matching `environment:`. See ADR-0024.
+
+### 7.6 App Check Enforcement per Tier
+
+`CATVOX_FIREBASE_FIRESTORE_APP_CHECK_ENFORCEMENT` (`OFF`, `UNENFORCED`, or `ENFORCED`) sets Firestore App Check enforcement per environment: `UNENFORCED` for mutable environments (keeps the debug-token developer path frictionless) and `ENFORCED` for protected environments (client SDK access requires a valid App Attest token). Service-account and Admin SDK access — the backend SA and CI integration probes via `@google-cloud/firestore` — bypass App Check regardless of this setting. The Functions-layer App Check (App Attest in Release, Debug Provider locally) is described in §6.3. See ADR-0025.
+
+### 7.7 Integration-Safe Environments
+
+Mutable live integration tests may run only against environments explicitly listed in `CATVOX_INTEGRATION_SAFE_ENVIRONMENTS`. Protected environments must be absent from that list and receive only non-invasive smoke tests via `CATVOX_ENVIRONMENT=<env> make smoke` and `docs/SMOKE_CHECKLIST.md`.
+
+### 7.8 Add / Remove Environment Lifecycle
+
+Because the environment name is data (§7.1; ADR-0017, ADR-0026), creating or removing an environment is a configuration plus operator-runbook operation and never requires a source-code change.
+
+Creating an environment touches only these per-environment files and resources:
+
+* `config/environments/<environment>.xcconfig` — committed, non-secret
+* `CatVox/Resources/Firebase/GoogleService-Info-<environment>.plist` — committed after validation
+* `terraform/env/<environment>.tfvars` — ignored, secrets-only (commit only the `.example`)
+* a `<environment>` GitHub Environment — secrets only
+
+No `.tf`, Swift, script, Makefile, or workflow file changes are needed; the plist and tfvars are per-environment instances of existing templates.
+
+Removing an environment (`make environment-destroy`, which keeps the GCP project) removes the Terraform-managed resources, the PostHog Terraform resources, the script-created Terraform-state and Cloud Functions source buckets, and the `<environment>` GitHub Environment; the committed xcconfig and plist are repository artifacts the operator deletes in a normal commit. Step-by-step procedures — creation, the protected-environment operator checklist, and teardown — live in `docs/CREATE_NEW_ENVIRONMENT.md`.
 
 ---
 
-## 7. CI/CD Pipelines
+## 8. CI/CD Pipelines
 
-### 7.0 Shared Local / CI Command Facade
+### 8.0 Shared Local / CI Command Facade
 CatVox uses the repository-root `Makefile` as a thin facade for common developer and CI command bodies. Developers should prefer discoverable `make` targets such as `make ios-test`, `make functions-deploy`, `make functions-integration`, `make terraform-plan`, and `make terraform-apply CONFIRM=apply` over manually retyping long command sequences.
 
 GitHub Actions may call Makefile targets for the command body, but workflow YAML remains responsible for CI-only concerns such as checkout, toolchain installation, dependency caching, Workload Identity Federation authentication, path/event triggers, and PR comments. See ADR-0014.
 
-### 7.0.1 Markdown Documentation Pipeline
+### 8.0.1 Markdown Documentation Pipeline
 * **Trigger:** Pushes and pull requests targeting `main` when files under `docs/`, the top-level `README.md`, `.markdownlint.jsonc`, or the workflow file itself change. Manual `workflow_dispatch` runs are also supported.
 * **Runner:** Ubuntu latest.
 * **Steps:** Checkout → markdownlint over `README.md` and `docs/**/*.md` using the repository `.markdownlint.jsonc` config.
 * **Purpose:** Provides a cheap documentation-quality check for docs-heavy changes without waking the macOS iOS build workflow.
 
-### 7.1 iOS Build Pipeline
+### 8.1 iOS Build Pipeline
 * **Trigger:** Pushes and pull requests targeting `main` when iOS-relevant source, project, config, scripts, Makefile, or workflow files change. Manual `workflow_dispatch` runs always execute the iOS build path.
 * **Runner:** macOS 15 (Xcode 16, iOS 17+ SDK).
 * **Steps:** Checkout → install XcodeGen / `xcpretty` → `make ios-generate` → validate Dev Firebase config → structurally validate Prod config → `make ios-build-only` for the generic iOS Simulator slice (`CODE_SIGNING_ALLOWED=NO`) → `make ios-test-only` on a concrete simulator device (`platform=iOS Simulator,name=iPhone 16,OS=latest`). Xcode cannot run tests on `generic/platform=iOS Simulator`.
 * **Purpose:** Catches build breaks, XcodeGen drift, and unit-test regressions on iOS-relevant changes without spending macOS CI time on docs-only edits. No device signing or provisioning profiles required.
 
-### 7.1.1 iOS UI Test Pipeline
+### 8.1.1 iOS UI Test Pipeline
 * **Local command:** `make ios-ui-test` regenerates the Xcode project and runs the dedicated `CatVoxUITests` XCUITest scheme on a concrete iPhone simulator destination (`IOS_UI_TEST_DESTINATION`, defaulting to `platform=iOS Simulator,name=iPhone 16,OS=latest`).
 * **CI trigger:** The Build workflow runs UI tests as a separate job on iOS-relevant pushes to `main` and on manual `workflow_dispatch`, after the normal build/unit-test job passes. Pull requests keep running the cheaper build and unit-test path unless UI coverage is manually requested after merge.
 * **Launch mode:** UI tests launch the app with `-uiTesting` and `-mockBackend`; individual scenarios may also use `-seedHistory` or `-forceQuotaExceeded`.
@@ -397,7 +443,7 @@ GitHub Actions may call Makefile targets for the command body, but workflow YAML
 * **Coverage boundary:** The baseline suite covers Home launch smoke, source-choice visibility/dismissal, seeded history replay, and mocked quota exceeded UI. It intentionally does not use real camera, Photos picker content, Firebase App Check, GCS, Gemini/Vertex AI, user accounts, network calls, snapshots, Appium, Maestro, BrowserStack, or Firebase Test Lab.
 * **Extension path:** The suite remains native XCUITest and launch-argument driven so it can later run on real devices through Firebase Test Lab or BrowserStack without changing app behavior or adopting a second UI automation framework. See `docs/UI_TESTING.md`.
 
-### 7.2 Terraform Infrastructure Pipeline
+### 8.2 Terraform Infrastructure Pipeline
 * **Trigger:** Push or pull request targeting `main` when files under `terraform/`, the repository `Makefile`, or the workflow file itself change.
 * **Authentication:** Keyless via **Workload Identity Federation (WIF)**. GitHub Actions presents its OIDC token; GCP exchanges it for a short-lived credential scoped to `catvox-ci-sa` (the dedicated Terraform CI identity). No long-lived service account keys are stored anywhere.
 * **Plan job (on PR):**
@@ -406,10 +452,10 @@ GitHub Actions may call Makefile targets for the command body, but workflow YAML
     3. Post a structured comment to the PR with fmt/init outcomes and the full plan output (collapsible, truncated at 60k characters if needed).
     4. Fail the job if the plan step fails, surfacing the error in the PR comment.
 * **Apply job (on merge to `main`):** `make terraform-init` → `make terraform-ci-apply` (`terraform apply -auto-approve -no-color`).
-* **Variables:** The workflow reads `config/environments/<environment>.xcconfig` before WIF authentication, then the Makefile passes non-secret GCP/Firebase foundation values to Terraform as `TF_VAR_*` values. Environment-scoped GitHub secrets supply only `TF_VAR_app_check_debug_token` and `TF_VAR_alert_email`. Local ignored `terraform/env/<environment>.tfvars` files should contain only `app_check_debug_token` and `alert_email`.
+* **Variables:** The workflow reads `config/environments/<environment>.xcconfig` before WIF authentication, then the Makefile passes non-secret GCP/Firebase foundation values to Terraform as `TF_VAR_*` values (see §7.4 for the parameterization model). Environment-scoped GitHub secrets supply only `TF_VAR_app_check_debug_token` and `TF_VAR_alert_email`. Local ignored `terraform/env/<environment>.tfvars` files should contain only `app_check_debug_token` and `alert_email`.
 * **Local apply guard:** Developers must run `make terraform-plan` before review, and local `make terraform-apply` refuses to run unless invoked as `make terraform-apply CONFIRM=apply`. The target still uses Terraform's interactive apply prompt.
 
-### 7.3 Firebase Cloud Functions Pipeline
+### 8.3 Firebase Cloud Functions Pipeline
 * **Trigger:** Push or pull request targeting `main` when files under `functions/`, `firebase.json`, `docs/systemInstruction.md`, the repository `Makefile`, or the workflow file itself change. `docs/systemInstruction.md` is included because it is copied into the deployment artifact at build time — a prompt-only change must trigger a redeploy. (See ADR-0008 and ADR-0010.)
 * **Authentication:** Same WIF setup as the Terraform pipeline. Workflows read the selected xcconfig before authentication and pass `CATVOX_GCP_WIF_PROVIDER` and `CATVOX_GCP_CI_SERVICE_ACCOUNT` to `google-github-actions/auth`.
 * **Build job (on PR and push):** `make functions-install` → `make functions-test` (TypeScript compile check plus backend unit tests).
@@ -418,7 +464,7 @@ GitHub Actions may call Makefile targets for the command body, but workflow YAML
 * **Integration auth boundary:** GitHub Actions WIF produces an external-account Application Default Credentials (ADC) file. Direct data-plane probes in `functions/integration/**` should use Google Cloud client libraries such as `@google-cloud/firestore`, which accept that ADC path. Do not initialize Firebase Admin SDK inside the integration test harness unless it has been explicitly verified under GitHub Actions WIF; Admin ADC loading can reject the CI credentials even when the deployed Cloud Functions runtime uses Firebase Admin correctly.
 * **Local Dev integration command:** Developers can run the same backend integration suite against the currently deployed Dev backend with `make functions-integration` or `npm --prefix functions run test:integration`. The Makefile target supplies selected environment values from `CATVOX_ENV_CONFIG`, sets `CATVOX_INTEGRATION_MUTATIONS_ALLOWED=1`, and passes `CATVOX_INTEGRATION_SAFE_ENVIRONMENTS=dev` for the integration-safe Dev environment. It preserves an explicitly supplied `CATVOX_APP_CHECK_DEBUG_TOKEN`; when no App Check token environment variable is present, it silently falls back to `app_check_debug_token` in the selected ignored `terraform/env/<environment>.tfvars` if that file/value exists. Direct `npm --prefix functions run test:integration` runs must provide the required `CATVOX_*` environment values or an integration env file.
 
-### 7.4 CI Bootstrap & GitHub Environment Secrets
+### 8.4 CI Bootstrap & GitHub Environment Secrets
 One-time repository setup, GitHub Actions availability, GitHub Environment protection, and the WIF trust model are documented in `docs/CI_BOOTSTRAP.md`.
 
 Per-environment cloud setup is documented in `docs/CREATE_NEW_ENVIRONMENT.md`. Each environment gets its own GCP project, `catvox-ci-sa`, WIF pool/provider, Terraform state bucket, committed xcconfig values, and GitHub Environment secrets for values that are actually secret or deliberately private.
@@ -431,18 +477,18 @@ Active Dev uses the GitHub Environment named `dev` with:
 | `TF_VAR_APP_CHECK_DEBUG_TOKEN` | Dev App Check debug token |
 | `POSTHOG_API_KEY` | Dev PostHog scoped personal API key, normally stored by `make posthog-environment-provision` |
 
-### 7.5 Environment Creation Runbook
+### 8.5 Environment Creation Runbook
 
-Use `docs/CREATE_NEW_ENVIRONMENT.md` and `make environment-create` when creating a new GCP/Firebase environment or when reconstructing an environment after a full destroy. The runbook covers project creation, optional billing link, Firebase enablement, Terraform state bootstrap, Functions source bucket bootstrap, Terraform init/plan/apply, Firebase plist export, Functions deploy, GitHub Environment secrets, validation, and legacy pre-split cleanup.
+Use `docs/CREATE_NEW_ENVIRONMENT.md` and `make environment-create` when creating a new GCP/Firebase environment or when reconstructing an environment after a full destroy. The runbook covers project creation, optional billing link, Firebase enablement, Terraform state bootstrap, Functions source bucket bootstrap, Terraform init/plan/apply, Firebase plist export, Functions deploy, GitHub Environment secrets, validation, and legacy pre-split cleanup. See §7.8 for the environment lifecycle contract — the files create and destroy touch, and the guarantee that neither requires a source-code change.
 
 ---
 
-## 8. Implementation Backlog (MVP)
+## 9. Implementation Backlog (MVP)
 
 The MVP backlog source of truth now lives in `docs/MVP_BACKLOG.md`.
 
 ---
 
-## 9. Future Enhancements (Post-MVP)
+## 10. Future Enhancements (Post-MVP)
 
 Future-feature ideas now live in the CatVox Notion Ideas table.

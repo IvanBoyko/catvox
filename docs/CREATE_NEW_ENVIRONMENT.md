@@ -8,6 +8,11 @@ environments exists. Behaviour differences between environments come from
 For one-time repository and GitHub Actions setup, see
 `docs/CI_BOOTSTRAP.md`.
 
+The canonical environment model — the security-tier rules, the xcconfig-driven
+parameterization, and the mutable-vs-protected differences — lives in the
+Environment Model section of `docs/TRD.md`. This runbook is the operational
+how-to.
+
 ## Artifact Contract
 
 Each environment owns these artifacts:
@@ -209,30 +214,25 @@ strings, not composed pieces. **Note for App Check:** `config/environments/<env>
 Committed boolean values must be lowercase `true` or `false`; do not use `1`,
 `0`, `yes`, or `no`.
 
-**WIF ref scoping (`CATVOX_GCP_WIF_GITHUB_REF`).** WIF trust is always scoped to
-the GitHub Environment whose name equals `CATVOX_ENVIRONMENT` (ADR-0024), so the
-GitHub Environment name must match the CatVox environment name and every CI job
-that authenticates must declare the matching `environment:`. Leave this key empty
-to trust any ref. Set it to a ref such as `refs/heads/main` for a protected
-environment so CI auth additionally requires `assertion.ref` to match.
+**WIF ref scoping (`CATVOX_GCP_WIF_GITHUB_REF`).** Leave empty for a mutable
+environment (trusts any ref); set a pinned ref such as `refs/heads/main` for a
+protected environment. The GitHub Environment name must equal `CATVOX_ENVIRONMENT`
+and every CI job that authenticates must declare the matching `environment:`. The
+trust model is specified in the Environment Model section of `docs/TRD.md`
+(ADR-0024).
 
-**Firestore App Check (`CATVOX_FIREBASE_FIRESTORE_APP_CHECK_ENFORCEMENT`).** One
-of `OFF`, `UNENFORCED`, or `ENFORCED` (ADR-0025). Use `ENFORCED` for protected
-environments (secure-by-default; Firebase client SDK access needs a valid App
-Attest token) and `UNENFORCED` for mutable environments so the debug-token path
-stays frictionless. Service-account / Admin SDK access (the backend SA and CI
-integration probes via `@google-cloud/firestore`) bypasses App Check regardless
-of this setting.
+**Firestore App Check (`CATVOX_FIREBASE_FIRESTORE_APP_CHECK_ENFORCEMENT`).** One of
+`OFF`, `UNENFORCED`, or `ENFORCED`: `UNENFORCED` for mutable environments,
+`ENFORCED` for protected. Rationale and the service-account bypass note are in the
+Environment Model section of `docs/TRD.md` (ADR-0025).
 
-**Environment security tier (`CATVOX_ENVIRONMENT_PROTECTED`).** `true` for
-protected environments, `false` for mutable environments (ADR-0026). When
-`true`, `make ios-validate-env-config-structure`
-(via `scripts/validate-environment-config.mjs`) enforces the protected posture:
-App Check `ENFORCED`, a pinned `CATVOX_GCP_WIF_GITHUB_REF`, the `ABANDON`
-deletion policy, and that the environment is absent from
-`CATVOX_INTEGRATION_SAFE_ENVIRONMENTS`. Validation and smoke are
-environment-agnostic — run them with `CATVOX_ENVIRONMENT=<env>`; only the CI/CD
-promotion pipeline names environments literally.
+**Environment security tier (`CATVOX_ENVIRONMENT_PROTECTED`).** `true` for protected
+environments, `false` for mutable. `make ios-validate-env-config-structure` (via
+`scripts/validate-environment-config.mjs`) enforces the protected invariants; the
+full mutable-vs-protected difference table is in the Environment Model section of
+`docs/TRD.md` (ADR-0026). Validation and smoke are environment-agnostic — run them
+with `CATVOX_ENVIRONMENT=<env>`; only the CI/CD promotion pipeline names
+environments literally.
 
 ## Conditional Apple Developer Bundle Setup
 

@@ -32,6 +32,6 @@ Local developers get short, discoverable commands through `make help`.
 
 CI and local workflows share more of the same command surface without turning the Makefile into a replacement for GitHub Actions orchestration.
 
-Workflow changes must keep the Makefile, GitHub Actions YAML, and TRD §7 aligned.
+Workflow changes must keep the Makefile, GitHub Actions YAML, and TRD §8 aligned.
 
 The Makefile should stay thin. Larger workflow logic should remain in purpose-built scripts such as `scripts/run-on-iphone.sh` or the Terraform bootstrap scripts.

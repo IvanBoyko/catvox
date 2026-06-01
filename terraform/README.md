@@ -9,10 +9,10 @@ CatVox's Terraform layout has three kinds of directories under `terraform/`:
 | `terraform/env/` | Per-environment private inputs | Holds secrets-only `.tfvars` files. Not a Terraform root in its own right — no `.tf` files. Passed to a root's `terraform plan/apply -var-file=…`. |
 
 The two Terraform roots share the same per-environment GCS state bucket
-(`catvox-tf-state-<gcp-project-id>`); only the prefix differs. Active Dev
-points at `kathelix-catvox-dev`; each additional environment uses its own
-state/config set for its own GCP project. See ADR-0017, ADR-0018,
-ADR-0020, and `docs/CREATE_NEW_ENVIRONMENT.md`.
+(`catvox-tf-state-<gcp-project-id>`); only the prefix differs. Per-environment
+state/config conventions are specified in the Environment Model section of
+`docs/TRD.md`. See ADR-0017, ADR-0018, ADR-0020, and
+`docs/CREATE_NEW_ENVIRONMENT.md`.
 
 ## Provider Lock Files
 
@@ -39,11 +39,13 @@ Named environments use explicit files keyed by environment name:
 
 - `terraform/env/<environment>.tfvars` for environment-specific private values
 
-Non-secret GCP/Firebase foundation values live in
+Non-secret foundation values live in
 `config/environments/<environment>.xcconfig` and are passed by the Makefile as
-`TF_VAR_*` values or inline `-backend-config` arguments during `terraform init`. The ignored tfvars file remains only for
-`app_check_debug_token` and `alert_email`. The Makefile rejects tfvars
-basenames that do not match `CATVOX_ENVIRONMENT`.
+`TF_VAR_*` values or inline `-backend-config` arguments during `terraform init`;
+the ignored tfvars file holds only `app_check_debug_token` and `alert_email`. The
+Makefile rejects tfvars basenames that do not match `CATVOX_ENVIRONMENT`. The
+parameterization model is specified in the Environment Model section of
+`docs/TRD.md`. See ADR-0021.
 
 Example local flow:
 
@@ -62,4 +64,5 @@ The PostHog root intentionally does
 not have an `env/<environment>.tfvars` directory. Per-environment values come
 from `config/environments/<environment>.xcconfig` (read by the Makefile) and
 the matching per-environment GitHub Environment (read by CI). See
-`terraform/posthog/README.md` and ADR-0020.
+`terraform/posthog/README.md`, ADR-0020, and the Environment Model section of
+`docs/TRD.md`.
