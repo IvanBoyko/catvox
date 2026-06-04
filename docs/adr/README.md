@@ -74,6 +74,7 @@ Each ADR should usually contain:
 | 0025 | Enforce App Check on Cloud Firestore per Environment | Accepted |
 | 0026 | Classify Environments by Security Tier in Config | Accepted |
 | 0027 | Place Each Terraform Root in Its Own Subdirectory | Accepted |
+| 0028 | Extract ai-loop to a Standalone Repository Consumed as a Submodule | Accepted |
 
 ## Workflow
 
