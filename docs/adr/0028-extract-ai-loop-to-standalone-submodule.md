@@ -52,10 +52,14 @@ Scope of this decision (the "minimal" reuse model):
 - **Runtime is unchanged.** No edits to `ai_loop.py`. The only code change in the
   extracted repository is making the test resolve its own directory instead of a
   fixed `parents[2]/tools/ai-loop`, so the suite runs from the new repo root.
-- **CI ownership moves.** The loop's test and markdownlint runs now live in
+- **CI ownership.** The loop's primary test and markdownlint runs live in
   `kathelix/ai-loop`'s CI. CatVox drops `tools/ai-loop/**` from the `scripts.yml`
   and `markdownlint.yml` path filters and removes `ai_loop_test.py` from
-  `make scripts-test` (CatVox CI checkouts do not initialize the submodule).
+  `make scripts-test`, so those generic jobs no longer initialize or run the
+  submodule. A dedicated consumer-side gate
+  (`.github/workflows/ai-loop-submodule.yml`) still does: on changes to the
+  `tools/ai-loop` gitlink or `.gitmodules` it checks out the pinned submodule and
+  runs its suite, so a pointer- or URL-only bump cannot land an untested loop.
 - **Submodule UX.** Contributors clone CatVox with `--recurse-submodules` (or run
   `git submodule update --init tools/ai-loop`); `make setup-local-ai-loop`
   performs the init before configuring hooks. Updating to a newer ai-loop is
