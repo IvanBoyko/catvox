@@ -111,7 +111,7 @@ catvox/
 │       └── environment.toml       # Codex app run actions; call Makefile targets
 ├── .antigravityrules              # Antigravity (Gemini) agent-specific quirks
 ├── CLAUDE.md                      # Claude Code-specific quirks
-├── tools/ai-loop/                 # Local Option B agent review loop controller
+├── tools/ai-loop/                 # Local Option B review loop (git submodule → kathelix/ai-loop)
 ├── Makefile                       # Local/CI command facade for common automation
 └── AGENTS.md                      # Developer onboarding (read automatically by AI agents)
 ```
@@ -155,8 +155,12 @@ CATVOX_PROJECT_ID=kathelix-catvox-dev make functions-deploy
 DEVICE_ID=<device-udid> make ios-device-launch
 ```
 
-The local Option B AI loop lives under `tools/ai-loop/` (see ADR-0023). Run
-`make setup-local-ai-loop` once per clone to configure repo-controlled hooks.
+The local Option B AI loop lives under `tools/ai-loop/`, a git submodule
+tracking [`kathelix/ai-loop`](https://github.com/kathelix/ai-loop) (see
+ADR-0023 and ADR-0028). Clone CatVox with `--recurse-submodules`, or run
+`git submodule update --init tools/ai-loop` in an existing clone;
+`make setup-local-ai-loop` does the latter for you before configuring
+repo-controlled hooks.
 `make ai-loop-start` bootstraps a local run and defaults to dry-run routing;
 `make ai-loop-answer` appends a structured human clarification answer and wakes
 the loop when the latest event is `awaiting_human`. Agent invocation is opt-in

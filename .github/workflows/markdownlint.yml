@@ -10,7 +10,6 @@ on:
       - 'CLAUDE.md'
       - 'docs/**'
       - 'terraform/README.md'
-      - 'tools/ai-loop/**/*.md'
       - '.markdownlint.jsonc'
       - '.github/workflows/markdownlint.yml'
   pull_request:
@@ -22,7 +21,6 @@ on:
       - 'CLAUDE.md'
       - 'docs/**'
       - 'terraform/README.md'
-      - 'tools/ai-loop/**/*.md'
       - '.markdownlint.jsonc'
       - '.github/workflows/markdownlint.yml'
   workflow_dispatch:
@@ -54,4 +52,3 @@ jobs:
             CLAUDE.md
             docs/**/*.md
             terraform/README.md
-            tools/ai-loop/**/*.md

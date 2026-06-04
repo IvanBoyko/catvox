@@ -1,0 +1,4 @@
+[submodule "tools/ai-loop"]
+	path = tools/ai-loop
+	url = https://github.com/kathelix/ai-loop.git
+	branch = main
