@@ -5,6 +5,10 @@
 - Owners: Kathelix / CatVox
 - Related issue: GitHub Issue 63
 - Related docs: `AGENTS.md`, `.codex/AGENTS.md`, `CLAUDE.md`, `.antigravityrules`, `Makefile`
+- Related ADRs: ADR-0028 (Extract ai-loop to a Standalone Repository) — the
+  `tools/ai-loop/` controller has since been extracted to its own repository
+  (`kathelix/ai-loop`) and is consumed as a git submodule; this ADR's design and
+  rationale are unchanged.
 
 ## Context
 

@@ -7,7 +7,6 @@ on:
       - 'Makefile'
       - 'scripts/lib/**'
       - 'scripts/test/**'
-      - 'tools/ai-loop/**'
       - 'config/environments/**'
       # Docs read by scripts/test/docs-environment-model-sst.test.mjs — the
       # single-source-of-truth contract must re-run when these change.
@@ -22,7 +21,6 @@ on:
       - 'Makefile'
       - 'scripts/lib/**'
       - 'scripts/test/**'
-      - 'tools/ai-loop/**'
       - 'config/environments/**'
       # Docs read by scripts/test/docs-environment-model-sst.test.mjs — the
       # single-source-of-truth contract must re-run when these change.

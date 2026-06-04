@@ -1,0 +1,82 @@
+name: ai-loop submodule
+
+# Consumer-side gate for the ai-loop submodule. The loop's own test suite runs
+# in kathelix/ai-loop's CI, but that only validates *that* repo's main — it does
+# not guarantee a CatVox submodule pointer (or .gitmodules URL/branch) targets a
+# sound revision. Since `make setup-local-ai-loop` and the post-commit hook run
+# whatever revision is pinned here, this workflow checks out the pinned submodule
+# and runs its suite so a pointer/URL-only change can't land an untested loop. It
+# also verifies the configured .gitmodules branch (when set) resolves on the
+# configured URL, so a branch-only typo can't pass the gate and then break
+# `git submodule update --remote`.
+#
+# Triggers on the gitlink path (`tools/ai-loop`, NOT `tools/ai-loop/**`, which
+# would never match a gitlink change) and `.gitmodules`.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'tools/ai-loop'
+      - '.gitmodules'
+      - '.github/workflows/ai-loop-submodule.yml'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'tools/ai-loop'
+      - '.gitmodules'
+      - '.github/workflows/ai-loop-submodule.yml'
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  validate-pinned-ai-loop:
+    name: validate-pinned-ai-loop
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout with the pinned ai-loop submodule
+        uses: actions/checkout@v6
+        with:
+          submodules: true
+
+      # `submodules: true` checks out the pinned gitlink commit and the suite
+      # ignores .gitmodules, so a branch-only typo would otherwise pass this gate
+      # and only break later at `git submodule update --remote`. Verify the
+      # configured branch (when present) actually resolves on the configured URL.
+      - name: Verify the configured submodule branch resolves
+        run: |
+          path="tools/ai-loop"
+          branch="$(git config -f .gitmodules "submodule.${path}.branch" || true)"
+          url="$(git config -f .gitmodules "submodule.${path}.url")"
+          if [ -z "$branch" ]; then
+            echo "No branch configured for ${path}; nothing to verify."
+            exit 0
+          fi
+          echo "Checking that branch '${branch}' exists on ${url}"
+          if ! git ls-remote --exit-code --heads "$url" "$branch" >/dev/null; then
+            echo "::error::.gitmodules sets submodule.${path}.branch=${branch}, but that branch does not exist on ${url}; 'git submodule update --remote ${path}' would fail." >&2
+            exit 1
+          fi
+          echo "OK: '${branch}' resolves on ${url}"
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+
+      # The suite builds throwaway git repos and commits into them; give the
+      # runner a global git identity so commit-creating steps never fail.
+      - name: Configure git identity for test repos
+        run: |
+          git config --global user.name "ai-loop CI"
+          git config --global user.email "ai-loop-ci@example.com"
+
+      - name: Run the pinned ai-loop suite from the consumer checkout
+        run: python3 tools/ai-loop/ai_loop_test.py
