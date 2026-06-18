@@ -89,3 +89,9 @@ terraform/backend/*.hcl
 .agents/
 .mcp.json
 .agentsroom/
+
+# Claude Code — keep the shared project settings (.claude/settings.json)
+# tracked, but ignore personal/machine-specific local settings and any vendored
+# third-party skills (e.g. the PostHog integration-swift skill).
+.claude/settings.local.json
+.claude/skills/

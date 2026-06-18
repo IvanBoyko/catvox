@@ -1,0 +1,33 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(gcloud run services list *)",
+      "Bash(gcloud run services describe *)",
+      "Bash(gcloud functions logs *)",
+      "Bash(gcloud storage buckets describe *)",
+      "Bash(gcloud storage buckets list *)",
+      "Bash(gcloud storage ls *)",
+      "Bash(gcloud logging read *)",
+      "Bash(gcloud projects describe *)",
+      "Bash(gcloud projects get-iam-policy *)",
+      "Bash(gcloud projects list *)",
+      "Bash(gcloud builds describe *)",
+      "Bash(gcloud builds list *)",
+      "Bash(gcloud builds log *)",
+      "Bash(gcloud iam service-accounts list *)",
+      "Bash(gcloud iam service-accounts describe *)",
+      "Bash(gcloud iam service-accounts get-iam-policy *)",
+      "Bash(gcloud iam workload-identity-pools describe *)",
+      "Bash(xcrun simctl list *)",
+      "Bash(plutil -p *)",
+      "Bash(find *)",
+      "Bash(grep *)",
+      "Bash(sed -n *)",
+      "Bash(npx --yes markdownlint-cli2@*)",
+      "Bash(git branch *)",
+      "Write(/tmp/**)",
+      "Edit(.claude/**)",
+      "Write(.claude/**)"
+    ]
+  }
+}
