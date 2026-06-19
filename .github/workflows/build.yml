@@ -33,6 +33,11 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
+# Restrict the default GITHUB_TOKEN to least privilege. Both jobs only check
+# out the repo and run the build/test toolchain — no write scopes required.
+permissions:
+  contents: read
+
 jobs:
   build:
     name: Build — iOS Simulator
